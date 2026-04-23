@@ -10,10 +10,12 @@ User input must be validated to prevent injection attacks, path traversal, and o
 Implement strict input validation:
 
 ### UUID Validation
-All asset IDs and album IDs must match UUID v4 format:
+All asset IDs and album IDs must match canonical UUID text format:
 ```regex
 ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$
 ```
+
+Note: this validation checks UUID shape, not UUID version bits.
 
 ### Share Key Validation
 Share keys must match:

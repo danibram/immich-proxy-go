@@ -17,9 +17,16 @@ signedValue := base64.URLEncoding.EncodeToString([]byte(password)) + "." +
 
 Cookie attributes:
 - `HttpOnly: true` - Prevents JavaScript access
-- `Secure: true` - Only sent over HTTPS
 - `SameSite: Strict` - Prevents CSRF
 - `MaxAge: 86400` - 24 hour expiration
+
+`Secure` cookie behavior is environment-aware:
+- `Secure=true` when any of:
+  - `security.force_secure_cookies=true`
+  - `security.trust_proxy_headers=true` and `X-Forwarded-Proto=https`
+  - direct TLS request (`r.TLS != nil`)
+  - `proxy.public_url` starts with `https://`
+- otherwise `Secure=false` (local HTTP/dev compatibility)
 
 The signing secret:
 - Can be configured via `security.cookie_secret`
@@ -35,7 +42,7 @@ The signing secret:
 ### Negative
 - Password is still readable (base64 encoded, not encrypted)
 - Auto-generated secret doesn't persist across restarts
-- `Secure: true` means cookies don't work over HTTP (dev may need adjustment)
+- In local HTTP deployments, `Secure=false` may be required for compatibility
 
 ## Future Considerations
 Consider using opaque session tokens instead of storing the password:

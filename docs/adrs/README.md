@@ -2,6 +2,12 @@
 
 This directory contains Architecture Decision Records for the Immich Public Proxy project.
 
+## AI Quick Start
+
+For compact context loading, start with:
+
+- [ADR AI Context (Compact)](AI_CONTEXT.md)
+
 ## What is an ADR?
 
 An ADR is a document that captures an important architectural decision made along with its context and consequences.

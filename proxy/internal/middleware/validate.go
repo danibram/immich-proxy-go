@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-// UUID regex pattern (standard UUID v4 format)
+// UUID regex pattern (canonical UUID text shape; version bits not enforced)
 var uuidRegex = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // Share key can be alphanumeric with some special characters

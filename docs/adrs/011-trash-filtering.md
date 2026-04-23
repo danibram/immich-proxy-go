@@ -22,9 +22,11 @@ func (h *ShareHandler) filterValidAssets(assets []immich.Asset) []immich.Asset {
 }
 ```
 
-2. **Individual asset requests**: Check `IsTrashed` in `GetAsset` and return 404
+2. **Individual asset requests**: Rely on Immich share-scoped authorization for
+   direct file routes (`thumbnail`, `original`, `video`) and map denied/missing
+   responses to not-found behavior in the proxy.
 ```go
-if asset.IsTrashed {
+if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
     http.Error(w, "Asset not found", http.StatusNotFound)
     return
 }

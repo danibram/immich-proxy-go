@@ -44,6 +44,8 @@ Implement a job-based bulk download system with progress tracking:
 - All asset IDs must be valid UUIDs
 - Downloads must be enabled at proxy AND shared link level
 - Validates `allowDownload` on the Immich shared link
+- Optional concurrency cap via `security.max_concurrent_download_jobs`
+  (default `5`, `0` disables the cap)
 
 ### Features
 - Progress tracking for large albums
