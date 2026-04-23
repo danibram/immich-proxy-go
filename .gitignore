@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+web/node_modules/
+.pnpm-store/
+
+# Build outputs
+bin/
+web/dist/
+web/.svelte-kit/
+web/playwright-report/
+web/test-results/
+coverage/
+proxy/server
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+config.local.yaml
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Misc
+*.bak
+*.tmp
+proxy/.omc/

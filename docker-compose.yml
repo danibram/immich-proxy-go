@@ -1,0 +1,32 @@
+services:
+  immich-public-proxy:
+    build: .
+    container_name: immich-public-proxy
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Required: URL to your Immich instance (internal network URL)
+      - IMMICH_URL=http://immich-server:2283
+      # Optional: Public URL for the proxy (used for generating links)
+      # - PUBLIC_URL=https://photos.example.com
+      # Optional: Change the port (default 3000)
+      # - IPP_PORT=3000
+    volumes:
+      # Optional: Mount a custom config file
+      # - ./config.yaml:/app/config.yaml:ro
+      []
+    # If Immich is in the same Docker network, uncomment below
+    # networks:
+    #   - immich_default
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# Uncomment if you need to connect to an existing Immich network
+# networks:
+#   immich_default:
+#     external: true

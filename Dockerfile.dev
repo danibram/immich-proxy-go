@@ -1,0 +1,25 @@
+# Development Dockerfile with hot reload
+
+FROM golang:1.22-alpine
+
+WORKDIR /app
+
+# Install build dependencies and air for hot reload
+RUN apk add --no-cache git nodejs npm
+RUN go install github.com/air-verse/air@latest
+
+# Copy go module files
+COPY proxy/go.mod proxy/go.sum ./proxy/
+
+# Download dependencies
+WORKDIR /app/proxy
+RUN go mod download
+
+# Go back to app root
+WORKDIR /app
+
+# Expose ports (Go proxy + Vite dev server)
+EXPOSE 3000 5173
+
+# The source code will be mounted as a volume
+CMD ["air", "-c", ".air.toml"]

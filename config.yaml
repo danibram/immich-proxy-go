@@ -1,0 +1,70 @@
+# Immich Public Proxy Configuration
+
+immich:
+  # URL to your Immich instance (internal network URL, not public)
+  url: "http://immich:2283"
+
+proxy:
+  # Port to run the proxy on
+  port: 3000
+  # Public URL for the proxy (optional, used for generating links and CORS)
+  # If not set, will use the request host
+  public_url: ""
+
+options:
+  # Allow downloading original files
+  allow_download: true
+  # Show EXIF metadata in the viewer
+  show_metadata: true
+  # Cache TTL in seconds for static assets
+  cache_ttl: 3600
+
+security:
+  # Rate limit: requests per minute for general endpoints
+  # Note: Each thumbnail is 1 request, so with many photos you need a high limit
+  rate_limit: 1000
+  # Rate limit: password attempts per minute (protection against brute force)
+  password_rate_limit: 5
+  # Maximum upload size in MB
+  max_upload_size: 100
+
+  # CORS: Allowed origins for cross-origin requests
+  # IMPORTANT: In production with a reverse proxy (Caddy, Traefik, nginx),
+  # you MUST configure this explicitly with your domain(s).
+  # If empty and public_url is not set, ALL cross-origin requests are rejected.
+  # Example: ["https://photos.example.com"]
+  # For multiple domains: ["https://photos.example.com", "https://share.example.com"]
+  allowed_origins: []
+
+  # Enable HSTS header (usually better to configure this in your reverse proxy)
+  enable_hsts: false
+
+  # Cookie secret for signing cookies (auto-generated if empty, but won't persist across restarts)
+  # Generate with: openssl rand -hex 32
+  cookie_secret: ""
+
+  # Hotlink protection: block direct URL access to all API endpoints
+  # When enabled, all API calls must come from the web app (verified via browser headers)
+  # This prevents:
+  # - Direct URL access to images/videos
+  # - Hotlinking from other websites
+  # - Using the API outside of the web interface
+  hotlink_protection: false
+
+  # Trust X-Forwarded-For / X-Real-IP / X-Forwarded-Proto headers.
+  # SET TO true ONLY when the proxy sits behind a reverse proxy that
+  # strips/replaces these headers (Caddy, Traefik, nginx with proper
+  # real_ip config, etc.). With this off, rate-limit buckets are always
+  # keyed on the TCP RemoteAddr, which prevents clients from rotating
+  # X-Forwarded-For to bypass the password brute-force limiter.
+  trust_proxy_headers: false
+
+  # Force-mark auth cookies with the Secure attribute regardless of the
+  # request scheme. Enable when behind a TLS-terminating reverse proxy
+  # that talks to this service over plaintext HTTP.
+  force_secure_cookies: false
+
+  # Maximum number of simultaneous ZIP download jobs across all shares.
+  # Each job uses a temp file; an attacker with a share URL could
+  # otherwise trigger unbounded disk usage. Set to 0 to disable the cap.
+  max_concurrent_download_jobs: 5

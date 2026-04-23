@@ -1,0 +1,10 @@
+.git
+.github
+bin
+node_modules
+web/node_modules
+web/playwright-report
+web/test-results
+proxy/.omc
+.DS_Store
+*.log
