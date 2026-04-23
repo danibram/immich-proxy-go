@@ -121,6 +121,17 @@ security:
   hotlink_protection: false    # Block direct URL access to API
 ```
 
+Predefined profiles are available in [config/profiles/README.md](config/profiles/README.md):
+
+- `config/profiles/read-only.yaml`
+- `config/profiles/family-upload.yaml`
+- `config/profiles/strict.yaml`
+
+Upload behavior note:
+- Uploads are enabled/disabled per shared link in Immich (`allowUpload`), not by a global proxy toggle.
+- Downloads are allowed only when both proxy config and shared link allow them.
+- Metadata is shown only when both proxy config (`show_metadata`) and shared link (`showMetadata`) allow it.
+
 ### Environment Variables
 
 ```bash
@@ -157,7 +168,12 @@ cd web && npm test
 
 # E2E tests
 cd web && npm run test:e2e
+
+# Full integration E2E (Immich + proxy + Caddy/Traefik in Docker Compose)
+just test-e2e-compose --proxy caddy
 ```
+
+See [E2E stack docs](e2e/README.md) for details and Traefik mode.
 
 ## Documentation
 

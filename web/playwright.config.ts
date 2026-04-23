@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const externalBaseURL = process.env.E2E_EXTERNAL_BASE_URL;
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -9,7 +11,7 @@ export default defineConfig({
   reporter: [['line']],
   timeout: 15000,
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: externalBaseURL || 'http://localhost:4173',
     trace: 'off',
     screenshot: 'off',
   },
@@ -19,10 +21,12 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npm run preview -- --port 4173',
-    url: 'http://localhost:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
-  },
+  webServer: externalBaseURL
+    ? undefined
+    : {
+        command: 'npm run preview -- --port 4173',
+        url: 'http://localhost:4173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 30000,
+      },
 });

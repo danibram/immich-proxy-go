@@ -1,0 +1,28 @@
+# Profile: family-upload
+# Goal: allow uploads and downloads for trusted private sharing.
+# Note: Uploads are enabled per Immich shared link (allowUpload=true).
+
+immich:
+  url: "http://immich:2283"
+
+proxy:
+  port: 3000
+  public_url: "https://photos.example.com"
+
+options:
+  allow_download: true
+  show_metadata: false
+  cache_ttl: 3600
+
+security:
+  rate_limit: 1200
+  password_rate_limit: 5
+  max_upload_size: 100
+  allowed_origins:
+    - "https://photos.example.com"
+  enable_hsts: false
+  cookie_secret: "replace-with-openssl-rand-hex-32"
+  hotlink_protection: false
+  trust_proxy_headers: true
+  force_secure_cookies: true
+  max_concurrent_download_jobs: 5

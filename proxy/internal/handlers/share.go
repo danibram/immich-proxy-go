@@ -156,8 +156,8 @@ func generateJobID() string {
 
 // Allowed Content-Type prefixes for uploads
 var allowedUploadPrefixes = []string{
-	"image/",           // All image types (jpeg, png, heic, raw, etc.)
-	"video/",           // All video types (mp4, mov, webm, etc.)
+	"image/",              // All image types (jpeg, png, heic, raw, etc.)
+	"video/",              // All video types (mp4, mov, webm, etc.)
 	"multipart/form-data", // For form uploads
 }
 
@@ -323,11 +323,17 @@ func (h *ShareHandler) GetSharedLink(w http.ResponseWriter, r *http.Request) {
 		link.Album.Assets = h.filterValidAssets(link.Album.Assets)
 	}
 
+	// Metadata visibility is restrictive: global proxy config can disable
+	// metadata for every share, but cannot force-enable metadata when the
+	// Immich shared link itself has showMetadata=false.
+	// effectiveShowMetadata = proxy.show_metadata && sharedLink.showMetadata
+	effectiveShowMetadata := h.config.Options.ShowMetadata && link.ShowMetadata
+
 	// Strip sensitive/internal fields before exposing to the public.
 	// This removes: password, token, owner email/name, user IDs,
 	// Immich filesystem paths, device IDs, checksums, GPS coordinates,
 	// and face-recognition people (when metadata is disabled).
-	sanitizeSharedLink(link, h.config.Options.ShowMetadata)
+	sanitizeSharedLink(link, effectiveShowMetadata)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(link)
@@ -374,8 +380,14 @@ func (h *ShareHandler) GetAlbum(w http.ResponseWriter, r *http.Request) {
 	// Filter out trashed assets
 	album.Assets = h.filterValidAssets(album.Assets)
 
+	// Metadata visibility is restrictive: global proxy config can disable
+	// metadata for every share, but cannot force-enable metadata when the
+	// Immich shared link itself has showMetadata=false.
+	// effectiveShowMetadata = proxy.show_metadata && sharedLink.showMetadata
+	effectiveShowMetadata := h.config.Options.ShowMetadata && link.ShowMetadata
+
 	// Strip sensitive/internal fields before exposing to the public.
-	sanitizeAlbumResponse(album, h.config.Options.ShowMetadata)
+	sanitizeAlbumResponse(album, effectiveShowMetadata)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(album)
@@ -652,7 +664,7 @@ func (h *ShareHandler) ValidatePassword(w http.ResponseWriter, r *http.Request) 
 		HttpOnly: true,
 		Secure:   isSecure,
 		SameSite: http.SameSiteStrictMode, // Strict: never sent on cross-site requests
-		MaxAge:   86400, // 24 hours
+		MaxAge:   86400,                   // 24 hours
 	})
 
 	w.Header().Set("Content-Type", "application/json")

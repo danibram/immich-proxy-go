@@ -37,6 +37,10 @@ test-frontend:
 test-e2e: build-web
     cd web && npx playwright test
 
+# Run docker-compose integration E2E (Immich + proxy + reverse proxy)
+test-e2e-compose *ARGS:
+    ./e2e/run.sh {{ARGS}}
+
 # Run tests with coverage
 test-coverage:
     cd proxy && go test ./... -cover

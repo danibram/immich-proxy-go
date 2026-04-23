@@ -36,9 +36,11 @@ const (
 	testLinkID1   = "11111111-1111-1111-1111-111111111111"
 	testLinkID2   = "22222222-2222-2222-2222-222222222222"
 	testLinkID3   = "33333333-3333-3333-3333-333333333333"
+	testLinkID4   = "44444444-4444-4444-4444-444444444444"
 	testAlbumID1  = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 	testAlbumID2  = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 	testAlbumID3  = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	testAlbumID4  = "12121212-1212-1212-1212-121212121212"
 	testAssetID1  = "dddddddd-dddd-dddd-dddd-dddddddddddd"
 	testAssetID2  = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"
 	testInvalidID = "ffffffff-ffff-ffff-ffff-ffffffffffff"
@@ -100,12 +102,36 @@ func handleMockSharedLink(w http.ResponseWriter, r *http.Request, shareKey, shar
 				CreatedAt: now,
 				UpdatedAt: now,
 				Assets: []immich.Asset{
-					{ID: testAssetID1, Type: "IMAGE", OriginalFileName: "photo1.jpg", FileCreatedAt: now, FileModifiedAt: now, LocalDateTime: now, UpdatedAt: now},
+					{
+						ID:               testAssetID1,
+						Type:             "IMAGE",
+						OriginalFileName: "photo1.jpg",
+						FileCreatedAt:    now,
+						FileModifiedAt:   now,
+						LocalDateTime:    now,
+						UpdatedAt:        now,
+						ExifInfo: &immich.ExifInfo{
+							Make:           "Canon",
+							FileSizeInByte: 12345,
+						},
+					},
 					{ID: testAssetID2, Type: "VIDEO", OriginalFileName: "video1.mp4", Duration: "0:00:30.000000", FileCreatedAt: now, FileModifiedAt: now, LocalDateTime: now, UpdatedAt: now},
 				},
 			},
 			Assets: []immich.Asset{
-				{ID: testAssetID1, Type: "IMAGE", OriginalFileName: "photo1.jpg", FileCreatedAt: now, FileModifiedAt: now, LocalDateTime: now, UpdatedAt: now},
+				{
+					ID:               testAssetID1,
+					Type:             "IMAGE",
+					OriginalFileName: "photo1.jpg",
+					FileCreatedAt:    now,
+					FileModifiedAt:   now,
+					LocalDateTime:    now,
+					UpdatedAt:        now,
+					ExifInfo: &immich.ExifInfo{
+						Make:           "Canon",
+						FileSizeInByte: 12345,
+					},
+				},
 				{ID: testAssetID2, Type: "VIDEO", OriginalFileName: "video1.mp4", Duration: "0:00:30.000000", FileCreatedAt: now, FileModifiedAt: now, LocalDateTime: now, UpdatedAt: now},
 			},
 		}
@@ -154,6 +180,55 @@ func handleMockSharedLink(w http.ResponseWriter, r *http.Request, shareKey, shar
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(link)
 
+	case "metadata-off":
+		link := immich.SharedLink{
+			ID:            testLinkID4,
+			Key:           shareKey,
+			Type:          "ALBUM",
+			AllowDownload: true,
+			AllowUpload:   false,
+			ShowMetadata:  false,
+			CreatedAt:     now,
+			Album: &immich.Album{
+				ID:        testAlbumID4,
+				AlbumName: "Metadata Off Album",
+				CreatedAt: now,
+				UpdatedAt: now,
+				Assets: []immich.Asset{
+					{
+						ID:               testAssetID1,
+						Type:             "IMAGE",
+						OriginalFileName: "photo1.jpg",
+						FileCreatedAt:    now,
+						FileModifiedAt:   now,
+						LocalDateTime:    now,
+						UpdatedAt:        now,
+						ExifInfo: &immich.ExifInfo{
+							Make:           "Nikon",
+							FileSizeInByte: 67890,
+						},
+					},
+				},
+			},
+			Assets: []immich.Asset{
+				{
+					ID:               testAssetID1,
+					Type:             "IMAGE",
+					OriginalFileName: "photo1.jpg",
+					FileCreatedAt:    now,
+					FileModifiedAt:   now,
+					LocalDateTime:    now,
+					UpdatedAt:        now,
+					ExifInfo: &immich.ExifInfo{
+						Make:           "Nikon",
+						FileSizeInByte: 67890,
+					},
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(link)
+
 	case "expired-key":
 		w.WriteHeader(http.StatusNotFound)
 
@@ -175,10 +250,47 @@ func handleMockAlbum(w http.ResponseWriter, r *http.Request, shareKey string) {
 			CreatedAt: now,
 			UpdatedAt: now,
 			Assets: []immich.Asset{
-				{ID: testAssetID1, Type: "IMAGE", OriginalFileName: "photo1.jpg", FileCreatedAt: now, FileModifiedAt: now, LocalDateTime: now, UpdatedAt: now},
+				{
+					ID:               testAssetID1,
+					Type:             "IMAGE",
+					OriginalFileName: "photo1.jpg",
+					FileCreatedAt:    now,
+					FileModifiedAt:   now,
+					LocalDateTime:    now,
+					UpdatedAt:        now,
+					ExifInfo: &immich.ExifInfo{
+						Make:           "Canon",
+						FileSizeInByte: 12345,
+					},
+				},
 				{ID: testAssetID2, Type: "VIDEO", OriginalFileName: "video1.mp4", FileCreatedAt: now, FileModifiedAt: now, LocalDateTime: now, UpdatedAt: now},
 			},
 			AssetCount: 2,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(album)
+	} else if albumID == testAlbumID4 && shareKey == "metadata-off" {
+		album := immich.Album{
+			ID:        testAlbumID4,
+			AlbumName: "Metadata Off Album",
+			CreatedAt: now,
+			UpdatedAt: now,
+			Assets: []immich.Asset{
+				{
+					ID:               testAssetID1,
+					Type:             "IMAGE",
+					OriginalFileName: "photo1.jpg",
+					FileCreatedAt:    now,
+					FileModifiedAt:   now,
+					LocalDateTime:    now,
+					UpdatedAt:        now,
+					ExifInfo: &immich.ExifInfo{
+						Make:           "Nikon",
+						FileSizeInByte: 67890,
+					},
+				},
+			},
+			AssetCount: 1,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(album)
@@ -241,14 +353,12 @@ func handleMockOriginal(w http.ResponseWriter, r *http.Request, shareKey string)
 }
 
 // Helper to setup the handler with a mock server
-func setupTestHandler(t *testing.T, mockServer *httptest.Server) (*ShareHandler, *chi.Mux) {
+func setupTestHandlerWithOptions(t *testing.T, mockServer *httptest.Server, options config.OptionsConfig) (*ShareHandler, *chi.Mux) {
 	testSecret := "test-secret-key-12345"
 
 	client := immich.NewClient(mockServer.URL)
 	cfg := &config.Config{
-		Options: config.OptionsConfig{
-			AllowDownload: true,
-		},
+		Options: options,
 		Security: config.SecurityConfig{
 			MaxUploadSize: 100,
 		},
@@ -273,6 +383,13 @@ func setupTestHandler(t *testing.T, mockServer *httptest.Server) (*ShareHandler,
 	})
 
 	return handler, r
+}
+
+func setupTestHandler(t *testing.T, mockServer *httptest.Server) (*ShareHandler, *chi.Mux) {
+	return setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+		AllowDownload: true,
+		ShowMetadata:  true,
+	})
 }
 
 // Test: Get shared link successfully
@@ -306,6 +423,67 @@ func TestGetSharedLink_Success(t *testing.T) {
 
 	if len(link.Assets) != 2 {
 		t.Errorf("expected 2 assets, got %d", len(link.Assets))
+	}
+}
+
+func TestGetSharedLink_RespectsMetadataFlags(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+
+	tests := []struct {
+		name       string
+		key        string
+		showConfig bool
+		expectExif bool
+	}{
+		{
+			name:       "metadata visible when both config and share enable it",
+			key:        "valid-key",
+			showConfig: true,
+			expectExif: true,
+		},
+		{
+			name:       "metadata hidden when config disables it",
+			key:        "valid-key",
+			showConfig: false,
+			expectExif: false,
+		},
+		{
+			name:       "metadata hidden when share disables it",
+			key:        "metadata-off",
+			showConfig: true,
+			expectExif: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, router := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+				AllowDownload: true,
+				ShowMetadata:  tc.showConfig,
+			})
+
+			req := httptest.NewRequest("GET", "/api/share/"+tc.key+"/link", nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status 200, got %d, body: %s", rec.Code, rec.Body.String())
+			}
+
+			var link immich.SharedLink
+			if err := json.NewDecoder(rec.Body).Decode(&link); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+			if len(link.Album.Assets) == 0 {
+				t.Fatalf("expected at least one album asset")
+			}
+
+			hasExif := link.Album.Assets[0].ExifInfo != nil
+			if hasExif != tc.expectExif {
+				t.Fatalf("unexpected EXIF visibility: expected %v, got %v", tc.expectExif, hasExif)
+			}
+		})
 	}
 }
 
@@ -428,6 +606,71 @@ func TestGetAlbum_WrongAlbum(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestGetAlbum_RespectsMetadataFlags(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+
+	tests := []struct {
+		name       string
+		key        string
+		albumID    string
+		showConfig bool
+		expectExif bool
+	}{
+		{
+			name:       "album metadata visible when both config and share enable it",
+			key:        "valid-key",
+			albumID:    testAlbumID1,
+			showConfig: true,
+			expectExif: true,
+		},
+		{
+			name:       "album metadata hidden when config disables it",
+			key:        "valid-key",
+			albumID:    testAlbumID1,
+			showConfig: false,
+			expectExif: false,
+		},
+		{
+			name:       "album metadata hidden when share disables it",
+			key:        "metadata-off",
+			albumID:    testAlbumID4,
+			showConfig: true,
+			expectExif: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, router := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+				AllowDownload: true,
+				ShowMetadata:  tc.showConfig,
+			})
+
+			req := httptest.NewRequest("GET", "/api/share/"+tc.key+"/album/"+tc.albumID, nil)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected status 200, got %d, body: %s", rec.Code, rec.Body.String())
+			}
+
+			var album immich.Album
+			if err := json.NewDecoder(rec.Body).Decode(&album); err != nil {
+				t.Fatalf("failed to decode response: %v", err)
+			}
+			if len(album.Assets) == 0 {
+				t.Fatalf("expected at least one album asset")
+			}
+
+			hasExif := album.Assets[0].ExifInfo != nil
+			if hasExif != tc.expectExif {
+				t.Fatalf("unexpected EXIF visibility: expected %v, got %v", tc.expectExif, hasExif)
+			}
+		})
 	}
 }
 

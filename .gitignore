@@ -11,6 +11,8 @@ web/playwright-report/
 web/test-results/
 coverage/
 proxy/server
+e2e/runtime/seed.env
+e2e/runtime/*.log
 
 # Go
 *.exe

@@ -1,0 +1,116 @@
+name: immich-public-proxy-e2e
+
+services:
+  redis:
+    image: docker.io/valkey/valkey:9@sha256:3b55fbaa0cd93cf0d9d961f405e4dfcc70efe325e2d84da207a0a8e6d8fde4f9
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  database:
+    image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: immich
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    volumes:
+      - immich-postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}
+    environment:
+      DB_HOSTNAME: database
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE_NAME: immich
+      REDIS_HOSTNAME: redis
+      UPLOAD_LOCATION: /data
+      TZ: UTC
+    depends_on:
+      redis:
+        condition: service_healthy
+      database:
+        condition: service_started
+    volumes:
+      - immich-library:/data
+    restart: unless-stopped
+
+  proxy:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      IMMICH_URL: http://immich-server:2283
+      IPP_PORT: 3000
+      PUBLIC_BASE_URL: http://localhost:8080
+      IPP_OPTIONS_ALLOW_DOWNLOAD: "${IPP_OPTIONS_ALLOW_DOWNLOAD:-true}"
+      IPP_OPTIONS_SHOW_METADATA: "${IPP_OPTIONS_SHOW_METADATA:-true}"
+      IPP_COOKIE_SECRET: e2e-cookie-secret-change-me
+      IPP_SECURITY_TRUST_PROXY_HEADERS: "true"
+    depends_on:
+      - immich-server
+    restart: unless-stopped
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.ipp-e2e.rule=PathPrefix(`/`)
+      - traefik.http.routers.ipp-e2e.entrypoints=web
+      - traefik.http.services.ipp-e2e.loadbalancer.server.port=3000
+
+  caddy:
+    image: caddy:2.9.1-alpine
+    profiles: ["caddy"]
+    depends_on:
+      - proxy
+    ports:
+      - "8080:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped
+
+  traefik:
+    image: traefik:v3.1
+    profiles: ["traefik"]
+    depends_on:
+      - proxy
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --api.dashboard=false
+      - --log.level=ERROR
+    ports:
+      - "8081:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  seed:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.tools
+    depends_on:
+      - immich-server
+    entrypoint: ["/bin/bash", "/scripts/seed-immich.sh"]
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./runtime:/runtime
+
+  tester:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.tools
+    depends_on:
+      - proxy
+    entrypoint: ["/bin/bash", "/scripts/assert-proxy.sh"]
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./runtime:/runtime
+
+volumes:
+  immich-library:
+  immich-postgres:

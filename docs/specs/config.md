@@ -58,6 +58,16 @@ security:
 
 This allows administrators to globally disable downloads at the proxy level, while individual shares can also have downloads disabled via Immich settings.
 
+**Note**: Metadata visibility is also restrictive:
+- `EXIF/people data` is shown only if BOTH:
+  - `options.show_metadata: true` in proxy config, AND
+  - `showMetadata: true` on the specific shared link in Immich
+
+This means proxy config can globally hide metadata, but cannot force metadata to be shown for a share where Immich has `showMetadata: false`.
+
+**Note**: Upload permission is controlled by Immich shared-link settings (`allowUpload`).  
+Proxy config does not include a global `allow_upload` switch; `security.max_upload_size` only caps upload size.
+
 ### Security
 
 | Option | Type | Default | Env Var | Description |
@@ -69,6 +79,9 @@ This allows administrators to globally disable downloads at the proxy level, whi
 | `security.enable_hsts` | bool | `false` | `IPP_SECURITY_ENABLE_HSTS` | Enable HSTS header |
 | `security.cookie_secret` | string | `""` | `IPP_COOKIE_SECRET`, `COOKIE_SECRET` | Secret for signing cookies |
 | `security.hotlink_protection` | bool | `false` | `IPP_SECURITY_HOTLINK_PROTECTION` | Block direct API access (must come from web app) |
+| `security.trust_proxy_headers` | bool | `false` | `IPP_SECURITY_TRUST_PROXY_HEADERS` | Trust X-Forwarded-* headers (only behind trusted reverse proxy) |
+| `security.force_secure_cookies` | bool | `false` | `IPP_SECURITY_FORCE_SECURE_COOKIES` | Always mark auth cookies as `Secure` |
+| `security.max_concurrent_download_jobs` | int | `5` | `IPP_SECURITY_MAX_CONCURRENT_DOWNLOAD_JOBS` | Max concurrent ZIP download jobs (`0` disables cap) |
 
 ## Environment Variables
 
@@ -84,7 +97,19 @@ export PUBLIC_BASE_URL="https://photos.example.com"
 export IPP_SECURITY_RATE_LIMIT="100"
 export IPP_SECURITY_ALLOWED_ORIGINS="https://example.com,https://www.example.com"
 export IPP_COOKIE_SECRET="your-32-byte-hex-secret"
+export IPP_SECURITY_TRUST_PROXY_HEADERS="true"
+export IPP_SECURITY_FORCE_SECURE_COOKIES="true"
 ```
+
+## Preset Profiles
+
+Ready-to-use profile files live in:
+
+- `config/profiles/read-only.yaml`
+- `config/profiles/family-upload.yaml`
+- `config/profiles/strict.yaml`
+
+Guide: `config/profiles/README.md`
 
 ## Command Line Flags
 
