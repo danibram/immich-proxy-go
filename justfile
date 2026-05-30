@@ -73,11 +73,11 @@ run *ARGS:
 
 # Build Docker image
 docker-build:
-    docker build -t immich-public-proxy .
+    docker build -t immich-proxy-go .
 
 # Run Docker container
 docker-run:
-    docker run -p 3000:3000 --env-file .env immich-public-proxy
+    docker run -p 3000:3000 --env-file .env immich-proxy-go
 
 # Build and run Docker
 docker: docker-build docker-run
@@ -141,3 +141,20 @@ info:
     @echo "Testing:"
     @echo "  just test       # Run all tests"
     @echo "  just test-watch # Watch mode"
+
+# Preview the next release changelog without changing files
+release-dry bump:
+    ./scripts/release.sh {{bump}} --dry-run
+
+# Bump version, update CHANGELOG, commit, and tag (then push main + tag)
+release bump:
+    ./scripts/release.sh {{bump}}
+
+prod-build version:
+	docker build \
+	--platform linux/amd64 \
+	-t rg.fr-par.scw.cloud/ddbr/immich-proxy-go:{{version}} \
+	-f Dockerfile . \
+	--no-cache \
+	--progress=plain
+	docker push rg.fr-par.scw.cloud/ddbr/immich-proxy-go:{{version}}
