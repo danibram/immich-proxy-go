@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"github.com/dbr/immich-public-proxy/internal/immich"
+	"github.com/danibram/immich-proxy-go/internal/immich"
 )
 
 // sanitizeSharedLink strips sensitive and internal-only fields from a SharedLink

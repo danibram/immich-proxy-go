@@ -1,5 +1,6 @@
 import { AlertCircle, Check, FileImage, Upload, X } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
+import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
 import { isUploading, setIsUploading, setSharedLink } from '~/store/share';
 
@@ -72,6 +73,13 @@ export default function UploadModal(props: Props) {
     setIsUploading(true);
 
     const currentFiles = files();
+    const pendingFiles = currentFiles.filter((f) => f.status === 'pending');
+    if (pendingFiles.length > 0) {
+      captureEvent('upload_started', { file_count: pendingFiles.length });
+    }
+
+    let completed = 0;
+    let failed = 0;
     for (let i = 0; i < currentFiles.length; i++) {
       const uploadFile = currentFiles[i];
       if (uploadFile.status !== 'pending') continue;
@@ -94,7 +102,9 @@ export default function UploadModal(props: Props) {
         // Refresh album data (backend returns full album in single request)
         const updatedLink = await api.getSharedLink();
         setSharedLink(updatedLink);
+        completed += 1;
       } catch (error) {
+        failed += 1;
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i
@@ -103,6 +113,10 @@ export default function UploadModal(props: Props) {
           )
         );
       }
+    }
+
+    if (completed > 0 || failed > 0) {
+      captureEvent('upload_finished', { completed_count: completed, failed_count: failed });
     }
 
     setIsUploading(false);

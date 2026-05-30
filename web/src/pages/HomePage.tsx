@@ -1,6 +1,17 @@
 import { Images, Share2, Shield, Upload } from 'lucide-solid';
+import { onCleanup, onMount } from 'solid-js';
+import { captureEvent, registerPage, unregisterPage } from '~/analytics';
 
 export default function HomePage() {
+  onMount(() => {
+    registerPage('home');
+    captureEvent('home_viewed');
+  });
+
+  onCleanup(() => {
+    unregisterPage();
+  });
+
   return (
     <div class="min-h-screen flex items-center justify-center p-4">
       <div class="text-center max-w-lg animate-fadeIn">
@@ -19,19 +30,19 @@ export default function HomePage() {
 
         {/* Features */}
         <div class="grid grid-cols-3 gap-4 max-w-md mx-auto">
-          <div class="glass-card p-4 rounded-2xl hover:scale-105 transition-transform duration-200">
+          <div class="glass-card p-4 rounded-2xl">
             <div class="w-10 h-10 mx-auto mb-3 rounded-xl bg-icy-aqua/20 flex items-center justify-center glow-aqua">
               <Share2 class="w-5 h-5 text-icy-aqua" />
             </div>
             <p class="text-sm text-white/60">Easy Sharing</p>
           </div>
-          <div class="glass-card p-4 rounded-2xl hover:scale-105 transition-transform duration-200">
+          <div class="glass-card p-4 rounded-2xl">
             <div class="w-10 h-10 mx-auto mb-3 rounded-xl bg-light-blue/20 flex items-center justify-center">
               <Shield class="w-5 h-5 text-light-blue" />
             </div>
             <p class="text-sm text-white/60">Secure Access</p>
           </div>
-          <div class="glass-card p-4 rounded-2xl hover:scale-105 transition-transform duration-200">
+          <div class="glass-card p-4 rounded-2xl">
             <div class="w-10 h-10 mx-auto mb-3 rounded-xl bg-powder-blush/20 flex items-center justify-center glow-blush">
               <Upload class="w-5 h-5 text-powder-blush" />
             </div>

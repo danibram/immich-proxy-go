@@ -1,5 +1,6 @@
 import { CheckSquare, Download, Square, X } from 'lucide-solid';
 import { createSignal, Show } from 'solid-js';
+import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
 import {
   assets,
@@ -21,6 +22,12 @@ export default function SelectionBar() {
   async function handleDownloadSelected() {
     const selected = getSelectedAssets();
     if (selected.length === 0) return;
+
+    captureEvent('download_started', {
+      source: 'selection',
+      asset_count: selected.length,
+      zip: selected.length > 1,
+    });
 
     // Single file - direct download via window.open
     if (selected.length === 1) {
@@ -48,8 +55,18 @@ export default function SelectionBar() {
       setDownloadProgress(prev => ({ ...prev, status: 'ready' as const, downloadUrl }));
       // Auto-open download
       window.open(downloadUrl, '_blank');
+      captureEvent('download_ready', {
+        source: 'selection',
+        asset_count: selected.length,
+        zip: true,
+      });
     } catch (error) {
       console.error('Failed to download ZIP:', error);
+      captureEvent('download_failed', {
+        source: 'selection',
+        asset_count: selected.length,
+        zip: true,
+      });
       setDownloadProgress({ isOpen: false, progress: 0, total: 0, status: 'starting', downloadUrl: '' });
     }
   }

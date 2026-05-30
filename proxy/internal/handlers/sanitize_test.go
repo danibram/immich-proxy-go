@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dbr/immich-public-proxy/internal/immich"
+	"github.com/danibram/immich-proxy-go/internal/immich"
 )
 
 // TestSanitizeSharedLink_StripsOwnerPII makes sure we never leak the owner's

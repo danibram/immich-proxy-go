@@ -72,7 +72,7 @@ Custom slugs are configured in Immich when creating a shared link. They provide 
 version: '3.8'
 services:
   immich-public-proxy:
-    image: ghcr.io/dbr/immich-public-proxy:latest
+    image: ghcr.io/danibram/immich-proxy-go:latest
     environment:
       - IMMICH_URL=http://immich-server:2283
       - PUBLIC_BASE_URL=https://photos.example.com
@@ -119,6 +119,11 @@ security:
   enable_hsts: false           # Enable HSTS header
   cookie_secret: ""            # Secret for signing cookies (auto-generated if empty)
   hotlink_protection: false    # Block direct URL access to API
+
+# Optional PostHog (runtime on/off; credentials at web build — see docs/specs/config.md)
+analytics:
+  posthog:
+    enabled: false
 ```
 
 Predefined profiles are available in [config/profiles/README.md](config/profiles/README.md):
@@ -141,6 +146,16 @@ PUBLIC_BASE_URL=https://photos.example.com
 IPP_SECURITY_ALLOWED_ORIGINS=https://photos.example.com
 IPP_SECURITY_RATE_LIMIT=100
 IPP_COOKIE_SECRET=your-secret-here
+
+# PostHog runtime toggle (proxy injects into index.html)
+IPP_ANALYTICS_POSTHOG_ENABLED=true
+```
+
+Web build (Docker `ARG` or `web/.env` — see `web/.env.example`):
+
+```bash
+VITE_POSTHOG_API_KEY=phc_...
+VITE_POSTHOG_HOST=https://eu.i.posthog.com
 ```
 
 ## Development

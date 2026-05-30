@@ -1,5 +1,5 @@
 {
-  "name": "immich-public-proxy-web",
+  "name": "immich-proxy-go-web",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -16,6 +16,7 @@
   "dependencies": {
     "@solidjs/router": "^0.14.0",
     "lucide-solid": "^0.460.0",
+    "posthog-js": "^1.376.4",
     "solid-js": "^1.8.0"
   },
   "devDependencies": {

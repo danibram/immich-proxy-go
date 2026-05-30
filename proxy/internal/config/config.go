@@ -7,10 +7,11 @@ import (
 )
 
 type Config struct {
-	Immich   ImmichConfig   `mapstructure:"immich"`
-	Proxy    ProxyConfig    `mapstructure:"proxy"`
-	Options  OptionsConfig  `mapstructure:"options"`
-	Security SecurityConfig `mapstructure:"security"`
+	Immich    ImmichConfig    `mapstructure:"immich"`
+	Proxy     ProxyConfig     `mapstructure:"proxy"`
+	Options   OptionsConfig   `mapstructure:"options"`
+	Security  SecurityConfig  `mapstructure:"security"`
+	Analytics AnalyticsConfig `mapstructure:"analytics"`
 }
 
 type ImmichConfig struct {
@@ -57,6 +58,16 @@ type SecurityConfig struct {
 	MaxConcurrentDownloadJobs int `mapstructure:"max_concurrent_download_jobs"`
 }
 
+type AnalyticsConfig struct {
+	PostHog PostHogConfig `mapstructure:"posthog"`
+}
+
+// PostHogConfig toggles analytics at runtime (injected into index.html).
+// API key and SDK options are set at web build time via VITE_POSTHOG_* env vars.
+type PostHogConfig struct {
+	Enabled bool `mapstructure:"enabled"`
+}
+
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
 
@@ -80,6 +91,8 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("security.force_secure_cookies", false)    // Opt-in for behind-TLS-proxy deployments
 	v.SetDefault("security.max_concurrent_download_jobs", 5)
 
+	v.SetDefault("analytics.posthog.enabled", false)
+
 	// Environment variables
 	v.SetEnvPrefix("IPP")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
@@ -90,6 +103,7 @@ func Load(configPath string) (*Config, error) {
 	v.BindEnv("proxy.port", "IPP_PORT", "PORT")
 	v.BindEnv("proxy.public_url", "PUBLIC_BASE_URL", "PUBLIC_URL")
 	v.BindEnv("security.cookie_secret", "IPP_COOKIE_SECRET", "COOKIE_SECRET")
+	v.BindEnv("analytics.posthog.enabled", "IPP_ANALYTICS_POSTHOG_ENABLED")
 
 	// Config file
 	if configPath != "" {

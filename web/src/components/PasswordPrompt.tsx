@@ -1,5 +1,6 @@
 import { Eye, EyeOff, Lock } from 'lucide-solid';
 import { createSignal } from 'solid-js';
+import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
 import { setPasswordRequired } from '~/store/share';
 
@@ -26,10 +27,13 @@ export default function PasswordPrompt(props: Props) {
 
     try {
       await api.validatePassword(password());
+      captureEvent('share_password_unlock', { success: true });
       setPasswordRequired(false);
       props.onSuccess();
     } catch (err) {
-      if (err instanceof Error && err.message.includes('401')) {
+      const invalidPassword = err instanceof Error && err.message.includes('401');
+      captureEvent('share_password_unlock', { success: false, invalid_password: invalidPassword });
+      if (invalidPassword) {
         setErrorMessage('Invalid password');
       } else {
         setErrorMessage('An error occurred. Please try again.');

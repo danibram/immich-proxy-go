@@ -8,7 +8,7 @@
 version: '3.8'
 services:
   immich-public-proxy:
-    image: ghcr.io/your-org/immich-public-proxy:latest
+    image: ghcr.io/danibram/immich-proxy-go:latest
     environment:
       - IMMICH_URL=http://immich-server:2283
       - PUBLIC_BASE_URL=https://photos.example.com

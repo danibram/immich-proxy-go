@@ -20,9 +20,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dbr/immich-public-proxy/internal/config"
-	"github.com/dbr/immich-public-proxy/internal/immich"
-	"github.com/dbr/immich-public-proxy/internal/middleware"
+	"github.com/danibram/immich-proxy-go/internal/config"
+	"github.com/danibram/immich-proxy-go/internal/immich"
+	"github.com/danibram/immich-proxy-go/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )

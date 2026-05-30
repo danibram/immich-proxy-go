@@ -139,6 +139,32 @@ When `security.hotlink_protection: true`, the proxy validates that API requests 
 
 **Note:** This is a deterrent against casual direct access, not a security guarantee. Headers can be spoofed.
 
+### Analytics (PostHog)
+
+Optional product analytics and feature flags. Disabled by default.
+
+**Proxy (runtime on/off only)**
+
+| Option | Type | Default | Env Var | Description |
+|--------|------|---------|---------|-------------|
+| `analytics.posthog.enabled` | bool | `false` | `IPP_ANALYTICS_POSTHOG_ENABLED` | Inject `window.__IPP_POSTHOG_ENABLED__` when serving `index.html` |
+
+**Web build (`VITE_*` at `npm run build` / Docker web stage)**
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_POSTHOG_API_KEY` | PostHog project API key (public client key) |
+| `VITE_POSTHOG_HOST` | e.g. `https://eu.i.posthog.com` |
+| `VITE_POSTHOG_DISABLE_SESSION_RECORDING` | Default `true` unless set to `false` |
+| `VITE_POSTHOG_AUTOCAPTURE` | `true` to enable autocapture |
+| `VITE_POSTHOG_ENABLED` | **Vite dev only** — use when `just dev` runs the UI without the Go proxy |
+
+PostHog initializes only when `analytics.posthog.enabled` is true **and** the bundle was built with `VITE_POSTHOG_API_KEY`. No extra HTTP endpoints.
+
+Events are aggregated only (no share keys, filenames, or album titles).
+
+**Feature flags** (examples in PostHog): `upload-ui` hides the upload button when off.
+
 ## Production Recommendations
 
 ```yaml

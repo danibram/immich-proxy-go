@@ -1,12 +1,15 @@
 /* @refresh reload */
 import { Route, Router } from '@solidjs/router';
 import { render } from 'solid-js/web';
+import { initAnalytics } from './analytics';
 import App from './App';
 import './index.css';
 import HomePage from './pages/HomePage';
 import SharePage from './pages/SharePage';
 
 const root = document.getElementById('root');
+
+initAnalytics();
 
 render(
   () => (

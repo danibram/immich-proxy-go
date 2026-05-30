@@ -1,5 +1,6 @@
 import { Calendar, Camera, ChevronLeft, ChevronRight, Download, Info, MapPin, X } from 'lucide-solid';
-import { createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
 import {
   allowDownload,
@@ -24,6 +25,14 @@ export default function AssetViewer() {
   let contentRef: HTMLDivElement | undefined;
 
   const SWIPE_THRESHOLD = 50;
+
+  createEffect(() => {
+    const asset = selectedAsset();
+    if (!asset) {
+      return;
+    }
+    captureEvent('asset_viewed', { asset_type: asset.type });
+  });
 
   function handleKeydown(event: KeyboardEvent) {
     switch (event.key) {

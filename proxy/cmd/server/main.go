@@ -9,10 +9,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/dbr/immich-public-proxy/internal/config"
-	"github.com/dbr/immich-public-proxy/internal/handlers"
-	"github.com/dbr/immich-public-proxy/internal/immich"
-	"github.com/dbr/immich-public-proxy/internal/middleware"
+	"github.com/danibram/immich-proxy-go/internal/config"
+	"github.com/danibram/immich-proxy-go/internal/handlers"
+	"github.com/danibram/immich-proxy-go/internal/immich"
+	"github.com/danibram/immich-proxy-go/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -86,7 +86,7 @@ func main() {
 
 	// Create handlers
 	shareHandler := handlers.NewShareHandler(client, cfg, logger, cookieSecret)
-	staticHandler := handlers.NewStaticHandler(*webDir, nil, logger)
+	staticHandler := handlers.NewStaticHandler(*webDir, nil, cfg.Analytics.PostHog.Enabled, logger)
 
 	// Create router
 	r := chi.NewRouter()
@@ -214,28 +214,8 @@ func main() {
 	r.Get("/assets/*", staticHandler.ServeHTTP)
 	r.Get("/favicon.ico", staticHandler.ServeHTTP)
 
-	// Root redirect or landing page
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		w.Write([]byte(`<!DOCTYPE html>
-<html>
-<head>
-	<title>Immich Public Proxy</title>
-	<style>
-		body { font-family: system-ui, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #1a1a2e; color: #eee; }
-		.container { text-align: center; }
-		h1 { font-size: 2rem; margin-bottom: 0.5rem; }
-		p { color: #888; }
-	</style>
-</head>
-<body>
-	<div class="container">
-		<h1>Immich Public Proxy</h1>
-		<p>Share your photos securely</p>
-	</div>
-</body>
-</html>`))
-	})
+	// Landing page (SolidJS app)
+	r.Get("/", staticHandler.ServeIndex)
 
 	// Start server
 	addr := fmt.Sprintf(":%d", cfg.Proxy.Port)

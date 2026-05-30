@@ -68,3 +68,8 @@ security:
   # Each job uses a temp file; an attacker with a share URL could
   # otherwise trigger unbounded disk usage. Set to 0 to disable the cap.
   max_concurrent_download_jobs: 5
+
+# PostHog: runtime on/off only. SDK credentials are baked in at web build (VITE_POSTHOG_*).
+analytics:
+  posthog:
+    enabled: false

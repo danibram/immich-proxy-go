@@ -8,27 +8,32 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
 )
 
+const posthogInjectMarker = "</head>"
+
 // StaticHandler serves static files from the web directory
 type StaticHandler struct {
-	webDir     string
-	embedFS    *embed.FS
-	fileServer http.Handler
-	logger     *zap.Logger
+	webDir         string
+	embedFS        *embed.FS
+	fileServer     http.Handler
+	logger         *zap.Logger
+	posthogEnabled bool
 }
 
 // NewStaticHandler creates a new static file handler
 // If webDir is provided and exists, it serves from disk
 // Otherwise, it will use the embedded filesystem if provided
-func NewStaticHandler(webDir string, embedFS *embed.FS, logger *zap.Logger) *StaticHandler {
+func NewStaticHandler(webDir string, embedFS *embed.FS, posthogEnabled bool, logger *zap.Logger) *StaticHandler {
 	h := &StaticHandler{
-		webDir:  webDir,
-		embedFS: embedFS,
-		logger:  logger,
+		webDir:         webDir,
+		embedFS:        embedFS,
+		logger:         logger,
+		posthogEnabled: posthogEnabled,
 	}
 
 	// Try to serve from disk first
@@ -77,7 +82,7 @@ func (h *StaticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// For root path, serve index.html
 	if path == "/" || path == "" {
-		h.serveFile(w, r, "index.html", "text/html; charset=utf-8")
+		h.serveIndexHTML(w, r)
 		return
 	}
 
@@ -97,7 +102,7 @@ func (h *StaticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// File doesn't exist, serve index.html for SPA routing
-	h.serveFile(w, r, "index.html", "text/html; charset=utf-8")
+	h.serveIndexHTML(w, r)
 }
 
 // setCacheHeaders sets appropriate cache headers based on file type
@@ -124,7 +129,41 @@ func (h *StaticHandler) setCacheHeaders(w http.ResponseWriter, path string) {
 
 // ServeIndex serves the index.html file directly
 func (h *StaticHandler) ServeIndex(w http.ResponseWriter, r *http.Request) {
-	h.serveFile(w, r, "index.html", "text/html; charset=utf-8")
+	h.serveIndexHTML(w, r)
+}
+
+func (h *StaticHandler) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
+	if h.webDir == "" {
+		http.Error(w, "Static files not configured", http.StatusNotFound)
+		return
+	}
+
+	filePath := filepath.Join(h.webDir, "index.html")
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		h.logger.Error("failed to read index.html", zap.String("path", filePath), zap.Error(err))
+		http.Error(w, "File not found", http.StatusNotFound)
+		return
+	}
+
+	html := injectPostHogFlag(string(content), h.posthogEnabled)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+	w.Header().Set("Content-Length", strconv.Itoa(len(html)))
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(html))
+}
+
+func injectPostHogFlag(html string, enabled bool) string {
+	snippet := fmt.Sprintf(
+		`<script>window.__IPP_POSTHOG_ENABLED__=%s</script>`+"\n",
+		strconv.FormatBool(enabled),
+	)
+	if idx := strings.Index(html, posthogInjectMarker); idx != -1 {
+		return html[:idx] + snippet + html[idx:]
+	}
+	return snippet + html
 }
 
 // serveFile serves a specific file from the web directory

@@ -1,5 +1,6 @@
 import { Calendar, CheckSquare, Download, Images, Upload } from 'lucide-solid';
 import { createSignal, Show } from 'solid-js';
+import { captureEvent, isFeatureEnabled } from '~/analytics';
 import { api } from '~/api/client';
 import { albumName, allowDownload, allowUpload, assets, isSelectionMode, setIsSelectionMode } from '~/store/share';
 import DownloadProgress from './DownloadProgress';
@@ -34,6 +35,12 @@ export default function Header(props: Props) {
     const assetList = assets();
     if (assetList.length === 0) return;
 
+    captureEvent('download_started', {
+      source: 'header',
+      asset_count: assetList.length,
+      zip: assetList.length > 1,
+    });
+
     // Single file - direct download via window.open
     if (assetList.length === 1) {
       const asset = assetList[0];
@@ -60,8 +67,10 @@ export default function Header(props: Props) {
       setDownloadProgress(prev => ({ ...prev, status: 'ready' as const, downloadUrl }));
       // Auto-open download
       window.open(downloadUrl, '_blank');
+      captureEvent('download_ready', { source: 'header', asset_count: assetList.length, zip: true });
     } catch (error) {
       console.error('Failed to download ZIP:', error);
+      captureEvent('download_failed', { source: 'header', asset_count: assetList.length, zip: true });
       setDownloadProgress({ isOpen: false, progress: 0, total: 0, status: 'starting', downloadUrl: '' });
     }
   }
@@ -104,7 +113,10 @@ export default function Header(props: Props) {
                 <Show when={allowDownload() && assets().length > 0}>
                   <button
                     class="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 hover:text-white text-sm font-medium transition-colors"
-                    onClick={() => setIsSelectionMode(true)}
+                    onClick={() => {
+                      captureEvent('selection_mode_enabled', { source: 'header' });
+                      setIsSelectionMode(true);
+                    }}
                   >
                     <CheckSquare class="w-4 h-4" />
                     <span class="hidden sm:inline">Select</span>
@@ -123,7 +135,7 @@ export default function Header(props: Props) {
                 </Show>
 
                 {/* Upload */}
-                <Show when={allowUpload()}>
+                <Show when={allowUpload() && isFeatureEnabled('upload-ui', true)}>
                   <button
                     class="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-slate hover:bg-blue-slate/80 text-white text-sm font-medium transition-colors"
                     onClick={props.onUploadClick}

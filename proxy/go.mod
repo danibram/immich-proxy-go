@@ -1,4 +1,4 @@
-module github.com/dbr/immich-public-proxy
+module github.com/danibram/immich-proxy-go
 
 go 1.22
 

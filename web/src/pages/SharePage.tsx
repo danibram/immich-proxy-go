@@ -1,6 +1,15 @@
 import { useParams } from '@solidjs/router';
 import { AlertCircle, Images } from 'lucide-solid';
-import { createEffect, createSignal, onMount, Show } from 'solid-js';
+import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
+import {
+  captureEvent,
+  getShareRouteTypeFromPath,
+  registerPage,
+  registerShareContext,
+  unregisterPage,
+  unregisterShareContext,
+} from '~/analytics';
+import type { SharedLink } from '~/api/types';
 import { api, PasswordRequiredError } from '~/api/client';
 import AssetTimeline from '~/components/AssetTimeline';
 import AssetViewer from '~/components/AssetViewer';
@@ -22,9 +31,25 @@ import {
   sharedLink,
 } from '~/store/share';
 
+function assetCountFromLink(link: SharedLink): number {
+  if (link.type === 'ALBUM' && link.album) {
+    return link.album.assets?.length ?? link.album.assetCount ?? 0;
+  }
+  return link.assets?.length ?? 0;
+}
+
 export default function SharePage() {
   const params = useParams();
   const [showUploadModal, setShowUploadModal] = createSignal(false);
+
+  onMount(() => {
+    registerPage('share');
+  });
+
+  onCleanup(() => {
+    unregisterShareContext();
+    unregisterPage();
+  });
 
   async function loadSharedLink() {
     const key = params.key;
@@ -41,11 +66,36 @@ export default function SharePage() {
       // Backend now returns full album details in a single request
       const link = await api.getSharedLink();
       setSharedLink(link);
+
+      const shareRouteType = getShareRouteTypeFromPath(window.location.pathname);
+      const count = assetCountFromLink(link);
+      registerShareContext({
+        share_route_type: shareRouteType,
+        link_type: link.type,
+        asset_count: count,
+        allow_upload: link.allowUpload,
+        allow_download: link.allowDownload,
+        show_metadata: link.showMetadata,
+      });
+      captureEvent('share_loaded', {
+        share_route_type: shareRouteType,
+        link_type: link.type,
+        asset_count: count,
+        allow_upload: link.allowUpload,
+        allow_download: link.allowDownload,
+        show_metadata: link.showMetadata,
+      });
     } catch (err) {
       if (err instanceof PasswordRequiredError) {
         setPasswordRequired(true);
+        captureEvent('share_password_required', {
+          share_route_type: getShareRouteTypeFromPath(window.location.pathname),
+        });
       } else {
         setError(err instanceof Error ? err.message : 'Failed to load shared link');
+        captureEvent('share_load_failed', {
+          share_route_type: getShareRouteTypeFromPath(window.location.pathname),
+        });
       }
     } finally {
       setIsLoading(false);
