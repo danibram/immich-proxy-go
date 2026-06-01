@@ -210,24 +210,12 @@ export default function HomePage() {
               </div>
               <div class="landing-mock-date">Today · Lisbon</div>
               <div class="landing-mock-grid">
-                <div class="ph" style={{ 'grid-column': 'span 4' }}>
-                  <img loading="lazy" src="https://picsum.photos/seed/ipp1/400/300" alt="" />
-                </div>
-                <div class="ph vid" style={{ 'grid-column': 'span 5' }}>
-                  <img loading="lazy" src="https://picsum.photos/seed/ipp2/500/300" alt="" />
-                </div>
-                <div class="ph" style={{ 'grid-column': 'span 3' }}>
-                  <img loading="lazy" src="https://picsum.photos/seed/ipp3/300/300" alt="" />
-                </div>
-                <div class="ph" style={{ 'grid-column': 'span 3' }}>
-                  <img loading="lazy" src="https://picsum.photos/seed/ipp4/300/300" alt="" />
-                </div>
-                <div class="ph" style={{ 'grid-column': 'span 4' }}>
-                  <img loading="lazy" src="https://picsum.photos/seed/ipp5/400/300" alt="" />
-                </div>
-                <div class="ph" style={{ 'grid-column': 'span 5' }}>
-                  <img loading="lazy" src="https://picsum.photos/seed/ipp6/500/300" alt="" />
-                </div>
+                <div class="ph ph-a" style={{ 'grid-column': 'span 4' }} />
+                <div class="ph ph-b vid" style={{ 'grid-column': 'span 5' }} />
+                <div class="ph ph-c" style={{ 'grid-column': 'span 3' }} />
+                <div class="ph ph-d" style={{ 'grid-column': 'span 3' }} />
+                <div class="ph ph-e" style={{ 'grid-column': 'span 4' }} />
+                <div class="ph ph-f" style={{ 'grid-column': 'span 5' }} />
               </div>
             </div>
           </div>
