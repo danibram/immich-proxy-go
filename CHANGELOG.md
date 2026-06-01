@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-06-01
+
+### Bug Fixes
+
+- 🩹 Fix GitHub release notes to include only latest tag
+
+- 🐛 Unify PostHog active state and widen CSP when analytics is on
+
+Centralize Active(), Origins(), and CSPDirective() in config; inject
+enabled meta only when active; align frontend gate and CSP allowlist
+for PostHog cloud hosts without passing API keys into middleware.
+
+- 🐛 Fix slug 404 handling and polish timeline scrubber
+
+- 🩹 Stabilize thumbnail reloads and align timeline pill
+
+
+### Features
+
+- ✨ Improve thumbnail loading priority during fast scroll
+
+
+### Other
+
+- 🔧 Bump version to 1.1.0 in package-lock.json
+
 ## [1.1.0] - 2026-06-01
 
 ### Features
