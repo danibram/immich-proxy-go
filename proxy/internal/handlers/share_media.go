@@ -65,7 +65,7 @@ func (h *ShareHandler) GetOriginal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	link, creds, err := h.loadShareLinkFromRequest(r)
+	link, creds, _, err := h.loadShareLinkFromRequest(r)
 	if err != nil {
 		h.handleError(w, err)
 		return

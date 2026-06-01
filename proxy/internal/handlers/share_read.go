@@ -12,10 +12,13 @@ import (
 // GetSharedLink returns information about a shared link
 // For album shares, it automatically fetches the full album details to avoid a second request
 func (h *ShareHandler) GetSharedLink(w http.ResponseWriter, r *http.Request) {
-	link, creds, err := h.loadShareLinkFromRequest(r)
+	link, creds, droppedStalePassword, err := h.loadShareLinkFromRequest(r)
 	if err != nil {
 		h.handleError(w, err)
 		return
+	}
+	if droppedStalePassword {
+		clearSharePasswordCookie(w, r)
 	}
 
 	if h.rejectIfExpired(w, link) {
@@ -62,10 +65,13 @@ func (h *ShareHandler) GetAlbum(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	link, creds, err := h.loadShareLinkFromRequest(r)
+	link, creds, droppedStalePassword, err := h.loadShareLinkFromRequest(r)
 	if err != nil {
 		h.handleError(w, err)
 		return
+	}
+	if droppedStalePassword {
+		clearSharePasswordCookie(w, r)
 	}
 
 	if h.rejectIfExpired(w, link) {

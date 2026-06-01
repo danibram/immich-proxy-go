@@ -45,12 +45,20 @@ func (c *Client) GetSharedLink(key string, password string) (*SharedLink, error)
 
 // GetSharedLinkWithKeyType retrieves information about a shared link using its key or slug
 func (c *Client) GetSharedLinkWithKeyType(key string, password string, keyType KeyType) (*SharedLink, error) {
+	link, _, err := c.GetSharedLinkWithKeyTypeDroppedStalePassword(key, password, keyType)
+	return link, err
+}
+
+// GetSharedLinkWithKeyTypeDroppedStalePassword is like GetSharedLinkWithKeyType but
+// reports when a stale password cookie was dropped for a public share.
+func (c *Client) GetSharedLinkWithKeyTypeDroppedStalePassword(key string, password string, keyType KeyType) (*SharedLink, bool, error) {
 	link, err := c.getSharedLinkWithKeyType(key, password, keyType)
 	if err == nil || password == "" || !isStalePasswordOnPublicShareError(err) {
-		return link, err
+		return link, false, err
 	}
 
-	return c.getSharedLinkWithKeyType(key, "", keyType)
+	link, err = c.getSharedLinkWithKeyType(key, "", keyType)
+	return link, err == nil, err
 }
 
 func (c *Client) getSharedLinkWithKeyType(key string, password string, keyType KeyType) (*SharedLink, error) {
@@ -237,15 +245,6 @@ func (c *Client) GetThumbnail(assetID string, key string, password string, size 
 
 // GetThumbnailWithKeyType retrieves an asset thumbnail with specified key type
 func (c *Client) GetThumbnailWithKeyType(assetID string, key string, password string, size string, keyType KeyType) (*http.Response, error) {
-	resp, err := c.getThumbnailWithKeyType(assetID, key, password, size, keyType)
-	if err != nil || password == "" || !shouldRetryShareMediaWithoutPassword(resp) {
-		return resp, err
-	}
-
-	return c.getThumbnailWithKeyType(assetID, key, "", size, keyType)
-}
-
-func (c *Client) getThumbnailWithKeyType(assetID string, key string, password string, size string, keyType KeyType) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/thumbnail", assetID)
 	query := shareQuery(key, password, keyType)
 	if size != "" {
@@ -262,15 +261,6 @@ func (c *Client) GetOriginal(assetID string, key string, password string) (*http
 
 // GetOriginalWithKeyType retrieves the original asset file with specified key type
 func (c *Client) GetOriginalWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
-	resp, err := c.getOriginalWithKeyType(assetID, key, password, keyType)
-	if err != nil || password == "" || !shouldRetryShareMediaWithoutPassword(resp) {
-		return resp, err
-	}
-
-	return c.getOriginalWithKeyType(assetID, key, "", keyType)
-}
-
-func (c *Client) getOriginalWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/original", assetID)
 	return c.ProxyRequest("GET", path, shareQuery(key, password, keyType), nil, nil)
 }
@@ -282,15 +272,6 @@ func (c *Client) GetVideo(assetID string, key string, password string) (*http.Re
 
 // GetVideoWithKeyType retrieves a video for playback with specified key type
 func (c *Client) GetVideoWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
-	resp, err := c.getVideoWithKeyType(assetID, key, password, keyType)
-	if err != nil || password == "" || !shouldRetryShareMediaWithoutPassword(resp) {
-		return resp, err
-	}
-
-	return c.getVideoWithKeyType(assetID, key, "", keyType)
-}
-
-func (c *Client) getVideoWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/video/playback", assetID)
 	return c.ProxyRequest("GET", path, shareQuery(key, password, keyType), nil, nil)
 }
@@ -396,16 +377,6 @@ func isStalePasswordOnPublicShareError(err error) bool {
 	// if upstream is flaky or returns inconsistent auth errors.
 	return strings.Contains(msg, "unexpected status code 400") &&
 		strings.Contains(msg, "shared link is not password protected")
-}
-
-func shouldRetryShareMediaWithoutPassword(resp *http.Response) bool {
-	if resp == nil || resp.StatusCode != http.StatusBadRequest {
-		return false
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	return strings.Contains(strings.ToLower(string(body)), "shared link is not password protected")
 }
 
 // Errors

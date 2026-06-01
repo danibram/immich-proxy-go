@@ -234,7 +234,7 @@ func TestGetThumbnail_StalePasswordOnProtectedShareDoesNotBypass(t *testing.T) {
 	}
 }
 
-func TestGetThumbnail_StalePasswordOnPublicShareFallsBackToPublicSlug(t *testing.T) {
+func TestGetThumbnail_StalePasswordOnPublicShareDoesNotRetryWithoutPassword(t *testing.T) {
 	var seenQueries []string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -260,20 +260,17 @@ func TestGetThumbnail_StalePasswordOnPublicShareFallsBackToPublicSlug(t *testing
 	c := NewClient(srv.URL)
 	resp, err := c.GetThumbnailWithKeyType("asset-1", "mei", "stale-cookie-password", "preview", KeyTypeSlug)
 	if err != nil {
-		t.Fatalf("expected thumbnail fallback to succeed, got %v", err)
+		t.Fatalf("expected thumbnail response without transport error, got %v", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400 to propagate, got %d", resp.StatusCode)
 	}
-	if len(seenQueries) != 2 {
-		t.Fatalf("expected one password request and one fallback request, got %d: %v", len(seenQueries), seenQueries)
+	if len(seenQueries) != 1 {
+		t.Fatalf("media requests must not retry without password, got %d: %v", len(seenQueries), seenQueries)
 	}
 	if !strings.Contains(seenQueries[0], "password=") {
-		t.Fatalf("first request should include password, got %q", seenQueries[0])
-	}
-	if strings.Contains(seenQueries[1], "password=") {
-		t.Fatalf("fallback request should drop password, got %q", seenQueries[1])
+		t.Fatalf("request should keep password, got %q", seenQueries[0])
 	}
 }

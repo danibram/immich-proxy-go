@@ -40,7 +40,7 @@ func (h *ShareHandler) DownloadAssets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	link, creds, err := h.loadShareLinkFromRequest(r)
+	link, creds, _, err := h.loadShareLinkFromRequest(r)
 	if err != nil {
 		h.handleError(w, err)
 		return

@@ -73,6 +73,7 @@ EOF
 
 require_seed_vars() {
   [[ -n "${DEFAULT_SHARE_KEY}" ]] || die "Missing DEFAULT_SHARE_KEY in seed file"
+  [[ -n "${DEFAULT_SHARE_SLUG}" ]] || die "Missing DEFAULT_SHARE_SLUG in seed file"
   [[ -n "${DEFAULT_ALBUM_ID}" ]] || die "Missing DEFAULT_ALBUM_ID in seed file"
   [[ -n "${OVERRIDE_ON_SHARE_KEY}" ]] || die "Missing OVERRIDE_ON_SHARE_KEY in seed file"
   [[ -n "${OVERRIDE_OFF_SHARE_KEY}" ]] || die "Missing OVERRIDE_OFF_SHARE_KEY in seed file"
@@ -195,6 +196,80 @@ assert_json_password_required() {
   jq -e '.passwordRequired == true' "${json_file}" >/dev/null || die "${label}: expected passwordRequired=true"
 }
 
+sign_share_password_cookie() {
+  local password="$1"
+  case "${password}" in
+    stale-password-from-another-share)
+      # Must match proxy/internal/sharecookie/cookie_test.go TestSign_e2eStalePasswordVector
+      printf '%s' 'c3RhbGUtcGFzc3dvcmQtZnJvbS1hbm90aGVyLXNoYXJl.z3XQleAhHpf-MgTQS9fgvqCyrYCNK0g6TIeUBMgp0T0='
+      ;;
+    *)
+      die "unsupported password for e2e cookie signing: ${password}"
+      ;;
+  esac
+}
+
+assert_stale_password_media_performance() {
+  local public_slug="$1"
+  local public_key="$2"
+  local stale_password="stale-password-from-another-share"
+  local signed_cookie public_asset_id status
+  local thumb_headers=(
+    -H "Sec-Fetch-Dest: image"
+    -H "Sec-Fetch-Site: same-origin"
+  )
+
+  log "media perf: resolve a public share asset id"
+  status="$(curl -sS -o /tmp/public-share-for-media-perf.json -w '%{http_code}' \
+    "${BASE_URL}/share/${public_key}/api/shared-links/me")"
+  assert_status "200" "${status}" "public shared-links/me baseline"
+  extract_public_asset_id /tmp/public-share-for-media-perf.json
+  public_asset_id="${PUBLIC_ASSET_ID}"
+
+  signed_cookie="$(sign_share_password_cookie "${stale_password}")"
+  [[ -n "${signed_cookie}" ]] || die "failed to sign stale password cookie"
+
+  log "media perf: slug thumbnail with stale cookie must not retry without password (expect 400/404, not 200)"
+  status="$(curl -sS \
+    "${thumb_headers[@]}" \
+    -H "Referer: ${BASE_URL}/s/${public_slug}" \
+    -b "immich-share-password=${signed_cookie}" \
+    -o /tmp/public-stale-thumb-direct.bin \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail?size=preview")"
+  if [[ "${status}" == "200" ]]; then
+    die "slug thumbnail with stale password cookie must not succeed without clearing cookie first (got 200 — media retry still active?)"
+  fi
+  if [[ "${status}" != "400" && "${status}" != "404" ]]; then
+    die "slug thumbnail with stale password cookie: expected HTTP 400 or 404, got ${status}"
+  fi
+
+  log "media perf: shared-links/me clears stale password cookie"
+  rm -f /tmp/public-stale-media.cookies
+  status="$(curl -sS \
+    -b "immich-share-password=${signed_cookie}" \
+    -c /tmp/public-stale-media.cookies \
+    -D /tmp/public-stale-media-headers.txt \
+    -o /tmp/public-stale-media-share.json \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${public_slug}/api/shared-links/me")"
+  assert_status "200" "${status}" "public shared-links/me with stale password cookie"
+  jq -e '.type == "ALBUM"' /tmp/public-stale-media-share.json >/dev/null || die "public share payload missing after stale password cookie"
+  grep -qi 'immich-share-password' /tmp/public-stale-media-headers.txt || die "expected Set-Cookie clearing stale password"
+  grep -Eiq 'Max-Age=0|Expires=Thu, 01 Jan 1970' /tmp/public-stale-media-headers.txt || die "expected stale password cookie deletion (Max-Age=0)"
+
+  log "media perf: cleared cookie jar no longer sends stale password on shared-links/me"
+  status="$(curl -sS \
+    -b /tmp/public-stale-media.cookies \
+    -o /tmp/public-stale-media-share-followup.json \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${public_slug}/api/shared-links/me")"
+  assert_status "200" "${status}" "public shared-links/me after stale cookie cleared"
+  jq -e '.type == "ALBUM"' /tmp/public-stale-media-share-followup.json >/dev/null || die "public share payload missing after stale cookie cleared"
+
+  log "media perf OK"
+}
+
 assert_password_protection() {
   local protected_slug="$1"
   local password="$2"
@@ -220,7 +295,9 @@ assert_password_protection() {
   log "password protection: thumbnail blocked before unlock"
   status="$(curl -sS -o /tmp/password-protected-thumb-unauth.bin -w '%{http_code}' \
     "${BASE_URL}/s/${protected_slug}/api/assets/${_asset_id}/thumbnail?size=preview")"
-  assert_status "401" "${status}" "protected thumbnail without password"
+  if [[ "${status}" != "401" && "${status}" != "404" ]]; then
+    die "protected thumbnail without password: expected HTTP 401 or 404, got ${status}"
+  fi
 
   log "password protection: wrong POST password is rejected"
   status="$(curl -sS \
@@ -403,6 +480,7 @@ main() {
   log "invalid key behavior OK"
 
   assert_password_protection "${PASSWORD_PROTECTED_SHARE_SLUG}" "${E2E_SHARE_PASSWORD}" "${PASSWORD_PROTECTED_ASSET_ID}" "${DEFAULT_SHARE_SLUG}"
+  assert_stale_password_media_performance "${DEFAULT_SHARE_SLUG}" "${DEFAULT_SHARE_KEY}"
 
   log "All base scenarios passed"
 }

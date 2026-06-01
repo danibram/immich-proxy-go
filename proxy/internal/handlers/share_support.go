@@ -22,21 +22,25 @@ type shareCredentials struct {
 }
 
 // loadShareLinkFromRequest fetches the shared link for the current request context.
-func (h *ShareHandler) loadShareLinkFromRequest(r *http.Request) (*immich.SharedLink, shareCredentials, error) {
+func (h *ShareHandler) loadShareLinkFromRequest(r *http.Request) (*immich.SharedLink, shareCredentials, bool, error) {
 	return h.loadShareLink(r.Context(), middleware.GetPassword(r.Context()))
 }
 
 // loadShareLink fetches the shared link using context key/slug and the given password.
-func (h *ShareHandler) loadShareLink(ctx context.Context, password string) (*immich.SharedLink, shareCredentials, error) {
+func (h *ShareHandler) loadShareLink(ctx context.Context, password string) (*immich.SharedLink, shareCredentials, bool, error) {
 	key := middleware.GetShareKey(ctx)
 	keyType := h.getKeyType(ctx)
+
+	link, droppedStalePassword, err := h.client.GetSharedLinkWithKeyTypeDroppedStalePassword(key, password, keyType)
+	if droppedStalePassword {
+		password = ""
+	}
 	creds := shareCredentials{key: key, password: password, keyType: keyType}
 
-	link, err := h.client.GetSharedLinkWithKeyType(key, password, keyType)
 	if err != nil {
-		return nil, creds, err
+		return nil, creds, droppedStalePassword, err
 	}
-	return link, creds, nil
+	return link, creds, droppedStalePassword, nil
 }
 
 // rejectIfExpired writes an HTTP error when the link has expired. Returns true if rejected.

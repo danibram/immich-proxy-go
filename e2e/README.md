@@ -85,6 +85,7 @@ Smoke tests in `web/e2e/share.spec.ts` run against Vite preview (`just test-e2e`
 7. Album endpoint and private album isolation.
 8. Invalid share key returns `404`.
 9. Password-protected slug: 401 without auth, unlock flow, scoped cookie, stale-password regressions, thumbnail auth.
+10. Stale password cookie on public shares: slug thumbnail must not succeed via password drop retry; cookie cleared on shared-links/me; follow-up API works without stale cookie.
 
 ## Using the Seeded Share
 

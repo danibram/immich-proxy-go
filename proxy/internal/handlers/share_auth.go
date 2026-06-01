@@ -26,7 +26,7 @@ func (h *ShareHandler) ValidatePassword(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	_, _, err := h.loadShareLink(r.Context(), req.Password)
+	_, _, _, err := h.loadShareLink(r.Context(), req.Password)
 	if err != nil {
 		if err == immich.ErrPasswordRequired {
 			http.Error(w, "Invalid password", http.StatusUnauthorized)
@@ -67,6 +67,20 @@ func (h *ShareHandler) ValidatePassword(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"valid": true})
+}
+
+// clearSharePasswordCookie removes a stale password cookie after Immich confirms
+// the shared link is public, so media requests are not sent with a useless password.
+func clearSharePasswordCookie(w http.ResponseWriter, r *http.Request) {
+	cookiePath := shareCookiePath(r)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "immich-share-password",
+		Value:    "",
+		Path:     cookiePath,
+		HttpOnly: true,
+		MaxAge:   -1,
+		SameSite: http.SameSiteStrictMode,
+	})
 }
 
 // shareCookiePath scopes the password cookie to the current share URL so a

@@ -50,7 +50,7 @@ func (h *ShareHandler) UploadAsset(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxSize)
 
-	link, creds, err := h.loadShareLinkFromRequest(r)
+	link, creds, _, err := h.loadShareLinkFromRequest(r)
 	if err != nil {
 		h.handleError(w, err)
 		return
