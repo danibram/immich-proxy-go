@@ -12,8 +12,8 @@ export default {
         ink: '#0C0B0B',
       },
       fontFamily: {
-        sans: ['Instrument Sans', 'Helvetica Neue', 'Arial', 'sans-serif'],
-        serif: ['Instrument Serif', 'Times New Roman', 'serif'],
+        sans: ['Geist Sans', 'Helvetica Neue', 'Arial', 'sans-serif'],
+        title: ['Bricolage Grotesque', 'Geist Sans', 'Helvetica Neue', 'Arial', 'sans-serif'],
       },
     },
   },

@@ -5,7 +5,7 @@
   overflow-y: auto;
   background: var(--white);
   color: var(--black);
-  font-family: var(--font-title);
+  font-family: var(--font-sans);
   font-size: 17px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;

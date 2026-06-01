@@ -95,10 +95,10 @@ export default function AssetViewer() {
         }
         break;
       case 'ArrowLeft':
-        carousel.step(-1);
+        carousel.step(-1, true);
         break;
       case 'ArrowRight':
-        carousel.step(1);
+        carousel.step(1, true);
         break;
       case 'i':
       case 'I':
@@ -158,38 +158,40 @@ export default function AssetViewer() {
         </div>
       </div>
 
-      <div
-        class="vw-stage"
-        ref={setStageEl}
-        onPointerDown={carousel.onPointerDown}
-        onPointerMove={carousel.onPointerMove}
-        onPointerUp={carousel.onPointerUp}
-        onPointerCancel={carousel.onPointerUp}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div class="vw-stage-wrap">
         <div
-          class={`vw-track ${carousel.anim() ? 'anim' : ''}`}
-          style={{
-            width: `${w() * 3}px`,
-            transform: carousel.trackTransform(),
-          }}
-          onTransitionEnd={carousel.onTransitionEnd}
+          class="vw-stage"
+          ref={setStageEl}
+          onPointerDown={carousel.onPointerDown}
+          onPointerMove={carousel.onPointerMove}
+          onPointerUp={carousel.onPointerUp}
+          onPointerCancel={carousel.onPointerUp}
+          onClick={(e) => e.stopPropagation()}
         >
-          <Show when={carousel.hasPrev()} fallback={<div class="vw-slide" style={{ width: `${w()}px` }} />}>
-            <ViewerSlide
-              asset={list()[index() - 1]}
-              width={w()}
-              slideKey={list()[index() - 1].id}
-            />
-          </Show>
-          <ViewerSlide asset={current()} width={w()} slideKey={current().id} />
-          <Show when={carousel.hasNext()} fallback={<div class="vw-slide" style={{ width: `${w()}px` }} />}>
-            <ViewerSlide
-              asset={list()[index() + 1]}
-              width={w()}
-              slideKey={list()[index() + 1].id}
-            />
-          </Show>
+          <div
+            class={`vw-track ${carousel.anim() ? 'anim' : ''}`}
+            style={{
+              width: `${w() * 3}px`,
+              transform: carousel.trackTransform(),
+            }}
+            onTransitionEnd={carousel.onTransitionEnd}
+          >
+            <Show when={carousel.hasPrev()} fallback={<div class="vw-slide" style={{ width: `${w()}px` }} />}>
+              <ViewerSlide
+                asset={list()[index() - 1]}
+                width={w()}
+                slideKey={list()[index() - 1].id}
+              />
+            </Show>
+            <ViewerSlide asset={current()} width={w()} slideKey={current().id} />
+            <Show when={carousel.hasNext()} fallback={<div class="vw-slide" style={{ width: `${w()}px` }} />}>
+              <ViewerSlide
+                asset={list()[index() + 1]}
+                width={w()}
+                slideKey={list()[index() + 1].id}
+              />
+            </Show>
+          </div>
         </div>
 
         <button
@@ -198,7 +200,7 @@ export default function AssetViewer() {
           aria-label="Previous"
           onClick={(e) => {
             e.stopPropagation();
-            carousel.step(-1);
+            carousel.step(-1, true);
           }}
         >
           <ChevronLeft size={26} />
@@ -209,7 +211,7 @@ export default function AssetViewer() {
           aria-label="Next"
           onClick={(e) => {
             e.stopPropagation();
-            carousel.step(1);
+            carousel.step(1, true);
           }}
         >
           <ChevronRight size={26} />

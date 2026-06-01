@@ -153,7 +153,44 @@ describe('useViewerCarousel', () => {
     });
   });
 
-  it('navigates immediately by default for button and keyboard controls', async () => {
+  it('navigates immediately when requested for button and keyboard controls', async () => {
+    await new Promise<void>((done) => {
+      createRoot(async (dispose) => {
+        const [index, setIndex] = createSignal(0);
+        const onIndexChange = vi.fn((i: number) => setIndex(i));
+        const div = document.createElement('div');
+        Object.defineProperty(div, 'clientWidth', { value: 400, configurable: true });
+        vi.stubGlobal(
+          'ResizeObserver',
+          class {
+            constructor(cb: ResizeObserverCallback) {
+              cb([{ contentRect: { width: 400 } } as ResizeObserverEntry], this);
+            }
+            observe() {}
+            disconnect() {}
+          }
+        );
+
+        const carousel = useViewerCarousel({
+          index,
+          count: () => 3,
+          stageEl: () => div,
+          onIndexChange,
+          animated: true,
+        });
+
+        await flushEffects();
+        carousel.step(1, true);
+
+        expect(onIndexChange).toHaveBeenCalledWith(1);
+        expect(index()).toBe(1);
+        dispose();
+        done();
+      });
+    });
+  });
+
+  it('navigates immediately by default when stage width is unavailable', async () => {
     await new Promise<void>((done) => {
       createRoot(async (dispose) => {
         const [index, setIndex] = createSignal(0);

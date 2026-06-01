@@ -48,12 +48,18 @@ export function useViewerCarousel(options: Options) {
     }
   }
 
-  function step(dir: -1 | 1) {
+  function step(dir: -1 | 1, immediate = false) {
     const w = stageWidth();
     if (dir > 0 && !hasNext()) return;
     if (dir < 0 && !hasPrev()) return;
-    if (!options.animated || !w) {
-      goToIndex(options.index() + dir);
+    if (immediate || !options.animated || !w) {
+      clearTransitionFallback();
+      pendingStep = 0;
+      batch(() => {
+        setAnim(false);
+        setDx(0);
+        goToIndex(options.index() + dir);
+      });
       return;
     }
     clearTransitionFallback();
@@ -99,6 +105,9 @@ export function useViewerCarousel(options: Options) {
   });
 
   function onPointerDown(e: PointerEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, a, .vid-bar, .vid-dock, [data-no-swipe]')) return;
+
     dragStartX = e.clientX;
     setAnim(false);
     options.onSwipeStart?.();

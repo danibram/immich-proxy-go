@@ -56,13 +56,25 @@ test-watch:
 
 # === Development ===
 
-# Start frontend dev server
+# Start frontend dev server (hot reload — use http://localhost:5173)
 dev-web:
     cd "{{ justfile_directory() }}/web" && npm run dev
 
-# Start backend dev server for API proxying from Vite
-dev-proxy: build-proxy
+# Start backend; rebuilds web once then serves web/dist on :3000 (no hot reload)
+dev-proxy: build-proxy build-web
     IPP_OPTIONS_CACHE_TTL=0 "{{ justfile_directory() }}/bin/immich-proxy" --web-dir "{{ justfile_directory() }}/web/dist" --config "{{ justfile_directory() }}/config.yaml" 2>&1 | \
+    jq -r '"\(.timestamp | split("T")[1] | split("+")[0]) [\(.level | ascii_upcase)] \(.msg)\(if .error then ": " + .error else "" end)"'
+
+# Like dev-proxy but rebuilds web/dist automatically on file changes (refresh browser manually)
+dev-proxy-watch: build-proxy build-web
+    #!/usr/bin/env bash
+    set -euo pipefail
+    trap 'kill 0' EXIT INT TERM
+    cd "{{ justfile_directory() }}/web"
+    npm run build:watch &
+    IPP_OPTIONS_CACHE_TTL=0 "{{ justfile_directory() }}/bin/immich-proxy" \
+      --web-dir "{{ justfile_directory() }}/web/dist" \
+      --config "{{ justfile_directory() }}/config.yaml" 2>&1 | \
     jq -r '"\(.timestamp | split("T")[1] | split("+")[0]) [\(.level | ascii_upcase)] \(.msg)\(if .error then ": " + .error else "" end)"'
 
 # Build frontend once and serve it through the Go proxy
@@ -72,8 +84,13 @@ dev-proxy-static: build-proxy build-web
 
 # Start both frontend and backend (requires tmux or run in separate terminals)
 dev: build
-    @echo "Run 'just dev-web' and 'just dev-proxy' in separate terminals"
-    @echo "Open http://localhost:5173/s/<slug> for live frontend updates"
+    @echo "Frontend hot reload (recommended):"
+    @echo "  Terminal 1: just dev-proxy"
+    @echo "  Terminal 2: just dev-web"
+    @echo "  Open http://localhost:5173/s/<slug>"
+    @echo ""
+    @echo "Single terminal on :3000 with auto-rebuild (manual browser refresh):"
+    @echo "  just dev-proxy-watch"
 
 # Run the built proxy
 run *ARGS:
@@ -145,8 +162,9 @@ info:
     @echo "  just run        # Run the proxy"
     @echo ""
     @echo "Development:"
-    @echo "  just dev-web    # Start frontend dev server"
-    @echo "  just dev-proxy  # Start backend dev server"
+    @echo "  just dev-web         # Vite on :5173 (hot reload)"
+    @echo "  just dev-proxy       # Go proxy on :3000 (static dist, rebuild on start)"
+    @echo "  just dev-proxy-watch # :3000 + auto-rebuild dist on save"
     @echo ""
     @echo "Testing:"
     @echo "  just test       # Run all tests"
