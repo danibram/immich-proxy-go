@@ -9,7 +9,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   reporter: [['line']],
-  timeout: 15000,
+  timeout: externalBaseURL ? 90_000 : 15_000,
   use: {
     baseURL: externalBaseURL || 'http://localhost:4173',
     trace: 'off',
