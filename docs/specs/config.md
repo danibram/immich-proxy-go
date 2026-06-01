@@ -151,7 +151,7 @@ Optional product analytics and feature flags. Disabled by default. All settings 
 | `analytics.posthog.disable_session_recording` | bool | `true` | Disable session replay |
 | `analytics.posthog.autocapture` | bool | `false` | Enable PostHog autocapture |
 
-PostHog initializes only when `enabled` is true **and** `api_key` is non-empty. No extra HTTP endpoints.
+PostHog initializes only when `enabled` is true **and** `api_key` is non-empty. The proxy injects `ipp-posthog-enabled=true` only in that case. No extra HTTP endpoints. When active, CSP allows the API and assets hosts (cloud: `eu.i.posthog.com` / `eu-assets.i.posthog.com`) and adds `'unsafe-inline'` to `script-src` for the PostHog SDK.
 
 Events are aggregated only (no share keys, filenames, or album titles).
 

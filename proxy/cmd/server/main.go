@@ -77,9 +77,12 @@ func main() {
 		logger.Warn("trust_proxy_headers is enabled - ensure this instance ONLY receives traffic through a trusted reverse proxy that strips/replaces X-Forwarded-For")
 	}
 
-	if cfg.Analytics.PostHog.Enabled && cfg.Analytics.PostHog.APIKey == "" {
+	cfg.Analytics.PostHog.Normalize()
+	if cfg.Analytics.PostHog.Enabled && !cfg.Analytics.PostHog.Active() {
 		logger.Warn("analytics.posthog.enabled is true but api_key is empty; PostHog will not initialize")
 	}
+
+	posthogCSP := cfg.Analytics.PostHog.CSPDirective()
 
 	// Create Immich client
 	client := immich.NewClient(cfg.Immich.URL)
@@ -109,6 +112,7 @@ func main() {
 	// via config without editing code.
 	r.Use(middleware.SecurityHeadersWithConfig(middleware.SecureHeadersConfig{
 		EnableHSTS: cfg.Security.EnableHSTS,
+		PostHog:    posthogCSP,
 	}))
 	// Note: Rate limiting is applied per-route, not globally
 	// Thumbnails are excluded to allow smooth scrolling of large albums

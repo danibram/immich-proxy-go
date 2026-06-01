@@ -94,11 +94,7 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("security.force_secure_cookies", false)    // Opt-in for behind-TLS-proxy deployments
 	v.SetDefault("security.max_concurrent_download_jobs", 5)
 
-	v.SetDefault("analytics.posthog.enabled", false)
-	v.SetDefault("analytics.posthog.api_key", "")
-	v.SetDefault("analytics.posthog.host", "https://us.i.posthog.com")
-	v.SetDefault("analytics.posthog.disable_session_recording", true)
-	v.SetDefault("analytics.posthog.autocapture", false)
+	setPostHogViperDefaults(v)
 
 	// Environment variables
 	v.SetEnvPrefix("IPP")
@@ -143,32 +139,16 @@ func Load(configPath string) (*Config, error) {
 	return &cfg, nil
 }
 
-func defaultAnalyticsConfig() AnalyticsConfig {
-	return AnalyticsConfig{
-		PostHog: PostHogConfig{
-			Enabled:                 false,
-			APIKey:                  "",
-			Host:                    "https://us.i.posthog.com",
-			DisableSessionRecording: true,
-			Autocapture:             false,
-		},
-	}
-}
-
 func applyAnalyticsFromConfigFile(cfg *Config, v *viper.Viper) error {
 	configFile := v.ConfigFileUsed()
 	if configFile == "" {
-		cfg.Analytics = defaultAnalyticsConfig()
+		cfg.Analytics = AnalyticsConfig{PostHog: defaultPostHogConfig()}
 		return nil
 	}
 
 	fv := viper.New()
 	fv.SetConfigFile(configFile)
-	fv.SetDefault("analytics.posthog.enabled", false)
-	fv.SetDefault("analytics.posthog.api_key", "")
-	fv.SetDefault("analytics.posthog.host", "https://us.i.posthog.com")
-	fv.SetDefault("analytics.posthog.disable_session_recording", true)
-	fv.SetDefault("analytics.posthog.autocapture", false)
+	setPostHogViperDefaults(fv)
 
 	if err := fv.ReadInConfig(); err != nil {
 		return err
@@ -182,8 +162,6 @@ func applyAnalyticsFromConfigFile(cfg *Config, v *viper.Viper) error {
 	}
 
 	cfg.Analytics = section.Analytics
-	if cfg.Analytics.PostHog.Host == "" {
-		cfg.Analytics.PostHog.Host = "https://us.i.posthog.com"
-	}
+	cfg.Analytics.PostHog.Normalize()
 	return nil
 }

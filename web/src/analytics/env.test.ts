@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { DEFAULT_POSTHOG_HOST } from './constants';
 import { isPostHogAllowed, readPostHogConfig } from './env';
 
 function setMeta(name: string, content: string) {
@@ -28,19 +29,26 @@ describe('analytics/env', () => {
     });
   });
 
-  it('isPostHogAllowed is true only when meta enabled is true', () => {
-    setMeta('ipp-posthog-enabled', 'false');
+  it('isPostHogAllowed requires enabled meta and api key', () => {
+    setMeta('ipp-posthog-enabled', 'true');
+    setMeta('ipp-posthog-api-key', '');
     expect(isPostHogAllowed()).toBe(false);
 
     document.head.innerHTML = '';
     setMeta('ipp-posthog-enabled', 'true');
+    setMeta('ipp-posthog-api-key', 'phc_meta');
     expect(isPostHogAllowed()).toBe(true);
+
+    document.head.innerHTML = '';
+    setMeta('ipp-posthog-enabled', 'false');
+    setMeta('ipp-posthog-api-key', 'phc_meta');
+    expect(isPostHogAllowed()).toBe(false);
   });
 
   it('returns empty config when proxy meta tags are absent', () => {
     expect(readPostHogConfig()).toEqual({
       apiKey: '',
-      host: 'https://us.i.posthog.com',
+      host: DEFAULT_POSTHOG_HOST,
       disableSessionRecording: true,
       autocapture: false,
     });

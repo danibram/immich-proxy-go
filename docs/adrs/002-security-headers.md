@@ -18,6 +18,8 @@ X-XSS-Protection: 1; mode=block
 Referrer-Policy: strict-origin-when-cross-origin
 Permissions-Policy: geolocation=(), microphone=(), camera=()
 Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+
+When PostHog is active (`enabled` plus non-empty `api_key`), `script-src`, `connect-src`, and `img-src` allow the configured API host and its matching `*-assets.i.posthog.com` origin (cloud EU/US only; self-hosted uses the API host for both). `script-src` also includes `'unsafe-inline'`, which is required by `posthog-js` and weakens XSS defenses for the whole app while analytics is on.
 ```
 
 Optional HSTS header when `security.enable_hsts` is true.

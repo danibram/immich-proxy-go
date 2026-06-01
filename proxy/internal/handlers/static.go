@@ -167,19 +167,16 @@ func (h *StaticHandler) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
 }
 
 func injectPostHogConfig(pageHTML string, cfg config.PostHogConfig) string {
-	host := cfg.Host
-	if host == "" {
-		host = "https://us.i.posthog.com"
-	}
+	cfg.Normalize()
 	snippet := fmt.Sprintf(
 		`<meta name="ipp-posthog-enabled" content="%s">`+"\n"+
 			`<meta name="ipp-posthog-api-key" content="%s">`+"\n"+
 			`<meta name="ipp-posthog-host" content="%s">`+"\n"+
 			`<meta name="ipp-posthog-disable-session-recording" content="%s">`+"\n"+
 			`<meta name="ipp-posthog-autocapture" content="%s">`+"\n",
-		html.EscapeString(strconv.FormatBool(cfg.Enabled)),
+		html.EscapeString(strconv.FormatBool(cfg.Active())),
 		html.EscapeString(cfg.APIKey),
-		html.EscapeString(host),
+		html.EscapeString(cfg.Host),
 		html.EscapeString(strconv.FormatBool(cfg.DisableSessionRecording)),
 		html.EscapeString(strconv.FormatBool(cfg.Autocapture)),
 	)

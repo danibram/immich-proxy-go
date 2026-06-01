@@ -1,3 +1,5 @@
+import { DEFAULT_POSTHOG_HOST } from './constants';
+
 export interface PostHogConfig {
   apiKey: string;
   host: string;
@@ -19,7 +21,7 @@ export function readPostHogConfig(): PostHogConfig {
   if (!hasPostHogMetaTags()) {
     return {
       apiKey: '',
-      host: 'https://us.i.posthog.com',
+      host: DEFAULT_POSTHOG_HOST,
       disableSessionRecording: true,
       autocapture: false,
     };
@@ -27,13 +29,16 @@ export function readPostHogConfig(): PostHogConfig {
 
   return {
     apiKey: metaContent('ipp-posthog-api-key')?.trim() ?? '',
-    host: metaContent('ipp-posthog-host')?.trim() || 'https://us.i.posthog.com',
+    host: metaContent('ipp-posthog-host')?.trim() || DEFAULT_POSTHOG_HOST,
     disableSessionRecording: metaContent('ipp-posthog-disable-session-recording') !== 'false',
     autocapture: metaContent('ipp-posthog-autocapture') === 'true',
   };
 }
 
+/** True when the proxy injected active PostHog (enabled with api key). */
 export function isPostHogAllowed(): boolean {
-  const content = metaContent('ipp-posthog-enabled');
-  return content === 'true';
+  if (metaContent('ipp-posthog-enabled') !== 'true') {
+    return false;
+  }
+  return (metaContent('ipp-posthog-api-key')?.trim() ?? '') !== '';
 }

@@ -35,9 +35,14 @@ func TestInjectPostHogConfig(t *testing.T) {
 		}
 	}
 
-	disabled := injectPostHogConfig(html, config.PostHogConfig{Enabled: false})
+	disabled := injectPostHogConfig(html, config.PostHogConfig{Enabled: true})
 	if !strings.Contains(disabled, `<meta name="ipp-posthog-enabled" content="false">`) {
-		t.Fatalf("disabled injection missing: %s", disabled)
+		t.Fatalf("enabled without api key must inject active=false: %s", disabled)
+	}
+
+	inactive := injectPostHogConfig(html, config.PostHogConfig{Enabled: false})
+	if !strings.Contains(inactive, `<meta name="ipp-posthog-enabled" content="false">`) {
+		t.Fatalf("disabled injection missing: %s", inactive)
 	}
 }
 
@@ -60,7 +65,7 @@ func TestInjectPostHogConfigEscapesHTML(t *testing.T) {
 func TestInjectPostHogConfigDefaultHost(t *testing.T) {
 	html := "<!DOCTYPE html><html><head></head><body></body></html>"
 	out := injectPostHogConfig(html, config.PostHogConfig{})
-	if !strings.Contains(out, `<meta name="ipp-posthog-host" content="https://us.i.posthog.com">`) {
+	if !strings.Contains(out, `<meta name="ipp-posthog-host" content="`+config.DefaultPostHogHost+`">`) {
 		t.Fatalf("expected default host: %s", out)
 	}
 }
