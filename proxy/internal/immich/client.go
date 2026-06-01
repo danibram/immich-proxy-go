@@ -72,10 +72,14 @@ func (c *Client) GetSharedLinkWithKeyType(key string, password string, keyType K
 		// Check if it's "Invalid share key" vs "Password required"
 		body, _ := io.ReadAll(resp.Body)
 		bodyStr := string(body)
-		if strings.Contains(bodyStr, "Invalid share key") {
+		normalizedBody := strings.ToLower(bodyStr)
+		if strings.Contains(normalizedBody, "invalid share key") ||
+			strings.Contains(normalizedBody, "invalid share slug") ||
+			strings.Contains(normalizedBody, "shared link not found") {
 			return nil, ErrSharedLinkNotFound
 		}
-		if strings.Contains(bodyStr, "Invalid password") {
+		if strings.Contains(normalizedBody, "invalid password") ||
+			strings.Contains(normalizedBody, "password required") {
 			return nil, ErrPasswordRequired
 		}
 		return nil, ErrPasswordRequired

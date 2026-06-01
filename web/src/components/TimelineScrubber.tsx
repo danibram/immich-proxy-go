@@ -1,15 +1,14 @@
 import type { Accessor } from 'solid-js';
-import { batch, createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { batch, createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import type { DateGroup } from '~/utils/dateUtils';
-import { getUniqueYears } from '~/utils/dateUtils';
 
 interface Props {
   scrollContainer?: Accessor<HTMLDivElement | undefined>;
   groupedAssets: Accessor<DateGroup[]>;
 }
 
-const PADDING_TOP = 24;
-const PADDING_BOTTOM = 24;
+const PADDING_TOP = 40;
+const PADDING_BOTTOM = 96;
 
 export default function TimelineScrubber(props: Props) {
   let scrubberRef: HTMLDivElement | undefined;
@@ -27,8 +26,6 @@ export default function TimelineScrubber(props: Props) {
   const [scrubberY, setScrubberY] = createSignal(0);
   const [hoverY, setHoverY] = createSignal(0);
   const [isTouchDevice, setIsTouchDevice] = createSignal(false);
-
-  const scrubberYears = () => getUniqueYears(props.groupedAssets());
 
   function handleScroll() {
     if (isDragging()) return;
@@ -54,6 +51,10 @@ export default function TimelineScrubber(props: Props) {
   function updateScrollPosition() {
     const containerRef = getScrollContainer();
     if (!containerRef || !scrubberRef) return;
+
+    const maxScroll = containerRef.scrollHeight - containerRef.clientHeight;
+    const scrollRatio = maxScroll > 0 ? containerRef.scrollTop / maxScroll : 0;
+    const scrubberHeight = scrubberRef.clientHeight - PADDING_TOP - PADDING_BOTTOM;
 
     const groups = props.groupedAssets();
     const domGroups = containerRef.querySelectorAll('[data-group-date]');
@@ -81,13 +82,9 @@ export default function TimelineScrubber(props: Props) {
       const group = groups[groupIndex];
 
       if (group) {
-        const totalGroups = groups.length;
-        const ratio = totalGroups > 1 ? groupIndex / (totalGroups - 1) : 0;
-        const scrubberHeight = scrubberRef.clientHeight - PADDING_TOP - PADDING_BOTTOM;
-
         batch(() => {
           setCurrentLabel(group.scrubberLabel);
-          setScrubberY(Math.min(ratio * scrubberHeight, scrubberHeight));
+          setScrubberY(Math.min(scrollRatio * scrubberHeight, scrubberHeight));
         });
       }
     }
@@ -96,15 +93,16 @@ export default function TimelineScrubber(props: Props) {
   function updateScrubberPosition(clientY: number, isDrag: boolean) {
     if (!scrubberRef) return;
 
-    const groups = props.groupedAssets();
     const rect = scrubberRef.getBoundingClientRect();
     const availableHeight = rect.height - PADDING_TOP - PADDING_BOTTOM;
     const y = Math.max(0, Math.min(clientY - rect.top - PADDING_TOP, availableHeight));
     const ratio = availableHeight > 0 ? y / availableHeight : 0;
 
-    const totalGroups = groups.length;
-    const groupIndex = Math.min(Math.floor(ratio * totalGroups), totalGroups - 1);
-    const group = groups[groupIndex];
+    const scrollContainer = getScrollContainer();
+    const targetScrollTop = scrollContainer
+      ? ratio * Math.max(scrollContainer.scrollHeight - scrollContainer.clientHeight, 0)
+      : 0;
+    const group = getGroupAtScrollTop(targetScrollTop);
 
     if (group) {
       batch(() => {
@@ -117,17 +115,32 @@ export default function TimelineScrubber(props: Props) {
         }
       });
 
-      const scrollContainer = getScrollContainer();
       if (isDrag && scrollContainer) {
-        const element = document.getElementById(`group-${group.date}`);
-        if (element) {
-          const containerRect = scrollContainer.getBoundingClientRect();
-          const elementRect = element.getBoundingClientRect();
-          const offset = elementRect.top - containerRect.top + scrollContainer.scrollTop;
-          scrollContainer.scrollTop = offset;
-        }
+        scrollContainer.scrollTop = targetScrollTop;
       }
     }
+  }
+
+  function getGroupAtScrollTop(scrollTop: number): DateGroup | undefined {
+    const scrollContainer = getScrollContainer();
+    const groups = props.groupedAssets();
+    if (!scrollContainer) return groups[0];
+
+    let activeGroup = groups[0];
+    const containerTop = scrollContainer.getBoundingClientRect().top;
+    for (const group of groups) {
+      const element = document.getElementById(`group-${group.date}`);
+      if (!element) continue;
+
+      const elementTop = element.getBoundingClientRect().top - containerTop + scrollContainer.scrollTop;
+      if (elementTop <= scrollTop + 150) {
+        activeGroup = group;
+      } else {
+        break;
+      }
+    }
+
+    return activeGroup;
   }
 
   function handleScrubberMouseDown(e: MouseEvent) {
@@ -233,22 +246,6 @@ export default function TimelineScrubber(props: Props) {
             <span class="scrub-bubble">{isHovering() || isDragging() ? hoverLabel() : currentLabel()}</span>
             <span class="scrub-grip" />
           </div>
-        </div>
-        <div
-          class="scrub-years"
-          style={{ top: `${PADDING_TOP}px`, bottom: `${PADDING_BOTTOM}px` }}
-        >
-          <For each={scrubberYears()}>
-            {(year, index) => {
-              const total = scrubberYears().length;
-              const topPct = total > 1 ? (index() / (total - 1)) * 100 : 0;
-              return (
-                <span class="scrub-year" style={{ top: `${topPct}%` }}>
-                  {year}
-                </span>
-              );
-            }}
-          </For>
         </div>
       </div>
     </Show>

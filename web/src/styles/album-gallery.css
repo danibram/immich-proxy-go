@@ -174,7 +174,7 @@
   top: 58px;
   right: 0;
   bottom: 0;
-  width: 56px;
+  width: 64px;
   z-index: 25;
   pointer-events: none;
   opacity: 0;
@@ -186,17 +186,16 @@
 }
 
 .app-share .album[data-wide='1'] .scrubber {
-  opacity: 1;
   top: 68px;
-  width: 64px;
+  width: 72px;
 }
 
 .app-share .scrub-track {
   position: absolute;
-  top: 8px;
+  top: 0;
   right: 0;
-  bottom: 18px;
-  width: 30px;
+  bottom: 0;
+  width: 64px;
   pointer-events: auto;
   touch-action: none;
   cursor: grab;
@@ -204,18 +203,20 @@
 
 .app-share .scrub-thumb-wrap {
   position: absolute;
-  right: 7px;
+  right: 8px;
   transform: translateY(-50%);
 }
 
 .app-share .scrub-grip {
   display: block;
-  width: 34px;
-  height: 26px;
-  border-radius: 999px;
-  background: var(--scrub-thumb);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 999px 0 0 999px;
+  background: color-mix(in srgb, var(--bg) 94%, white);
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18);
   position: relative;
+  backdrop-filter: blur(14px);
 }
 
 .app-share .scrub-grip::before,
@@ -224,62 +225,41 @@
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  width: 12px;
-  height: 1.5px;
-  border-radius: 2px;
-  background: var(--bg);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  background: transparent;
 }
 
 .app-share .scrub-grip::before {
-  top: 10px;
+  top: 13px;
+  border-bottom: 8px solid var(--fg-1);
 }
 
 .app-share .scrub-grip::after {
-  top: 14px;
+  bottom: 13px;
+  border-top: 8px solid var(--fg-1);
 }
 
 .app-share .scrub-bubble {
   position: absolute;
-  right: 46px;
+  top: 50%;
+  right: 60px;
   transform: translateY(-50%);
   background: var(--accent);
   color: #fff;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   white-space: nowrap;
-  padding: 6px 12px;
+  padding: 9px 15px;
   border-radius: 999px;
-  box-shadow: 0 6px 18px -4px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.38);
   opacity: 0;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
 .app-share .scrubber.is-active .scrub-bubble {
   opacity: 1;
+  transform: translateY(-50%) translateX(-2px);
 }
-
-.app-share .scrub-years {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  bottom: 18px;
-  left: 0;
-  pointer-events: none;
-}
-
-.app-share .scrub-year {
-  position: absolute;
-  right: 12px;
-  transform: translateY(-50%);
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--fg-3);
-  pointer-events: none;
-}
-
-.app-share .scrub-thumb-wrap {
-  position: absolute;
-  right: 7px;
-  transform: translateY(-50%);
-}
-

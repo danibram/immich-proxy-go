@@ -2,6 +2,7 @@ package immich
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -93,5 +94,23 @@ func TestClient_PasswordNotInErrorResponses(t *testing.T) {
 
 	if strings.Contains(err.Error(), secretPassword) {
 		t.Errorf("error string leaks password: %v", err)
+	}
+}
+
+func TestGetSharedLink_InvalidSlugUnauthorizedIsNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("slug"); got != "mei" {
+			t.Fatalf("expected slug query mei, got %q", got)
+		}
+
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"message":"Invalid share slug"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	_, err := c.GetSharedLinkWithKeyType("mei", "", KeyTypeSlug)
+	if !errors.Is(err, ErrSharedLinkNotFound) {
+		t.Fatalf("expected ErrSharedLinkNotFound, got %v", err)
 	}
 }
