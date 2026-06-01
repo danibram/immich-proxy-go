@@ -86,7 +86,7 @@ func main() {
 
 	// Create handlers
 	shareHandler := handlers.NewShareHandler(client, cfg, logger, cookieSecret)
-	staticHandler := handlers.NewStaticHandler(*webDir, nil, cfg.Analytics.PostHog.Enabled, logger)
+	staticHandler := handlers.NewStaticHandler(*webDir, nil, cfg.Analytics.PostHog.Enabled, cfg.Options.CacheTTL, logger)
 
 	// Create router
 	r := chi.NewRouter()

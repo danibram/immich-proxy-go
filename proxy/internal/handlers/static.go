@@ -23,17 +23,19 @@ type StaticHandler struct {
 	fileServer     http.Handler
 	logger         *zap.Logger
 	posthogEnabled bool
+	cacheTTL       int
 }
 
 // NewStaticHandler creates a new static file handler
 // If webDir is provided and exists, it serves from disk
 // Otherwise, it will use the embedded filesystem if provided
-func NewStaticHandler(webDir string, embedFS *embed.FS, posthogEnabled bool, logger *zap.Logger) *StaticHandler {
+func NewStaticHandler(webDir string, embedFS *embed.FS, posthogEnabled bool, cacheTTL int, logger *zap.Logger) *StaticHandler {
 	h := &StaticHandler{
 		webDir:         webDir,
 		embedFS:        embedFS,
 		logger:         logger,
 		posthogEnabled: posthogEnabled,
+		cacheTTL:       cacheTTL,
 	}
 
 	// Try to serve from disk first
@@ -107,23 +109,28 @@ func (h *StaticHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // setCacheHeaders sets appropriate cache headers based on file type
 func (h *StaticHandler) setCacheHeaders(w http.ResponseWriter, path string) {
+	if h.cacheTTL <= 0 {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		return
+	}
+
 	// Assets in /assets/ folder typically have content hashes and can be cached long
 	// e.g., /assets/index-abc123.js, /assets/style-def456.css
 	if strings.HasPrefix(path, "/assets/") {
-		// Cache for 1 year (immutable content with hash in filename)
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", h.cacheTTL))
 		return
 	}
 
 	// For other static files (favicon, etc), cache for shorter time
 	switch {
 	case strings.HasSuffix(path, ".ico"):
-		w.Header().Set("Cache-Control", "public, max-age=86400") // 1 day
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", h.cacheTTL))
 	case strings.HasSuffix(path, ".png"), strings.HasSuffix(path, ".jpg"), strings.HasSuffix(path, ".svg"):
-		w.Header().Set("Cache-Control", "public, max-age=86400") // 1 day
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", h.cacheTTL))
 	default:
-		// Default: short cache with revalidation
-		w.Header().Set("Cache-Control", "public, max-age=3600, must-revalidate") // 1 hour
+		w.Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, must-revalidate", h.cacheTTL))
 	}
 }
 
@@ -149,7 +156,9 @@ func (h *StaticHandler) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
 	html := injectPostHogFlag(string(content), h.posthogEnabled)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache, must-revalidate")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Length", strconv.Itoa(len(html)))
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(html))
