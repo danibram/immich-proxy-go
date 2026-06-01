@@ -2,13 +2,12 @@ package middleware
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/danibram/immich-proxy-go/internal/sharecookie"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -114,12 +113,8 @@ func TestExtractShareKey(t *testing.T) {
 func TestSignedCookie(t *testing.T) {
 	CookieSecret = []byte("test-secret-key-12345")
 
-	// Create a signed cookie value (same way as share.go does)
 	password := "mysecretpassword"
-	mac := hmac.New(sha256.New, CookieSecret)
-	mac.Write([]byte(password))
-	signature := mac.Sum(nil)
-	signedValue := base64.URLEncoding.EncodeToString([]byte(password)) + "." + base64.URLEncoding.EncodeToString(signature)
+	signedValue := sharecookie.Sign(CookieSecret, password)
 
 	// Test that the middleware correctly extracts the password
 	r := chi.NewRouter()
@@ -242,49 +237,38 @@ func TestGetPassword(t *testing.T) {
 }
 
 func TestVerifySignedCookie(t *testing.T) {
-	CookieSecret = []byte("test-secret-key-12345")
-
-	// Create valid signed cookie
+	secret := []byte("test-secret-key-12345")
 	password := "testpassword"
-	mac := hmac.New(sha256.New, CookieSecret)
-	mac.Write([]byte(password))
-	signature := mac.Sum(nil)
-	validSignedValue := base64.URLEncoding.EncodeToString([]byte(password)) + "." + base64.URLEncoding.EncodeToString(signature)
+	validSignedValue := sharecookie.Sign(secret, password)
 
 	tests := []struct {
 		name          string
 		signedValue   string
 		expectedValue string
-		expectError   bool
 	}{
 		{
 			name:          "valid signed cookie",
 			signedValue:   validSignedValue,
 			expectedValue: password,
-			expectError:   false,
 		},
 		{
 			name:          "no separator",
 			signedValue:   "nodot",
 			expectedValue: "",
-			expectError:   false, // Returns empty, no error
 		},
 		{
 			name:          "wrong signature",
 			signedValue:   base64.URLEncoding.EncodeToString([]byte("password")) + "." + base64.URLEncoding.EncodeToString([]byte("wrongsig")),
 			expectedValue: "",
-			expectError:   false, // Returns empty, no error
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := verifySignedCookie(tt.signedValue)
-
-			if tt.expectError && err == nil {
-				t.Error("expected error, got nil")
+			result, err := sharecookie.Verify(secret, tt.signedValue)
+			if err != nil {
+				t.Fatalf("verify: %v", err)
 			}
-
 			if result != tt.expectedValue {
 				t.Errorf("expected '%s', got '%s'", tt.expectedValue, result)
 			}
@@ -293,21 +277,16 @@ func TestVerifySignedCookie(t *testing.T) {
 }
 
 func TestDifferentSecrets(t *testing.T) {
-	// Sign with one secret
 	secret1 := []byte("secret1")
+	secret2 := []byte("secret2")
 	password := "testpassword"
 
-	mac := hmac.New(sha256.New, secret1)
-	mac.Write([]byte(password))
-	signature := mac.Sum(nil)
-	signedValue := base64.URLEncoding.EncodeToString([]byte(password)) + "." + base64.URLEncoding.EncodeToString(signature)
+	signedValue := sharecookie.Sign(secret1, password)
 
-	// Try to verify with different secret
-	CookieSecret = []byte("secret2")
-
-	result, _ := verifySignedCookie(signedValue)
-
-	// Should return empty string (invalid signature)
+	result, err := sharecookie.Verify(secret2, signedValue)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
 	if result != "" {
 		t.Errorf("expected empty string for wrong secret, got '%s'", result)
 	}

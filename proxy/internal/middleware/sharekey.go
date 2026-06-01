@@ -2,12 +2,10 @@ package middleware
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"net/http"
 	"strings"
 
+	"github.com/danibram/immich-proxy-go/internal/sharecookie"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -55,7 +53,7 @@ func ExtractShareKey(next http.Handler) http.Handler {
 		// request rate rather than at the password-endpoint strict rate, and
 		// bypasses our HMAC entirely.
 		if cookie, err := r.Cookie("immich-share-password"); err == nil {
-			if verifiedPassword, err := verifySignedCookie(cookie.Value); err == nil && verifiedPassword != "" {
+			if verifiedPassword, err := sharecookie.Verify(CookieSecret, cookie.Value); err == nil && verifiedPassword != "" {
 				password = verifiedPassword
 			}
 			// If verification fails, the password stays empty and the user
@@ -76,35 +74,6 @@ func ExtractShareKey(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// verifySignedCookie verifies and extracts the value from a signed cookie
-func verifySignedCookie(signedValue string) (string, error) {
-	parts := strings.Split(signedValue, ".")
-	if len(parts) != 2 {
-		return "", nil // Not a signed cookie, return empty
-	}
-
-	valueBytes, err := base64.URLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return "", err
-	}
-
-	signature, err := base64.URLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", err
-	}
-
-	// Verify signature
-	mac := hmac.New(sha256.New, CookieSecret)
-	mac.Write(valueBytes)
-	expectedSig := mac.Sum(nil)
-
-	if !hmac.Equal(signature, expectedSig) {
-		return "", nil // Invalid signature
-	}
-
-	return string(valueBytes), nil
 }
 
 // GetShareKey retrieves the share key from the context
