@@ -1,0 +1,92 @@
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700&display=swap');
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/InstrumentSans-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/InstrumentSans-Medium.ttf') format('truetype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/InstrumentSans-SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Sans';
+  src: url('/fonts/InstrumentSans-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('/fonts/InstrumentSerif-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  src: url('/fonts/InstrumentSerif-Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  --white: #ffffff;
+  --cream: #ecfdf3;
+  --accent: #22c55e;
+  --accent-press: #16a34a;
+  --black: #0c0b0b;
+  --grey-1: #e4e1df;
+  --grey-2: #bcb8b6;
+  --grey-3: #8d8a89;
+  --grey-4: #5e5c5b;
+  --grey-5: #2f2e2e;
+  --font-sans: 'Instrument Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-title: 'Bricolage Grotesque', var(--font-sans);
+  --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 28px 60px -26px rgba(0, 0, 0, 0.28), 0 6px 18px rgba(0, 0, 0, 0.07);
+  --accent-glow: 0 0 0 1px rgba(34, 197, 94, 0.18), 0 12px 32px -8px rgba(34, 197, 94, 0.32);
+}
+
+.album[data-theme='light'] {
+  --bg: var(--white);
+  --bg-2: var(--cream);
+  --surface: var(--white);
+  --surface-2: #f0fdf4;
+  --sheet: var(--white);
+  --fg-1: var(--black);
+  --fg-2: var(--grey-4);
+  --fg-3: var(--grey-3);
+  --border: var(--grey-1);
+  --border-faint: rgba(0, 0, 0, 0.07);
+  --thumb-bg: #dcfce7;
+  --bar-bg: rgba(255, 255, 255, 0.82);
+  --bar-border: rgba(0, 0, 0, 0.08);
+  --scrub-track: rgba(0, 0, 0, 0.1);
+  --scrub-thumb: var(--black);
+  --chip-bg: rgba(0, 0, 0, 0.05);
+  --overlay-chrome: rgba(20, 18, 17, 0.55);
+}

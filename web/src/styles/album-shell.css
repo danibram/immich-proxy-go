@@ -1,0 +1,340 @@
+.app-share {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: radial-gradient(120% 120% at 50% 0%, #e7e3e0 0%, #d7d2cf 100%);
+  font-family: var(--font-sans);
+}
+
+.app-share .album {
+  position: relative;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg-1);
+  font-size: 15px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-share .album-scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.app-share .album-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.app-share .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 58px;
+  padding: 0 8px 0 14px;
+  background: transparent;
+  border-bottom: 1px solid transparent;
+  transition:
+    background 0.28s ease,
+    border-color 0.28s ease,
+    height 0.26s ease;
+}
+
+.app-share .topbar[data-collapsed='1'],
+.app-share .topbar.is-select,
+.app-share .album[data-wide='1'] .topbar {
+  background: var(--bar-bg);
+  backdrop-filter: saturate(180%) blur(18px);
+  border-bottom-color: var(--bar-border);
+}
+
+.app-share .album[data-wide='1'] .topbar {
+  height: 68px;
+  padding: 0 20px;
+  gap: 18px;
+}
+
+.app-share .tb-left {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-share .tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.app-share .album[data-wide='1'] .tb-actions {
+  gap: 9px;
+}
+
+.app-share .tb-count {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg-1);
+}
+
+.app-share .tb-id {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.app-share .tb-av {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--accent);
+}
+
+.app-share .tb-id.small .tb-av {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.app-share .tb-idtext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.18;
+}
+
+.app-share .tb-title {
+  font-family: var(--font-title);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--fg-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-share .tb-id.small .tb-title {
+  font-size: 15px;
+}
+
+.app-share .tb-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+
+.app-share .tb-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--fg-3);
+}
+
+.app-share .topbar[data-wide='0'] .tb-id,
+.app-share .topbar[data-wide='0'] .tb-kicker {
+  transition:
+    opacity 0.26s ease,
+    transform 0.26s ease;
+}
+
+.app-share .topbar[data-wide='0'][data-collapsed='0'] .tb-id {
+  opacity: 0;
+  transform: translateY(7px);
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+}
+
+.app-share .topbar[data-wide='0'][data-collapsed='1'] .tb-kicker {
+  opacity: 0;
+  transform: translateY(-7px);
+  position: absolute;
+  left: 0;
+  pointer-events: none;
+}
+
+.app-share .icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--fg-1);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease;
+}
+
+.app-share .icon-btn:hover {
+  background: var(--chip-bg);
+}
+
+.app-share .icon-btn:active {
+  transform: scale(0.92);
+}
+
+.app-share .icon-btn.is-on {
+  color: var(--accent);
+}
+
+.app-share .tb-tbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 15px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-share .tb-tbtn:hover {
+  background: var(--chip-bg);
+}
+
+.app-share .tb-tbtn.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+.app-share .tb-tbtn.primary:hover {
+  background: var(--accent-press);
+}
+
+.app-share .hero {
+  padding: 20px 20px 12px;
+}
+
+.app-share .album[data-wide='0'] .hero {
+  margin-top: -48px;
+  padding-top: 4px;
+}
+
+.app-share .hero-kicker {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin-bottom: 12px;
+}
+
+.app-share .hero-title {
+  margin: 0;
+  font-family: var(--font-title);
+  font-weight: 600;
+  font-size: 34px;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  color: var(--fg-1);
+}
+
+.app-share .hero-title em {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-weight: 400;
+}
+
+.app-share .hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: var(--fg-2);
+}
+
+.app-share .hero-meta .dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--fg-3);
+}
+
+.app-share .hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.app-share .st-btn-dl,
+.app-share .st-btn-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition:
+    transform 0.12s ease,
+    background 0.15s ease;
+}
+
+.app-share .st-btn-dl {
+  background: var(--accent);
+  color: #fff;
+}
+
+.app-share .st-btn-dl:hover {
+  background: var(--accent-press);
+  transform: translateY(-1px);
+}
+
+.app-share .st-btn-up {
+  background: transparent;
+  color: var(--fg-1);
+  border-color: var(--border);
+}
+
+.app-share .st-btn-up:hover {
+  background: var(--chip-bg);
+  transform: translateY(-1px);
+}
+
+.app-share .hero-note {
+  font-size: 13px;
+  color: var(--fg-3);
+}
+

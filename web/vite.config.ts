@@ -15,7 +15,11 @@ export default defineConfig({
 	},
 	server: {
 		proxy: {
-			'/share': {
+			'^/share/[^/]+/api': {
+				target: 'http://localhost:3000',
+				changeOrigin: true,
+			},
+			'^/s/[^/]+/api': {
 				target: 'http://localhost:3000',
 				changeOrigin: true,
 			},

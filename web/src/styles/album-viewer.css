@@ -1,0 +1,332 @@
+/* ---------- fullscreen viewer ---------- */
+.app-share .album .viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  background: #000;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  animation: vwIn 0.2s ease;
+}
+
+@keyframes vwIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.app-share .album .vw-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 10px;
+  gap: 8px;
+  background: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0));
+}
+
+.app-share .album .vw-top-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.app-share .album .vw-btn {
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  background: transparent;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease,
+    color 0.15s ease;
+}
+
+.app-share .album .vw-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.app-share .album .vw-btn:active {
+  transform: scale(0.92);
+}
+
+.app-share .album .vw-btn.is-on {
+  color: var(--accent);
+}
+
+.app-share .album .vw-count {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.app-share .album .vw-stage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+
+.app-share .album .vw-track {
+  display: flex;
+  height: 100%;
+}
+
+.app-share .album .vw-track.anim {
+  transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.app-share .album .vw-slide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.app-share .album .vw-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
+.app-share .album .vw-slide .vid-ctl .vw-img {
+  pointer-events: auto;
+}
+
+.app-share .album .vw-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: none;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff;
+  backdrop-filter: blur(4px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease;
+  z-index: 2;
+}
+
+.app-share .album .vw-nav:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.app-share .album .vw-nav.left {
+  left: 10px;
+}
+
+.app-share .album .vw-nav.right {
+  right: 10px;
+}
+
+.app-share .album .vw-nav.off {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (hover: none) {
+  .app-share .album .vw-nav {
+    display: none;
+  }
+}
+
+.app-share .album .vw-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: 14px 18px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+}
+
+.app-share .album .vw-foot-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-share .album .vw-foot-date {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.app-share .album .vw-foot-place {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.app-share .album .vid-ctl {
+  position: absolute;
+  inset: 0;
+}
+
+.app-share .album .vid-ctl .vw-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  object-fit: contain;
+}
+
+.app-share .album .vid-bar {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 76px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.25);
+  overflow: hidden;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.app-share .album .vid-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.1s linear;
+}
+
+.app-share .album .vid-time {
+  position: absolute;
+  right: 18px;
+  bottom: 84px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.app-share .album .exif-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: var(--overlay-chrome);
+}
+
+.app-share .album .exif-sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  background: var(--sheet);
+  color: var(--fg-1);
+  border-radius: 24px 24px 0 0;
+  padding: 8px 20px calc(22px + env(safe-area-inset-bottom));
+  transform: translateY(102%);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  max-height: 70%;
+  overflow-y: auto;
+}
+
+.app-share .album .exif-sheet.is-open {
+  transform: translateY(0);
+}
+
+.app-share .album .exif-grip {
+  width: 38px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 4px auto 10px;
+}
+
+.app-share .album .exif-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--fg-3);
+  margin-bottom: 10px;
+}
+
+.app-share .album .exif-head span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-share .album .exif-x {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: var(--chip-bg);
+  color: var(--fg-1);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.app-share .album .exif-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-share .album .exif-row {
+  display: grid;
+  grid-template-columns: 26px 84px 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border-faint);
+  font-size: 13.5px;
+}
+
+.app-share .album .exif-row:first-child {
+  border-top: none;
+}
+
+.app-share .album .exif-ico {
+  color: var(--fg-3);
+  display: inline-flex;
+}
+
+.app-share .album .exif-label {
+  color: var(--fg-3);
+}
+
+.app-share .album .exif-val {
+  color: var(--fg-1);
+  font-weight: 500;
+  text-align: right;
+  word-break: break-word;
+}

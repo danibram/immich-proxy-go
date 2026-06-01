@@ -1,0 +1,285 @@
+.app-share .gallery {
+  padding: 6px 0 120px;
+}
+
+.app-share .album[data-wide='1'] .gallery {
+  padding: 10px 44px 150px 18px;
+}
+
+.app-share .grp {
+  margin-top: 10px;
+}
+
+.app-share .grp-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 9px;
+}
+
+.app-share .album[data-wide='1'] .grp-head {
+  padding: 24px 2px 12px;
+}
+
+.app-share .grp-sel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid var(--fg-3);
+  background: var(--bg);
+  color: var(--fg-3);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.app-share .grp-sel.is-on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.app-share .grp-date {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg-1);
+}
+
+.app-share .album[data-wide='1'] .grp-date {
+  font-size: 18px;
+}
+
+.app-share .just-rows {
+  display: flex;
+  flex-direction: column;
+  padding: 0 3px;
+}
+
+.app-share .album[data-wide='1'] .just-rows {
+  padding: 0;
+}
+
+.app-share .gallery-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  margin: calc(var(--gallery-gap) * -0.5);
+}
+
+.app-share .gallery-wrap::after {
+  content: '';
+  flex-grow: 1000000;
+}
+
+.app-share .gallery-item {
+  margin: calc(var(--gallery-gap) * 0.5);
+  height: var(--gallery-row-height);
+  flex-grow: calc(var(--ratio) * 100);
+  flex-basis: calc(var(--ratio) * var(--gallery-row-height));
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--thumb-bg);
+  transition:
+    transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1),
+    border-radius 0.16s,
+    box-shadow 0.16s;
+}
+
+.app-share .album[data-wide='1'] .gallery-item {
+  border-radius: 4px;
+}
+
+.app-share .thumb-img-slot,
+.app-share .gallery-item img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.app-share .gallery-item img {
+  object-fit: cover;
+}
+
+.app-share .thumb-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0) 32%);
+  transition: opacity 0.15s ease;
+}
+
+.app-share .gallery-item:hover .thumb-veil,
+.app-share .gallery-item.is-selecting .thumb-veil {
+  opacity: 1;
+}
+
+.app-share .gallery-item.is-selected {
+  transform: scale(0.82);
+  border-radius: 9px;
+  box-shadow: 0 0 0 3px var(--accent);
+}
+
+.app-share .thumb-vid {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.app-share .thumb-mark {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+  border: 2px solid #fff;
+  color: #fff;
+}
+
+.app-share .thumb-mark.is-on {
+  background: var(--accent);
+}
+
+.app-share .gallery-foot {
+  text-align: center;
+  color: var(--fg-3);
+  font-size: 12.5px;
+  padding: 26px 16px 8px;
+}
+
+.app-share .scrubber {
+  position: fixed;
+  top: 58px;
+  right: 0;
+  bottom: 0;
+  width: 56px;
+  z-index: 25;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.app-share .scrubber.is-active {
+  opacity: 1;
+}
+
+.app-share .album[data-wide='1'] .scrubber {
+  opacity: 1;
+  top: 68px;
+  width: 64px;
+}
+
+.app-share .scrub-track {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  bottom: 18px;
+  width: 30px;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+
+.app-share .scrub-thumb-wrap {
+  position: absolute;
+  right: 7px;
+  transform: translateY(-50%);
+}
+
+.app-share .scrub-grip {
+  display: block;
+  width: 34px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--scrub-thumb);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  position: relative;
+}
+
+.app-share .scrub-grip::before,
+.app-share .scrub-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 1.5px;
+  border-radius: 2px;
+  background: var(--bg);
+}
+
+.app-share .scrub-grip::before {
+  top: 10px;
+}
+
+.app-share .scrub-grip::after {
+  top: 14px;
+}
+
+.app-share .scrub-bubble {
+  position: absolute;
+  right: 46px;
+  transform: translateY(-50%);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px -4px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.app-share .scrubber.is-active .scrub-bubble {
+  opacity: 1;
+}
+
+.app-share .scrub-years {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  bottom: 18px;
+  left: 0;
+  pointer-events: none;
+}
+
+.app-share .scrub-year {
+  position: absolute;
+  right: 12px;
+  transform: translateY(-50%);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-3);
+  pointer-events: none;
+}
+
+.app-share .scrub-thumb-wrap {
+  position: absolute;
+  right: 7px;
+  transform: translateY(-50%);
+}
+
