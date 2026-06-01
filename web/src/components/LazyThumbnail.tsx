@@ -10,8 +10,21 @@ interface Props {
 
 export default function LazyThumbnail(props: Props) {
   const [shouldLoad, setShouldLoad] = createSignal(false);
+  const [src, setSrc] = createSignal('');
   let itemRef: HTMLDivElement | undefined;
   let frameId: number | null = null;
+
+  createEffect(() => {
+    props.asset.id;
+    setSrc(api.getThumbnailUrl(props.asset.id, 'preview'));
+  });
+
+  function onImgError() {
+    const fallback = api.getThumbnailUrl(props.asset.id, 'thumbnail');
+    if (src() !== fallback) {
+      setSrc(fallback);
+    }
+  }
 
   function isNearViewport(root: HTMLDivElement | undefined): boolean {
     if (!itemRef) return false;
@@ -88,10 +101,11 @@ export default function LazyThumbnail(props: Props) {
       <Show when={shouldLoad()}>
         <img
           data-testid="gallery-thumb"
-          src={api.getThumbnailUrl(props.asset.id, 'preview')}
+          src={src()}
           alt=""
           loading="lazy"
           decoding="async"
+          onError={onImgError}
         />
       </Show>
     </div>

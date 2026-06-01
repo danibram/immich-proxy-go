@@ -14,10 +14,24 @@ export function readPostHogBuildConfig(): PostHogBuildConfig {
   };
 }
 
-/** Runtime gate from proxy config (injected in index.html) or Vite dev env. */
-export function isPostHogAllowed(): boolean {
+/** Runtime gate from proxy config (meta in index.html) or Vite dev env. */
+function readPostHogRuntimeFlag(): boolean | undefined {
+  const meta = document.querySelector('meta[name="ipp-posthog-enabled"]');
+  const content = meta?.getAttribute('content');
+  if (content === 'true') return true;
+  if (content === 'false') return false;
+
   if (typeof window.__IPP_POSTHOG_ENABLED__ === 'boolean') {
     return window.__IPP_POSTHOG_ENABLED__;
+  }
+
+  return undefined;
+}
+
+export function isPostHogAllowed(): boolean {
+  const runtime = readPostHogRuntimeFlag();
+  if (runtime !== undefined) {
+    return runtime;
   }
   if (import.meta.env.DEV) {
     return import.meta.env.VITE_POSTHOG_ENABLED === 'true';

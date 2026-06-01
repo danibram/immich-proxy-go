@@ -166,7 +166,7 @@ func (h *StaticHandler) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
 
 func injectPostHogFlag(html string, enabled bool) string {
 	snippet := fmt.Sprintf(
-		`<script>window.__IPP_POSTHOG_ENABLED__=%s</script>`+"\n",
+		`<meta name="ipp-posthog-enabled" content="%s">`+"\n",
 		strconv.FormatBool(enabled),
 	)
 	if idx := strings.Index(html, posthogInjectMarker); idx != -1 {

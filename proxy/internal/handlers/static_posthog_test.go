@@ -15,12 +15,12 @@ func TestInjectPostHogFlag(t *testing.T) {
 	html := "<!DOCTYPE html><html><head><title>x</title></head><body></body></html>"
 
 	enabled := injectPostHogFlag(html, true)
-	if !strings.Contains(enabled, `window.__IPP_POSTHOG_ENABLED__=true`) {
+	if !strings.Contains(enabled, `<meta name="ipp-posthog-enabled" content="true">`) {
 		t.Fatalf("enabled injection missing: %s", enabled)
 	}
 
 	disabled := injectPostHogFlag(html, false)
-	if !strings.Contains(disabled, `window.__IPP_POSTHOG_ENABLED__=false`) {
+	if !strings.Contains(disabled, `<meta name="ipp-posthog-enabled" content="false">`) {
 		t.Fatalf("disabled injection missing: %s", disabled)
 	}
 }

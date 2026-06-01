@@ -213,6 +213,7 @@ func main() {
 	// Static files for SolidJS app
 	r.Get("/assets/*", staticHandler.ServeHTTP)
 	r.Get("/favicon.ico", staticHandler.ServeHTTP)
+	r.Get("/favicon.svg", staticHandler.ServeHTTP)
 
 	// Landing page (SolidJS app)
 	r.Get("/", staticHandler.ServeIndex)
