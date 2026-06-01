@@ -16,6 +16,7 @@ export default function LazyThumbnail(props: Props) {
   let frameId: number | null = null;
   let currentTask: ThumbnailTask | null = null;
   let currentRequestId = 0;
+  let currentRoot: HTMLDivElement | undefined;
   let requestedSize: 'preview' | 'thumbnail' = 'preview';
 
   createEffect(() => {
@@ -116,7 +117,7 @@ export default function LazyThumbnail(props: Props) {
 
     if (requestedSize === 'preview') {
       setStatus('idle');
-      requestLoad('thumbnail');
+      requestLoad(currentRoot, 'thumbnail');
       return;
     }
 
@@ -128,7 +129,7 @@ export default function LazyThumbnail(props: Props) {
     const inPreloadZone = isWithinViewportMargin(root, 1);
     const inCancelZone = isWithinViewportMargin(root, 2.5);
 
-    if ((currentStatus === 'queued' || currentStatus === 'loading') && !inCancelZone) {
+    if (currentStatus === 'queued' && !inCancelZone) {
       currentRequestId += 1;
       cancelLoad();
       setSrc('');
@@ -156,6 +157,7 @@ export default function LazyThumbnail(props: Props) {
 
   createEffect(() => {
     const root = props.scrollContainer?.();
+    currentRoot = root;
     if (!itemRef) return;
 
     if (typeof IntersectionObserver === 'undefined') {
@@ -205,7 +207,6 @@ export default function LazyThumbnail(props: Props) {
           data-testid="gallery-thumb"
           src={src()}
           alt=""
-          loading="lazy"
           decoding="async"
           onLoad={handleImgLoad}
           onError={handleImgError}

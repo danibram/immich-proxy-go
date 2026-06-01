@@ -101,9 +101,9 @@ describe('LazyThumbnail', () => {
     });
   });
 
-  it('aborts when the thumbnail moves far away and retries when it comes back', async () => {
+  it('keeps an in-flight image mounted when it moves far away and still shows it again later', async () => {
     let rootRef: HTMLDivElement | undefined;
-    const { getByTestId, queryByTestId } = render(() => (
+    const { getByTestId } = render(() => (
       <div ref={rootRef} data-testid="scroll-root">
         <LazyThumbnail asset={asset} scrollContainer={() => rootRef} />
       </div>
@@ -134,7 +134,8 @@ describe('LazyThumbnail', () => {
     fireEvent.scroll(root);
 
     await waitFor(() => {
-      expect(queryByTestId('gallery-thumb')).toBeNull();
+      const image = getByTestId('gallery-thumb') as HTMLImageElement;
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=preview');
     });
 
     top = 120;
@@ -144,6 +145,41 @@ describe('LazyThumbnail', () => {
     await waitFor(() => {
       const image = getByTestId('gallery-thumb') as HTMLImageElement;
       expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=preview');
+    });
+  });
+
+  it('falls back to thumbnail size when preview fails', async () => {
+    let rootRef: HTMLDivElement | undefined;
+    const { getByTestId } = render(() => (
+      <div ref={rootRef} data-testid="scroll-root">
+        <LazyThumbnail asset={asset} scrollContainer={() => rootRef} />
+      </div>
+    ));
+
+    const root = getByTestId('scroll-root') as HTMLDivElement;
+    const slot = getByTestId('gallery-thumb-slot') as HTMLDivElement;
+
+    Object.defineProperty(root, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ top: 0, bottom: 600 }),
+    });
+    Object.defineProperty(slot, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ top: 100, bottom: 220 }),
+    });
+
+    TestIntersectionObserver.instances[0]?.trigger();
+
+    await waitFor(() => {
+      const image = getByTestId('gallery-thumb') as HTMLImageElement;
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=preview');
+    });
+
+    fireEvent.error(getByTestId('gallery-thumb'));
+
+    await waitFor(() => {
+      const image = getByTestId('gallery-thumb') as HTMLImageElement;
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=thumbnail');
     });
   });
 });
