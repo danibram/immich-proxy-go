@@ -21,5 +21,7 @@ export const seed = {
   privateAlbumId: () => env('PRIVATE_ALBUM_ID'),
   passwordProtectedSlug: () => env('PASSWORD_PROTECTED_SHARE_SLUG'),
   passwordProtectedAssetId: () => env('PASSWORD_PROTECTED_ASSET_ID'),
+  passwordProtectedBSlug: () => env('PASSWORD_PROTECTED_B_SHARE_SLUG'),
   sharePassword: () => env('E2E_SHARE_PASSWORD'),
+  sharePasswordB: () => env('E2E_SHARE_PASSWORD_B'),
 };

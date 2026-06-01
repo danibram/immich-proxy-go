@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext } from '@playwright/test';
+import { expect, type APIRequestContext, type Playwright } from '@playwright/test';
 
 export interface SharedLinkCapabilities {
   allowDownload: boolean;
@@ -52,4 +52,21 @@ export async function validateSharePassword(
   });
   expect(res.status()).toBe(expectedStatus);
   return res;
+}
+
+/** Isolated API context so password cookies from one test do not leak to the next. */
+export async function withFreshRequest(
+  playwright: Playwright,
+  fn: (request: APIRequestContext) => Promise<void>
+): Promise<void> {
+  const baseURL = process.env.E2E_EXTERNAL_BASE_URL;
+  if (!baseURL) {
+    throw new Error('E2E_EXTERNAL_BASE_URL is required');
+  }
+  const ctx = await playwright.request.newContext({ baseURL });
+  try {
+    await fn(ctx);
+  } finally {
+    await ctx.dispose();
+  }
 }

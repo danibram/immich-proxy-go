@@ -22,7 +22,9 @@ OVERRIDE_ON_SHARED_SLUG="${OVERRIDE_ON_SHARED_SLUG:-${SHARED_SLUG}-override-on}"
 OVERRIDE_OFF_SHARED_SLUG="${OVERRIDE_OFF_SHARED_SLUG:-${SHARED_SLUG}-override-off}"
 METADATA_OFF_SHARED_SLUG="${METADATA_OFF_SHARED_SLUG:-${SHARED_SLUG}-metadata-off}"
 PASSWORD_PROTECTED_SHARED_SLUG="${PASSWORD_PROTECTED_SHARED_SLUG:-${SHARED_SLUG}-protected}"
+PASSWORD_PROTECTED_B_SHARED_SLUG="${PASSWORD_PROTECTED_B_SHARED_SLUG:-${SHARED_SLUG}-protected-b}"
 E2E_SHARE_PASSWORD="${E2E_SHARE_PASSWORD:-e2e-secret-password}"
+E2E_SHARE_PASSWORD_B="${E2E_SHARE_PASSWORD_B:-another-e2e-password}"
 
 E2E_IMAGE_COUNT="${E2E_IMAGE_COUNT:-24}"
 
@@ -328,6 +330,16 @@ create_password_protected_album() {
   PASSWORD_PROTECTED_ASSET_ID="${ASSET_ID}"
 }
 
+create_password_protected_album_b() {
+  create_album_with_assets \
+    "E2E Password Protected Album B" \
+    "Second password-protected album for cross-share isolation tests" \
+    "/tmp/password-protected-album-b.json" \
+    "PASSWORD_PROTECTED_B_ALBUM_ID" \
+    "${SEED_ASSET_IDS[2]}" "${SEED_ASSET_IDS[3]}"
+  PASSWORD_PROTECTED_B_ASSET_ID="${SEED_ASSET_IDS[2]}"
+}
+
 create_one_shared_link() {
   local key_var="$1"
   local slug_var="$2"
@@ -383,6 +395,8 @@ create_shared_links() {
     '{"allowDownload":true,"allowUpload":false,"showMetadata":false}'
   create_one_shared_link PASSWORD_PROTECTED_SHARE_KEY PASSWORD_PROTECTED_SHARE_SLUG "${PASSWORD_PROTECTED_ALBUM_ID}" "${PASSWORD_PROTECTED_SHARED_SLUG}" \
     '{"allowDownload":true,"allowUpload":false,"showMetadata":true}' "${E2E_SHARE_PASSWORD}"
+  create_one_shared_link PASSWORD_PROTECTED_B_SHARE_KEY PASSWORD_PROTECTED_B_SHARE_SLUG "${PASSWORD_PROTECTED_B_ALBUM_ID}" "${PASSWORD_PROTECTED_B_SHARED_SLUG}" \
+    '{"allowDownload":true,"allowUpload":false,"showMetadata":true}' "${E2E_SHARE_PASSWORD_B}"
 }
 
 write_runtime_file() {
@@ -404,7 +418,12 @@ PASSWORD_PROTECTED_SHARE_KEY=${PASSWORD_PROTECTED_SHARE_KEY}
 PASSWORD_PROTECTED_SHARE_SLUG=${PASSWORD_PROTECTED_SHARE_SLUG}
 PASSWORD_PROTECTED_ALBUM_ID=${PASSWORD_PROTECTED_ALBUM_ID}
 PASSWORD_PROTECTED_ASSET_ID=${PASSWORD_PROTECTED_ASSET_ID}
+PASSWORD_PROTECTED_B_SHARE_KEY=${PASSWORD_PROTECTED_B_SHARE_KEY}
+PASSWORD_PROTECTED_B_SHARE_SLUG=${PASSWORD_PROTECTED_B_SHARE_SLUG}
+PASSWORD_PROTECTED_B_ALBUM_ID=${PASSWORD_PROTECTED_B_ALBUM_ID}
+PASSWORD_PROTECTED_B_ASSET_ID=${PASSWORD_PROTECTED_B_ASSET_ID}
 E2E_SHARE_PASSWORD=${E2E_SHARE_PASSWORD}
+E2E_SHARE_PASSWORD_B=${E2E_SHARE_PASSWORD_B}
 ASSET_ID=${ASSET_ID}
 FIRST_ASSET_ID=${FIRST_ASSET_ID}
 VIDEO_ASSET_ID=${VIDEO_ASSET_ID}
@@ -421,6 +440,7 @@ main() {
   create_test_albums
   create_private_album
   create_password_protected_album
+  create_password_protected_album_b
   create_shared_links
   write_runtime_file
 

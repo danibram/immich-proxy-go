@@ -6,6 +6,7 @@ PROXY_MODE="caddy"
 KEEP_UP="false"
 SKIP_BUILD="false"
 WITH_PLAYWRIGHT="false"
+PLAYWRIGHT_SECURITY_ONLY="false"
 RUN_CONFIG_CASES="true"
 
 usage() {
@@ -17,6 +18,7 @@ Options:
   --keep-up    Keep containers running after test completion
   --skip-build Skip docker image build
   --with-playwright Run Playwright security check against the reverse-proxied share URL
+  --playwright-security-only Run only share security Playwright specs (no gallery suite)
   --no-config-cases Run only one scenario using current defaults (skip config matrix)
 EOF
 }
@@ -37,6 +39,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --with-playwright)
       WITH_PLAYWRIGHT="true"
+      shift
+      ;;
+    --playwright-security-only)
+      WITH_PLAYWRIGHT="true"
+      PLAYWRIGHT_SECURITY_ONLY="true"
       shift
       ;;
     --no-config-cases)
@@ -134,7 +141,13 @@ run_scenario() {
 
     if [[ "${WITH_PLAYWRIGHT}" == "true" ]]; then
       local -a playwright_specs=()
-      if [[ "${run_playwright}" == "true" ]]; then
+      if [[ "${PLAYWRIGHT_SECURITY_ONLY}" == "true" ]]; then
+        playwright_specs=(
+          e2e/public-share-security.spec.ts
+          e2e/share-password-security.spec.ts
+        )
+        echo "[e2e] Running Playwright share-security specs via ${proxy_name} (${host_url}) - ${scenario_name}"
+      elif [[ "${run_playwright}" == "true" ]]; then
         playwright_specs=(
           e2e/share-gallery.spec.ts
           e2e/share-proxy-options.spec.ts

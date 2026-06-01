@@ -52,6 +52,7 @@ services:
       IPP_OPTIONS_SHOW_METADATA: "${IPP_OPTIONS_SHOW_METADATA:-true}"
       IPP_COOKIE_SECRET: e2e-cookie-secret-change-me
       IPP_SECURITY_TRUST_PROXY_HEADERS: "true"
+      IPP_SECURITY_PASSWORD_RATE_LIMIT: "100"
     depends_on:
       - immich-server
     restart: unless-stopped

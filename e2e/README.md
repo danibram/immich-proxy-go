@@ -15,8 +15,9 @@ This E2E setup brings up:
   - plus one extra metadata-off link (`showMetadata=false`, `allowDownload=true`)
   - a private album (not reachable from public share routes)
   - a **password-protected** album/slug (`E2E_SHARE_PASSWORD`, default `e2e-secret-password`)
-- Shell assertion job (HTTP contract + proxy option matrix)
-- Optional **Playwright** browser tests (gallery, viewer, video, lazy loading, proxy/link UI gates)
+  - a **second password-protected** album B (`E2E_SHARE_PASSWORD_B`, default `another-e2e-password`) for cross-share isolation
+- Shell assertion job (HTTP contract + proxy option matrix + **share security matrix**)
+- Optional **Playwright** browser tests (gallery, viewer, video, lazy loading, proxy/link UI gates, password security)
 
 ## Prerequisites
 
@@ -36,6 +37,9 @@ From repository root:
 
 # Fast iteration: single proxy config, full Playwright
 ./e2e/run.sh --proxy caddy --with-playwright --no-config-cases
+
+# CI / release gate: shell security matrix + Playwright security specs only (no gallery flake)
+./e2e/run.sh --proxy caddy --no-config-cases --playwright-security-only
 ```
 
 Using `just`:
@@ -62,9 +66,13 @@ When `--with-playwright` is set:
 | `web/e2e/share-gallery.spec.ts` | Full UI: gallery load, slug route, lazy thumbnails, viewer navigation, video metadata |
 | `web/e2e/share-proxy-options.spec.ts` | Download/upload/info visibility per share + global proxy flags |
 | `web/e2e/public-share-security.spec.ts` | Private album isolation via browser |
-| `web/e2e/share-password-security.spec.ts` | Password gate, cookie scope, stale-password regressions, thumbnail auth |
+| `web/e2e/share-password-security.spec.ts` | Password gate UI, cross-album isolation, cookie scope, stale-password regressions, no 5xx on basic routes (thumbnail cold-path checks run in shell only — see note below) |
 
 On the **config matrix**, the full gallery suite runs only for `downloads-on-metadata-on`. Other matrix scenarios run `share-proxy-options.spec.ts` only (faster, still validates global gates). Password security Playwright runs on every `--with-playwright` invocation.
+
+**CI:** Go + unit tests on every push/PR. Full e2e is opt-in locally: `./e2e/run.sh --proxy caddy --no-config-cases --playwright-security-only`.
+
+**Note:** Password API routes (`/api/shared-links/me`) are the authoritative gate. The shell security matrix checks cold thumbnail access **before** any unlock. Playwright runs after that matrix (which ends with an authorized thumbnail fetch), so Immich may already serve the same asset URL without a password; UI/API password tests remain in Playwright, thumbnail cold-path in shell only.
 
 Smoke tests in `web/e2e/share.spec.ts` run against Vite preview (`just test-e2e`) without Docker.
 
@@ -84,8 +92,13 @@ Smoke tests in `web/e2e/share.spec.ts` run against Vite preview (`just test-e2e`
 6. Shared-link payload redaction.
 7. Album endpoint and private album isolation.
 8. Invalid share key returns `404`.
-9. Password-protected slug: 401 without auth, unlock flow, scoped cookie, stale-password regressions, thumbnail auth.
-10. Stale password cookie on public shares: slug thumbnail must not succeed via password drop retry; cookie cleared on shared-links/me; follow-up API works without stale cookie.
+9. **Share security matrix** (`e2e/scripts/assert-share-security.sh`):
+   - Public shares load without auth; no HTTP 5xx on basic routes
+   - Protected albums A and B reject direct API access (401, not 500)
+   - Album A password does not unlock album B (header, cookie scope, fresh session)
+   - Public shares still work with stale password header; stale cookie cleared on `shared-links/me`
+   - Protected unlock + thumbnail after correct password; stale cookie must not bypass via media retry
+10. Playwright mirrors the above in the browser (password gate UI, cross-album navigation, server error guard).
 
 ## Using the Seeded Share
 
