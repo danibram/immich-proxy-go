@@ -62,6 +62,35 @@ test.describe('Share gallery (integration)', () => {
     }
   });
 
+  test('caps concurrent thumbnail work during a fast scroll', async ({ page }) => {
+    const shareKey = requireEnv('DEFAULT_SHARE_KEY');
+    let activeRequests = 0;
+    let maxActiveRequests = 0;
+
+    await page.route('**/thumbnail?size=preview', async (route) => {
+      activeRequests += 1;
+      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+
+      await page.waitForTimeout(150);
+
+      try {
+        await route.continue();
+      } finally {
+        activeRequests -= 1;
+      }
+    });
+
+    await openShareByKey(page, shareKey);
+
+    const totalItems = await page.getByTestId('gallery-item').count();
+    test.skip(totalItems < 10, 'Need many assets for fast-scroll test');
+
+    await scrollGalleryToEnd(page);
+    await page.waitForTimeout(400);
+
+    expect(maxActiveRequests).toBeLessThanOrEqual(4);
+  });
+
   test('opens viewer, navigates with keyboard, and closes', async ({ page }) => {
     const shareKey = requireEnv('DEFAULT_SHARE_KEY');
     await openShareByKey(page, shareKey);
