@@ -4,43 +4,53 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import {
   captureEvent,
   getShareRouteTypeFromPath,
+  isFeatureEnabled,
   registerPage,
   registerShareContext,
   unregisterPage,
   unregisterShareContext,
 } from '~/analytics';
-import type { SharedLink } from '~/api/types';
 import { api, PasswordRequiredError } from '~/api/client';
+import type { Asset } from '~/api/types';
 import AssetTimeline from '~/components/AssetTimeline';
 import AssetViewer from '~/components/AssetViewer';
-import Header from '~/components/Header';
+import DownloadProgress from '~/components/DownloadProgress';
 import PasswordPrompt from '~/components/PasswordPrompt';
-import SelectionBar from '~/components/SelectionBar';
+import ShareTopBar from '~/components/ShareTopBar';
+import UploadFab from '~/components/UploadFab';
 import UploadModal from '~/components/UploadModal';
+import { useMatchMedia } from '~/hooks/useMatchMedia';
 import {
   assets,
   error,
+  getSelectedAssets,
   isLoading,
   isSelectionMode,
   passwordRequired,
   selectedAsset,
   setError,
   setIsLoading,
+  setLoadedSharedLink,
   setPasswordRequired,
-  setSharedLink,
+  shareCapabilities,
   sharedLink,
 } from '~/store/share';
-
-function assetCountFromLink(link: SharedLink): number {
-  if (link.type === 'ALBUM' && link.album) {
-    return link.album.assets?.length ?? link.album.assetCount ?? 0;
-  }
-  return link.assets?.length ?? 0;
-}
+import {
+  downloadAssets,
+  emptyDownloadState,
+  type DownloadSource,
+} from '~/utils/bulkDownload';
+import { formatAlbumDateRange } from '~/utils/dateUtils';
 
 export default function SharePage() {
   const params = useParams();
+  const wide = useMatchMedia('(min-width: 820px)');
+  const [downloadState, setDownloadState] = createSignal(emptyDownloadState());
   const [showUploadModal, setShowUploadModal] = createSignal(false);
+  const [collapsed, setCollapsed] = createSignal(false);
+  const [scrollEl, setScrollEl] = createSignal<HTMLDivElement>();
+
+  let loadSeq = 0;
 
   onMount(() => {
     registerPage('share');
@@ -51,11 +61,17 @@ export default function SharePage() {
     unregisterPage();
   });
 
-  async function loadSharedLink() {
-    const key = params.key;
+  function handleScroll() {
+    const el = scrollEl();
+    if (!el) return;
+    setCollapsed(el.scrollTop > 44);
+  }
+
+  async function loadSharedLink(requestKey?: string) {
+    const key = requestKey ?? params.key;
     if (!key) return;
 
-    // Detect share type from URL path (/s/ = slug, /share/ = key)
+    const seq = ++loadSeq;
     const shareType = window.location.pathname.startsWith('/s/') ? 's' : 'share';
     api.setShareKey(key, shareType);
     setIsLoading(true);
@@ -63,12 +79,13 @@ export default function SharePage() {
     setPasswordRequired(false);
 
     try {
-      // Backend now returns full album details in a single request
       const link = await api.getSharedLink();
-      setSharedLink(link);
+      if (seq !== loadSeq || params.key !== key) return;
 
+      setLoadedSharedLink(link);
+      const count = assets().length;
       const shareRouteType = getShareRouteTypeFromPath(window.location.pathname);
-      const count = assetCountFromLink(link);
+
       registerShareContext({
         share_route_type: shareRouteType,
         link_type: link.type,
@@ -86,6 +103,8 @@ export default function SharePage() {
         show_metadata: link.showMetadata,
       });
     } catch (err) {
+      if (seq !== loadSeq || params.key !== key) return;
+
       if (err instanceof PasswordRequiredError) {
         setPasswordRequired(true);
         captureEvent('share_password_required', {
@@ -98,99 +117,112 @@ export default function SharePage() {
         });
       }
     } finally {
-      setIsLoading(false);
+      if (seq === loadSeq) {
+        setIsLoading(false);
+      }
     }
   }
-
-  onMount(() => {
-    loadSharedLink();
-  });
 
   createEffect(() => {
     const key = params.key;
     if (key) {
-      loadSharedLink();
+      void loadSharedLink(key);
     }
   });
 
+  function runDownload(assetList: Asset[], source: DownloadSource) {
+    void downloadAssets(assetList, source, setDownloadState);
+  }
+
+  const fabHidden = () =>
+    wide() ||
+    !isFeatureEnabled('upload-ui', true) ||
+    !shareCapabilities().canUpload ||
+    isSelectionMode() ||
+    selectedAsset() !== null ||
+    showUploadModal();
+
   return (
     <>
-      <title>{sharedLink()?.album?.albumName || 'Shared Album'} - Immich</title>
+      <title>{sharedLink()?.album?.albumName || 'Shared Album'} - Immich Public Proxy</title>
 
-      {/* Loading */}
       <Show when={isLoading()}>
-        <div class="h-screen flex items-center justify-center">
-          <div class="text-center">
-            <div class="w-12 h-12 mx-auto mb-4 rounded-xl bg-icy-aqua/20 flex items-center justify-center">
-              <div class="w-6 h-6 border-2 border-icy-aqua/30 border-t-icy-aqua rounded-full animate-spin" />
+        <div class="share-state">
+          <div class="share-state-card">
+            <div class="share-state-spinner">
+              <div class="share-state-spinner-ring" />
             </div>
-            <p class="text-white/50 text-sm">Loading...</p>
+            <p>Loading album…</p>
           </div>
         </div>
       </Show>
 
-      {/* Password */}
       <Show when={!isLoading() && passwordRequired()}>
-        <PasswordPrompt onSuccess={loadSharedLink} />
+        <div class="share-state">
+          <PasswordPrompt onSuccess={() => loadSharedLink()} />
+        </div>
       </Show>
 
-      {/* Error */}
       <Show when={!isLoading() && !passwordRequired() && error()}>
-        <div class="h-screen flex items-center justify-center p-4">
-          <div class="text-center max-w-md">
-            <div class="w-16 h-16 mx-auto mb-4 rounded-xl bg-red-500/10 flex items-center justify-center">
-              <AlertCircle class="w-8 h-8 text-red-400" />
+        <div class="share-state">
+          <div class="share-state-card">
+            <div class="share-state-spinner share-state-spinner--error">
+              <AlertCircle size={28} color="#c0392b" />
             </div>
-            <h1 class="text-xl font-semibold text-white mb-2">Unable to load</h1>
-            <p class="text-white/50 text-sm mb-4">{error()}</p>
-            <button
-              class="px-4 py-2 rounded-lg bg-blue-slate hover:bg-blue-slate/80 text-white text-sm font-medium"
-              onClick={loadSharedLink}
-            >
+            <h1>Unable to load</h1>
+            <p>{error()}</p>
+            <button type="button" class="landing-btn" onClick={() => loadSharedLink()}>
               Try again
             </button>
           </div>
         </div>
       </Show>
 
-      {/* Main */}
       <Show when={!isLoading() && !passwordRequired() && !error() && sharedLink()}>
-        <div class="h-[100dvh] flex flex-col overflow-hidden bg-[#0a0a0a]">
-          {/* Selection bar (shown when in selection mode) */}
-          <SelectionBar />
+        <div class="album" data-theme="light" data-wide={wide() ? '1' : '0'}>
+          <div class="album-scroll scrollbar-hide" ref={setScrollEl} onScroll={handleScroll}>
+            <ShareTopBar
+              dateRange={formatAlbumDateRange(assets())}
+              wide={wide()}
+              collapsed={collapsed()}
+              onUploadClick={() => setShowUploadModal(true)}
+              onDownloadAll={() => runDownload(assets(), 'header')}
+              onDownloadSelected={() => runDownload(getSelectedAssets(), 'selection')}
+            />
 
-          {/* Regular header (hidden when in selection mode) */}
-          <Header onUploadClick={() => setShowUploadModal(true)} />
-
-          <main class={`flex-1 overflow-hidden ${isSelectionMode() ? 'pt-16' : ''}`}>
-            <div class="h-full px-2 py-2 sm:px-4 sm:py-4 lg:px-6">
+            <div class="gallery" data-testid="share-gallery">
               <Show
                 when={assets().length > 0}
                 fallback={
-                  <div class="h-full flex items-center justify-center">
-                    <div class="text-center">
-                      <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-white/5 flex items-center justify-center">
-                        <Images class="w-10 h-10 text-white/20" />
-                      </div>
-                      <h2 class="text-lg font-semibold text-white/80 mb-1">No photos yet</h2>
-                      <p class="text-white/40 text-sm">This album is empty</p>
+                  <div class="gallery-foot gallery-empty">
+                    <div class="gallery-empty-icon">
+                      <Images size={40} color="var(--fg-3)" stroke-width={1.5} />
                     </div>
+                    <h2 class="gallery-empty-title">No items yet</h2>
+                    <p class="gallery-empty-text">This album is empty</p>
                   </div>
                 }
               >
-                <AssetTimeline />
+                <AssetTimeline scrollContainer={scrollEl} />
               </Show>
             </div>
-          </main>
+          </div>
+
+          <UploadFab hidden={fabHidden()} onClick={() => setShowUploadModal(true)} />
+          <UploadModal isOpen={showUploadModal()} onClose={() => setShowUploadModal(false)} />
+
+          <DownloadProgress
+            isOpen={downloadState().isOpen}
+            progress={downloadState().progress}
+            total={downloadState().total}
+            status={downloadState().status}
+            onClose={() => setDownloadState(emptyDownloadState())}
+          />
+
+          <Show when={selectedAsset()}>
+            <AssetViewer />
+          </Show>
         </div>
-
-        {/* Upload Modal */}
-        <UploadModal isOpen={showUploadModal()} onClose={() => setShowUploadModal(false)} />
-
-        {/* Asset Viewer */}
-        <Show when={selectedAsset()}>
-          <AssetViewer />
-        </Show>
       </Show>
     </>
   );

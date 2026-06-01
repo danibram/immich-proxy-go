@@ -1,5 +1,6 @@
 import { createMemo, createSignal } from 'solid-js';
 import type { Asset, SharedLink } from '~/api/types';
+import { getAssetDateKey } from '~/utils/dateUtils';
 
 // Shared link data
 export const [sharedLink, setSharedLink] = createSignal<SharedLink | null>(null);
@@ -44,7 +45,7 @@ export const albumName = createMemo(() => {
     return link.album.albumName;
   }
 
-  return 'Shared Photos';
+  return 'Shared Album';
 });
 
 export const allowUpload = createMemo(() => {
@@ -57,6 +58,18 @@ export const allowDownload = createMemo(() => {
 
 export const showMetadata = createMemo(() => {
   return sharedLink()?.showMetadata ?? false;
+});
+
+export const shareCapabilities = createMemo(() => {
+  const count = assets().length;
+  return {
+    canDownload: allowDownload() && count > 0,
+    canSelect: count > 0,
+    canUpload: allowUpload(),
+    canShowMetadata: showMetadata(),
+    hasAssets: count > 0,
+    assetCount: count,
+  };
 });
 
 export const selectedCount = createMemo(() => {
@@ -74,30 +87,11 @@ export function closeViewer() {
   setSelectedAssetIndex(-1);
 }
 
-export function navigateAsset(direction: 'prev' | 'next') {
-  const currentIndex = selectedAssetIndex();
-  const assetList = assets();
-
-  if (currentIndex === -1) return;
-
-  let newIndex: number;
-  if (direction === 'prev') {
-    newIndex = currentIndex > 0 ? currentIndex - 1 : assetList.length - 1;
-  } else {
-    newIndex = currentIndex < assetList.length - 1 ? currentIndex + 1 : 0;
-  }
-
-  setSelectedAsset(assetList[newIndex]);
-  setSelectedAssetIndex(newIndex);
-}
-
-// Selection actions
-export function toggleSelectionMode() {
-  const newMode = !isSelectionMode();
-  setIsSelectionMode(newMode);
-  if (!newMode) {
-    clearSelection();
-  }
+export function setLoadedSharedLink(link: SharedLink) {
+  setSharedLink(link);
+  closeViewer();
+  setSelectedAssets(new Set());
+  setIsSelectionMode(false);
 }
 
 export function toggleAssetSelection(assetId: string) {
@@ -123,11 +117,7 @@ export function selectAllFromDate(date: string) {
   const current = selectedAssets();
   const newSet = new Set(current);
 
-  // Get all assets from this date
-  const dateAssets = assetList.filter(asset => {
-    const assetDate = new Date(asset.fileCreatedAt || asset.localDateTime);
-    return assetDate.toISOString().split('T')[0] === date;
-  });
+  const dateAssets = assetList.filter((asset) => getAssetDateKey(asset) === date);
 
   // Check if all are already selected
   const allSelected = dateAssets.every(a => newSet.has(a.id));
@@ -171,10 +161,7 @@ export function isDateFullySelected(date: string): boolean {
   const assetList = assets();
   const selected = selectedAssets();
 
-  const dateAssets = assetList.filter(asset => {
-    const assetDate = new Date(asset.fileCreatedAt || asset.localDateTime);
-    return assetDate.toISOString().split('T')[0] === date;
-  });
+  const dateAssets = assetList.filter((asset) => getAssetDateKey(asset) === date);
 
   return dateAssets.length > 0 && dateAssets.every(a => selected.has(a.id));
 }

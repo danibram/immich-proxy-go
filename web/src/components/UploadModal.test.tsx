@@ -31,7 +31,7 @@ describe('UploadModal Component', () => {
   it('is visible when isOpen is true', () => {
     createRoot((dispose) => {
       render(() => <UploadModal isOpen={true} onClose={() => { }} />);
-      expect(screen.getByText('Upload')).toBeInTheDocument();
+      expect(screen.getByText('Upload items')).toBeInTheDocument();
       dispose();
     });
   });
@@ -40,7 +40,7 @@ describe('UploadModal Component', () => {
     createRoot((dispose) => {
       render(() => <UploadModal isOpen={true} onClose={() => { }} />);
       expect(screen.getByText('Drag and drop')).toBeInTheDocument();
-      expect(screen.getByText('or click to browse')).toBeInTheDocument();
+      expect(screen.getByText('Photos and videos')).toBeInTheDocument();
       dispose();
     });
   });
@@ -48,7 +48,7 @@ describe('UploadModal Component', () => {
   it('shows browse button', () => {
     createRoot((dispose) => {
       render(() => <UploadModal isOpen={true} onClose={() => { }} />);
-      expect(screen.getByRole('button', { name: /browse files/i })).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /browse files/i }).length).toBeGreaterThan(0);
       dispose();
     });
   });
@@ -186,6 +186,56 @@ describe('UploadModal Component', () => {
       if (progressCallback) {
         progressCallback(50);
       }
+
+      dispose();
+    });
+  });
+
+  it('continues draining files added while an upload is already running', async () => {
+    const mockUpload = vi.mocked(api.uploadAsset);
+    const mockGetLink = vi.mocked(api.getSharedLink);
+    const uploads: Array<() => void> = [];
+
+    mockUpload.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          uploads.push(() => resolve({ id: `asset-${uploads.length}`, type: 'IMAGE' } as never));
+        })
+    );
+    mockGetLink.mockResolvedValue({
+      id: 'link-1',
+      key: 'test',
+      type: 'INDIVIDUAL',
+      allowDownload: true,
+      allowUpload: true,
+      showMetadata: true,
+      assets: [],
+    });
+
+    await createRoot(async (dispose) => {
+      const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+      Object.defineProperty(fileInput, 'files', {
+        value: [new File(['first'], 'first.jpg', { type: 'image/jpeg' })],
+        configurable: true,
+      });
+      fireEvent.change(fileInput);
+
+      await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
+
+      Object.defineProperty(fileInput, 'files', {
+        value: [new File(['second'], 'second.jpg', { type: 'image/jpeg' })],
+        configurable: true,
+      });
+      fireEvent.change(fileInput);
+
+      expect(mockUpload).toHaveBeenCalledTimes(1);
+      uploads[0]();
+
+      await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(2));
+      uploads[1]();
+      await waitFor(() => expect(mockGetLink).toHaveBeenCalled());
 
       dispose();
     });

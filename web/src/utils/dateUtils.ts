@@ -10,6 +10,19 @@ export interface DateGroup {
   assets: Asset[];
 }
 
+export function getAssetDate(asset: Asset): Date {
+  return new Date(asset.localDateTime || asset.fileCreatedAt);
+}
+
+export function getAssetDateKey(asset: Asset): string {
+  const raw = asset.localDateTime || asset.fileCreatedAt;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+    return raw.slice(0, 10);
+  }
+
+  return getAssetDate(asset).toISOString().slice(0, 10);
+}
+
 export function formatDateLabel(date: Date): string {
   const today = new Date();
   const yesterday = new Date(today);
@@ -38,8 +51,7 @@ export function groupAssetsByDate(assets: Asset[]): DateGroup[] {
   const groups = new Map<string, Asset[]>();
 
   for (const asset of assets) {
-    const date = new Date(asset.fileCreatedAt || asset.localDateTime);
-    const dateKey = date.toISOString().split('T')[0];
+    const dateKey = getAssetDateKey(asset);
 
     if (!groups.has(dateKey)) {
       groups.set(dateKey, []);
@@ -50,7 +62,7 @@ export function groupAssetsByDate(assets: Asset[]): DateGroup[] {
   return Array.from(groups.entries())
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([dateKey, groupAssets]) => {
-      const date = new Date(dateKey);
+      const date = new Date(`${dateKey}T00:00:00`);
       return {
         date: dateKey,
         label: formatDateLabel(date),
@@ -59,7 +71,7 @@ export function groupAssetsByDate(assets: Asset[]): DateGroup[] {
         month: date.getMonth(),
         day: date.getDate(),
         assets: groupAssets.sort(
-          (a, b) => new Date(b.fileCreatedAt).getTime() - new Date(a.fileCreatedAt).getTime()
+          (a, b) => getAssetDate(b).getTime() - getAssetDate(a).getTime()
         ),
       };
     });
@@ -80,6 +92,22 @@ export function formatDuration(duration: string): string {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
   return '';
+}
+
+export function formatAlbumDateRange(assetList: Asset[]): string | null {
+  if (assetList.length === 0) return null;
+
+  const dates = assetList.map(getAssetDate);
+  const oldest = new Date(Math.min(...dates.map((d) => d.getTime())));
+  const newest = new Date(Math.max(...dates.map((d) => d.getTime())));
+
+  const formatMonthYear = (d: Date) =>
+    d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
+
+  if (oldest.getMonth() === newest.getMonth() && oldest.getFullYear() === newest.getFullYear()) {
+    return formatMonthYear(oldest);
+  }
+  return `${formatMonthYear(oldest)} – ${formatMonthYear(newest)}`;
 }
 
 export function getUniqueYears(groups: DateGroup[]): number[] {

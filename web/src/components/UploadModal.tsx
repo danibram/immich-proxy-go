@@ -5,6 +5,7 @@ import { api } from '~/api/client';
 import { isUploading, setIsUploading, setSharedLink } from '~/store/share';
 
 interface UploadFile {
+  id: number;
   file: File;
   progress: number;
   status: 'pending' | 'uploading' | 'complete' | 'error';
@@ -20,6 +21,7 @@ export default function UploadModal(props: Props) {
   const [files, setFiles] = createSignal<UploadFile[]>([]);
   const [isDragging, setIsDragging] = createSignal(false);
   let inputRef: HTMLInputElement | undefined;
+  let nextUploadId = 1;
 
   function handleDragEnter(e: DragEvent) {
     e.preventDefault();
@@ -56,70 +58,67 @@ export default function UploadModal(props: Props) {
       (file) => file.type.startsWith('image/') || file.type.startsWith('video/')
     );
 
+    if (validFiles.length === 0) return;
+
     setFiles((prev) => [
       ...prev,
       ...validFiles.map((file) => ({
+        id: nextUploadId++,
         file,
         progress: 0,
         status: 'pending' as const,
       })),
     ]);
 
-    uploadFiles();
+    void drainUploadQueue();
   }
 
-  async function uploadFiles() {
+  function updateFile(id: number, patch: Partial<UploadFile>) {
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  }
+
+  async function drainUploadQueue() {
     if (isUploading()) return;
     setIsUploading(true);
 
-    const currentFiles = files();
-    const pendingFiles = currentFiles.filter((f) => f.status === 'pending');
-    if (pendingFiles.length > 0) {
-      captureEvent('upload_started', { file_count: pendingFiles.length });
-    }
-
     let completed = 0;
     let failed = 0;
-    for (let i = 0; i < currentFiles.length; i++) {
-      const uploadFile = currentFiles[i];
-      if (uploadFile.status !== 'pending') continue;
 
-      setFiles((prev) =>
-        prev.map((f, idx) => (idx === i ? { ...f, status: 'uploading' as const } : f))
-      );
+    try {
+      while (true) {
+        const uploadFile = files().find((f) => f.status === 'pending');
+        if (!uploadFile) break;
 
-      try {
-        await api.uploadAsset(uploadFile.file, (progress) => {
-          setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, progress } : f)));
-        });
+        captureEvent('upload_started', { file_count: 1 });
+        updateFile(uploadFile.id, { status: 'uploading' });
 
-        setFiles((prev) =>
-          prev.map((f, idx) =>
-            idx === i ? { ...f, status: 'complete' as const, progress: 100 } : f
-          )
-        );
+        try {
+          await api.uploadAsset(uploadFile.file, (progress) => {
+            updateFile(uploadFile.id, { progress });
+          });
 
-        // Refresh album data (backend returns full album in single request)
+          updateFile(uploadFile.id, { status: 'complete', progress: 100 });
+          completed += 1;
+        } catch (error) {
+          failed += 1;
+          updateFile(uploadFile.id, {
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Upload failed',
+          });
+        }
+      }
+
+      if (completed > 0) {
         const updatedLink = await api.getSharedLink();
         setSharedLink(updatedLink);
-        completed += 1;
-      } catch (error) {
-        failed += 1;
-        setFiles((prev) =>
-          prev.map((f, idx) =>
-            idx === i
-              ? { ...f, status: 'error' as const, error: error instanceof Error ? error.message : 'Upload failed' }
-              : f
-          )
-        );
       }
-    }
 
-    if (completed > 0 || failed > 0) {
-      captureEvent('upload_finished', { completed_count: completed, failed_count: failed });
+      if (completed > 0 || failed > 0) {
+        captureEvent('upload_finished', { completed_count: completed, failed_count: failed });
+      }
+    } finally {
+      setIsUploading(false);
     }
-
-    setIsUploading(false);
   }
 
   function removeFile(index: number) {
@@ -153,143 +152,114 @@ export default function UploadModal(props: Props) {
 
   return (
     <Show when={props.isOpen}>
-      <div
-        class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-        onClick={(e) => e.target === e.currentTarget && handleClose()}
-      >
-        <div class="glass-card rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden animate-scaleIn">
-          {/* Header */}
-          <div class="flex items-center justify-between p-4 border-b border-white/10">
-            <div class="flex items-center gap-3">
-              <div class="p-2 rounded-xl bg-icy-aqua/20">
-                <Upload class="w-5 h-5 text-icy-aqua" />
-              </div>
-              <h2 class="text-lg font-semibold text-white">Upload</h2>
-            </div>
+      <div class={`sheet-wrap ${props.isOpen ? 'is-open' : ''}`}>
+        <div class="sheet-scrim" onClick={handleClose} />
+        <div class="sheet scrollbar-hide">
+          <div class="sheet-grip" />
+          <div class="sheet-head">
+            <h2 class="sheet-title">Upload items</h2>
             <button
-              class="p-2 rounded-lg hover:bg-white/10 text-white/60 hover:text-white disabled:opacity-50"
+              type="button"
+              class="sheet-x"
+              aria-label="Close"
               onClick={handleClose}
               disabled={isUploading()}
             >
-              <X class="w-5 h-5" />
+              <X size={18} />
             </button>
           </div>
 
-          {/* Content */}
-          <div class="p-4 overflow-y-auto flex-1">
-            {/* Drop zone */}
-            <div
-              class={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors ${isDragging()
-                ? 'border-icy-aqua bg-icy-aqua/10'
-                : 'border-white/10 hover:border-white/20'
-                }`}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
+          <div
+            class={`dropzone ${isDragging() ? 'is-drag' : ''}`}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onClick={() => inputRef?.click()}
+            role="button"
+            tabIndex={0}
+          >
+            <FileImage size={28} stroke-width={1.8} />
+            <span class="dz-title">{isDragging() ? 'Drop files here' : 'Drag and drop'}</span>
+            <span class="dz-sub">Photos and videos</span>
+            <button
+              type="button"
+              class="dz-browse"
+              onClick={(e) => {
+                e.stopPropagation();
+                inputRef?.click();
+              }}
             >
-              <div class="w-14 h-14 mx-auto mb-4 rounded-xl bg-white/5 flex items-center justify-center">
-                <FileImage class="w-7 h-7 text-white/40" />
-              </div>
-              <p class="text-white/80 mb-1 font-medium">
-                {isDragging() ? 'Drop files here' : 'Drag and drop'}
-              </p>
-              <p class="text-white/40 text-sm mb-4">or click to browse</p>
-              <button
-                class="px-5 py-2 rounded-lg bg-blue-slate hover:bg-blue-slate/80 text-white font-medium text-sm"
-                onClick={() => inputRef?.click()}
-              >
-                Browse Files
-              </button>
-              <input
-                ref={inputRef}
-                type="file"
-                multiple
-                accept="image/*,video/*"
-                class="hidden"
-                onChange={handleFileSelect}
-              />
-            </div>
+              Browse files
+            </button>
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              class="hidden"
+              onChange={handleFileSelect}
+            />
+          </div>
 
-            {/* File list */}
-            <Show when={files().length > 0}>
-              <div class="mt-4">
-                <div class="flex justify-between items-center mb-3">
-                  <div class="flex items-center gap-2 text-xs">
-                    <Show when={completedCount() > 0}>
-                      <span class="px-2 py-1 rounded-md bg-green-500/20 text-green-400">
-                        {completedCount()} done
-                      </span>
-                    </Show>
-                    <Show when={pendingCount() > 0}>
-                      <span class="px-2 py-1 rounded-md bg-light-blue/20 text-light-blue">
-                        {pendingCount()} pending
-                      </span>
-                    </Show>
-                  </div>
-                  <Show when={completedCount() > 0}>
-                    <button
-                      class="text-xs text-white/40 hover:text-white"
-                      onClick={clearCompleted}
-                    >
-                      Clear completed
-                    </button>
-                  </Show>
-                </div>
-
-                <div class="space-y-2 max-h-48 overflow-y-auto">
-                  <For each={files()}>
-                    {(file, index) => (
-                      <div class="flex items-center gap-3 p-2.5 rounded-lg bg-white/5">
-                        <div class="w-7 h-7 rounded-md bg-white/5 flex items-center justify-center flex-shrink-0">
-                          <Show when={file.status === 'complete'}>
-                            <Check class="w-4 h-4 text-green-400" />
-                          </Show>
-                          <Show when={file.status === 'error'}>
-                            <AlertCircle class="w-4 h-4 text-red-400" />
-                          </Show>
-                          <Show when={file.status === 'uploading'}>
-                            <div class="w-4 h-4 border-2 border-icy-aqua border-t-transparent rounded-full animate-spin" />
-                          </Show>
-                          <Show when={file.status === 'pending'}>
-                            <div class="w-4 h-4 border-2 border-white/20 rounded-full" />
-                          </Show>
-                        </div>
-
-                        <div class="flex-1 min-w-0">
-                          <div class="text-sm text-white/90 truncate">{file.file.name}</div>
-                          <div class="text-xs text-white/40">
-                            {formatFileSize(file.file.size)}
-                            <Show when={file.error}>
-                              <span class="text-red-400 ml-2">{file.error}</span>
-                            </Show>
-                          </div>
-
-                          <Show when={file.status === 'uploading'}>
-                            <div class="mt-1.5 h-1 bg-white/10 rounded-full overflow-hidden">
-                              <div
-                                class="h-full bg-icy-aqua"
-                                style={{ width: `${file.progress}%` }}
-                              />
-                            </div>
-                          </Show>
-                        </div>
-
-                        <Show when={file.status === 'pending' || file.status === 'error'}>
-                          <button
-                            class="p-1 rounded hover:bg-white/10 text-white/40 hover:text-white"
-                            onClick={() => removeFile(index())}
-                          >
-                            <X class="w-4 h-4" />
-                          </button>
+          <Show when={files().length > 0}>
+            <div class="up-list">
+              <For each={files()}>
+                {(file, index) => (
+                  <div class={`up-item ${file.status === 'complete' ? 'is-done' : ''}`}>
+                    <span class="up-ico">
+                      <Show when={file.status === 'complete'}>
+                        <Check size={16} stroke-width={2.5} />
+                      </Show>
+                      <Show when={file.status === 'error'}>
+                        <AlertCircle size={16} />
+                      </Show>
+                      <Show when={file.status === 'uploading'}>
+                        <Upload size={16} />
+                      </Show>
+                      <Show when={file.status === 'pending'}>
+                        <FileImage size={16} />
+                      </Show>
+                    </span>
+                    <div class="min-w-0">
+                      <div class="up-name">{file.file.name}</div>
+                      <div class="up-size">
+                        {formatFileSize(file.file.size)}
+                        <Show when={file.error}>
+                          <span style={{ color: '#c0392b', 'margin-left': '6px' }}>{file.error}</span>
                         </Show>
                       </div>
-                    )}
-                  </For>
-                </div>
-              </div>
-            </Show>
-          </div>
+                      <Show when={file.status === 'uploading'}>
+                        <div class="up-bar">
+                          <div class="up-fill" style={{ width: `${file.progress}%` }} />
+                        </div>
+                      </Show>
+                    </div>
+                    <Show when={file.status === 'pending' || file.status === 'error'}>
+                      <button
+                        type="button"
+                        class="sheet-x"
+                        aria-label="Remove"
+                        onClick={() => removeFile(index())}
+                      >
+                        <X size={14} />
+                      </button>
+                    </Show>
+                  </div>
+                )}
+              </For>
+              <Show when={completedCount() > 0}>
+                <button
+                  type="button"
+                  class="dz-browse"
+                  style={{ width: '100%' }}
+                  onClick={clearCompleted}
+                >
+                  Clear completed ({completedCount()})
+                </button>
+              </Show>
+            </div>
+          </Show>
         </div>
       </div>
     </Show>

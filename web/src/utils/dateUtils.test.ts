@@ -4,7 +4,9 @@ import {
   formatDateLabel,
   formatDuration,
   formatScrubberLabel,
+  getAssetDateKey,
   getUniqueYears,
+  formatAlbumDateRange,
   groupAssetsByDate,
 } from './dateUtils';
 
@@ -101,6 +103,59 @@ describe('Date Utils', () => {
     it('returns empty array for empty input', () => {
       const groups = groupAssetsByDate([]);
       expect(groups).toEqual([]);
+    });
+
+    it('uses the asset local date as the canonical group key', () => {
+      const groups = groupAssetsByDate([
+        {
+          id: 'local-late',
+          type: 'IMAGE',
+          originalFileName: 'photo.jpg',
+          fileCreatedAt: '2024-01-16T00:30:00.000Z',
+          localDateTime: '2024-01-15T23:30:00',
+        } as Asset,
+      ]);
+
+      expect(groups[0].date).toBe('2024-01-15');
+    });
+  });
+
+  describe('getAssetDateKey', () => {
+    it('does not shift localDateTime through UTC conversion', () => {
+      expect(
+        getAssetDateKey({
+          id: 'asset-local',
+          type: 'IMAGE',
+          originalFileName: 'photo.jpg',
+          fileCreatedAt: '2024-01-16T00:30:00.000Z',
+          localDateTime: '2024-01-15T23:30:00',
+        } as Asset)
+      ).toBe('2024-01-15');
+    });
+  });
+
+  describe('formatAlbumDateRange', () => {
+    const sampleAssets: Asset[] = [
+      { id: 'a1', type: 'IMAGE', originalFileName: 'photo1.jpg', fileCreatedAt: '2024-01-15T10:00:00Z' },
+      { id: 'a2', type: 'IMAGE', originalFileName: 'photo2.jpg', fileCreatedAt: '2024-06-20T10:00:00Z' },
+    ];
+
+    it('returns null for empty list', () => {
+      expect(formatAlbumDateRange([])).toBeNull();
+    });
+
+    it('returns single month when all assets share month', () => {
+      const range = formatAlbumDateRange([
+        { ...sampleAssets[0], fileCreatedAt: '2024-01-10T10:00:00Z' },
+        { ...sampleAssets[0], id: 'a2', fileCreatedAt: '2024-01-20T10:00:00Z' },
+      ]);
+      expect(range?.toLowerCase()).toMatch(/jan|ene/);
+      expect(range).not.toContain('–');
+    });
+
+    it('returns range when assets span months', () => {
+      const range = formatAlbumDateRange(sampleAssets);
+      expect(range).toContain('–');
     });
   });
 

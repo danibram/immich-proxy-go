@@ -44,67 +44,48 @@ export default function PasswordPrompt(props: Props) {
   }
 
   return (
-    <div class="min-h-screen flex items-center justify-center p-4">
-      <div class="w-full max-w-md animate-fadeIn">
-        <div class="glass-card rounded-3xl p-8">
-          {/* Icon */}
-          <div class="text-center mb-8">
-            <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-slate/20 to-icy-aqua/20 flex items-center justify-center">
-              <Lock class="w-10 h-10 text-light-blue" />
-            </div>
-            <h1 class="text-2xl font-bold text-white">Password Required</h1>
-            <p class="text-white/50 mt-2">This album is protected</p>
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit}>
-            <div class="mb-6">
-              <label for="password" class="block text-sm font-medium text-white/60 mb-2">
-                Password
-              </label>
-              <div class="relative">
-                <input
-                  type={showPassword() ? 'text' : 'password'}
-                  id="password"
-                  value={password()}
-                  onInput={(e) => setPassword(e.currentTarget.value)}
-                  placeholder="Enter password"
-                  class="w-full px-4 py-3.5 pr-12 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:border-icy-aqua focus:ring-1 focus:ring-icy-aqua text-white placeholder-white/30 transition-all"
-                  disabled={isValidating()}
-                />
-                <button
-                  type="button"
-                  class="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-white/40 hover:text-white/60 transition-colors"
-                  onClick={() => setShowPassword(!showPassword())}
-                >
-                  {showPassword() ? <EyeOff class="w-5 h-5" /> : <Eye class="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            {errorMessage() && (
-              <div class="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                {errorMessage()}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              class="w-full py-3.5 rounded-xl bg-gradient-to-r from-blue-slate to-light-blue hover:from-blue-slate/90 hover:to-light-blue/90 text-white font-semibold transition-all duration-200 shadow-lg shadow-blue-slate/25 disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={isValidating()}
-            >
-              {isValidating() ? (
-                <span class="inline-flex items-center gap-2">
-                  <span class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Checking...
-                </span>
-              ) : (
-                'Unlock Album'
-              )}
-            </button>
-          </form>
+    <div class="password-card animate-fadeIn">
+      <div class="text-center mb-6">
+        <div
+          class="w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center"
+          style={{ background: 'rgba(34, 197, 94, 0.12)', color: 'var(--accent)' }}
+        >
+          <Lock size={32} stroke-width={1.8} />
         </div>
+        <h1>Password required</h1>
+        <p style={{ color: 'var(--grey-4)', 'font-size': '14px', 'margin-top': '6px' }}>
+          This album is protected
+        </p>
       </div>
+
+      <form onSubmit={handleSubmit}>
+        <label for="password">Password</label>
+        <div class="relative">
+          <input
+            type={showPassword() ? 'text' : 'password'}
+            id="password"
+            value={password()}
+            onInput={(e) => setPassword(e.currentTarget.value)}
+            placeholder="Enter password"
+            disabled={isValidating()}
+          />
+          <button
+            type="button"
+            class="absolute right-3 top-1/2 -translate-y-1/2 p-1"
+            style={{ color: 'var(--grey-3)', background: 'none', border: 'none', cursor: 'pointer' }}
+            onClick={() => setShowPassword(!showPassword())}
+            aria-label={showPassword() ? 'Hide password' : 'Show password'}
+          >
+            {showPassword() ? <EyeOff size={20} /> : <Eye size={20} />}
+          </button>
+        </div>
+
+        {errorMessage() && <div class="password-error">{errorMessage()}</div>}
+
+        <button type="submit" class="password-submit" disabled={isValidating()}>
+          {isValidating() ? 'Checking…' : 'Unlock album'}
+        </button>
+      </form>
     </div>
   );
 }

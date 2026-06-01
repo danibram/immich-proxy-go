@@ -11,8 +11,11 @@ import {
   isSelectionMode,
   selectAll,
   selectAllFromDate,
+  selectAsset,
   selectedCount,
+  selectedAsset,
   setIsSelectionMode,
+  setLoadedSharedLink,
   setSelectedAssets,
   setSharedLink,
   sharedLink,
@@ -55,6 +58,58 @@ describe('Share Store', () => {
 
         setSharedLink(mockLink);
         expect(sharedLink()).toEqual(mockLink);
+        dispose();
+      });
+    });
+
+    it('resets transient viewer and selection state when a loaded link is installed', () => {
+      createRoot((dispose) => {
+        const firstAsset = {
+          id: 'asset-1',
+          type: 'IMAGE',
+          originalFileName: 'photo1.jpg',
+          fileCreatedAt: '2024-01-15T10:00:00.000Z',
+        } as Asset;
+        const nextLink: SharedLink = {
+          id: 'link-456',
+          key: 'next-key',
+          type: 'ALBUM',
+          allowDownload: true,
+          allowUpload: false,
+          showMetadata: true,
+          album: {
+            id: 'album-456',
+            albumName: 'Next Album',
+            assets: [],
+            assetCount: 0,
+          },
+          assets: [],
+        };
+
+        setSharedLink({
+          id: 'link-123',
+          key: 'test-key',
+          type: 'ALBUM',
+          allowDownload: true,
+          allowUpload: false,
+          showMetadata: true,
+          album: {
+            id: 'album-123',
+            albumName: 'Test Album',
+            assets: [firstAsset],
+            assetCount: 1,
+          },
+          assets: [],
+        });
+        selectAsset(firstAsset, 0);
+        toggleAssetSelection(firstAsset.id);
+
+        setLoadedSharedLink(nextLink);
+
+        expect(sharedLink()).toEqual(nextLink);
+        expect(selectedAsset()).toBeNull();
+        expect(selectedCount()).toBe(0);
+        expect(isSelectionMode()).toBe(false);
         dispose();
       });
     });
@@ -150,7 +205,7 @@ describe('Share Store', () => {
       });
     });
 
-    it('should return "Shared Photos" for non-album types', () => {
+    it('should return "Shared Album" for non-album types', () => {
       createRoot((dispose) => {
         setSharedLink({
           id: 'link-123',
@@ -162,7 +217,7 @@ describe('Share Store', () => {
           assets: [],
         });
 
-        expect(albumName()).toBe('Shared Photos');
+        expect(albumName()).toBe('Shared Album');
         dispose();
       });
     });

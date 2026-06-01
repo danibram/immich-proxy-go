@@ -20,7 +20,7 @@ describe('PasswordPrompt Component', () => {
     createRoot((dispose) => {
       render(() => <PasswordPrompt onSuccess={() => { }} />);
 
-      expect(screen.getByText('Password Required')).toBeInTheDocument();
+      expect(screen.getByText('Password required')).toBeInTheDocument();
       expect(screen.getByPlaceholderText('Enter password')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /unlock/i })).toBeInTheDocument();
       dispose();
