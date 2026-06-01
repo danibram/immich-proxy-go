@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
 IMMICH_BASE_URL="${IMMICH_BASE_URL:-http://immich-server:2283}"
 IMMICH_API_URL="${IMMICH_BASE_URL%/}/api"
 RUNTIME_FILE="${RUNTIME_FILE:-/runtime/seed.env}"
+SEED_MEDIA_DIR="${SEED_MEDIA_DIR:-/tmp/seed-media}"
 
 IMMICH_ADMIN_EMAIL="${IMMICH_ADMIN_EMAIL:-admin@example.com}"
 IMMICH_ADMIN_NAME="${IMMICH_ADMIN_NAME:-E2E Admin}"
@@ -16,6 +21,10 @@ DEFAULT_SHARED_SLUG="${DEFAULT_SHARED_SLUG:-${SHARED_SLUG}}"
 OVERRIDE_ON_SHARED_SLUG="${OVERRIDE_ON_SHARED_SLUG:-${SHARED_SLUG}-override-on}"
 OVERRIDE_OFF_SHARED_SLUG="${OVERRIDE_OFF_SHARED_SLUG:-${SHARED_SLUG}-override-off}"
 METADATA_OFF_SHARED_SLUG="${METADATA_OFF_SHARED_SLUG:-${SHARED_SLUG}-metadata-off}"
+
+E2E_IMAGE_COUNT="${E2E_IMAGE_COUNT:-24}"
+
+declare -a SEED_ASSET_IDS=()
 
 log() {
   printf '[seed] %s\n' "$*"
@@ -77,12 +86,8 @@ create_admin() {
   status="$(json_request "POST" "/auth/admin-sign-up" "${payload}" "" "/tmp/signup.json")"
 
   case "$status" in
-    201)
-      log "Admin user created"
-      ;;
-    400|409)
-      log "Admin already exists, continuing"
-      ;;
+    201) log "Admin user created" ;;
+    400|409) log "Admin already exists, continuing" ;;
     *)
       cat /tmp/signup.json >&2 || true
       die "Failed to create admin user (status: ${status})"
@@ -111,59 +116,162 @@ login_admin() {
   fi
 }
 
-create_seed_png() {
-  # 1x1 transparent PNG
-  cat > /tmp/seed.base64 <<'EOF'
-iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WfD7asAAAAASUVORK5CYII=
-EOF
-  base64 -d /tmp/seed.base64 > /tmp/seed.png
+generate_seed_media() {
+  log "Generating fake media in ${SEED_MEDIA_DIR}"
+  rm -rf "${SEED_MEDIA_DIR}"
+  mkdir -p "${SEED_MEDIA_DIR}"
+
+  local i width height hex_color
+  for ((i = 1; i <= E2E_IMAGE_COUNT; i++)); do
+    width=$((400 + (i % 5) * 160))
+    height=$((300 + (i % 4) * 120))
+    if (( i % 7 == 0 )); then
+      local tmp="${width}"
+      width="${height}"
+      height="${tmp}"
+    fi
+    hex_color="0x$(printf '%02x%02x%02x' $((i * 7 % 200 + 40)) $((i * 13 % 200 + 40)) $((i * 19 % 200 + 40)))"
+    ffmpeg -y -hide_banner -loglevel error \
+      -f lavfi -i "color=c=${hex_color}:s=${width}x${height}:d=1" \
+      -frames:v 1 \
+      "${SEED_MEDIA_DIR}/e2e-photo-${i}.jpg"
+  done
+
+  ffmpeg -y -hide_banner -loglevel error \
+    -f lavfi -i "testsrc=duration=2:size=640x360:rate=24" \
+    -f lavfi -i "sine=frequency=440:duration=2" \
+    -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest \
+    "${SEED_MEDIA_DIR}/e2e-clip.mp4"
+
+  log "Generated ${E2E_IMAGE_COUNT} images and 1 video"
 }
 
-upload_asset() {
-  local now_iso
-  now_iso="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-  local device_id
-  device_id="e2e-device"
-  local device_asset_id
-  device_asset_id="e2e-asset-$(date -u +%s)"
+upload_file_asset() {
+  local file_path="$1"
+  local mime_type="$2"
+  local filename="$3"
+  local file_created_at="$4"
+  local device_asset_id="$5"
+  local out_json="$6"
 
   local status
   status="$(curl -sS \
     -X POST \
     -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-    -F "assetData=@/tmp/seed.png;type=image/png;filename=e2e-seed.png" \
-    -F "deviceId=${device_id}" \
+    -F "assetData=@${file_path};type=${mime_type};filename=${filename}" \
+    -F "deviceId=e2e-device" \
     -F "deviceAssetId=${device_asset_id}" \
-    -F "fileCreatedAt=${now_iso}" \
-    -F "fileModifiedAt=${now_iso}" \
-    -o /tmp/upload.json \
+    -F "fileCreatedAt=${file_created_at}" \
+    -F "fileModifiedAt=${file_created_at}" \
+    -o "${out_json}" \
     -w "%{http_code}" \
     "${IMMICH_API_URL}/assets")"
 
   if [[ "$status" != "201" && "$status" != "200" ]]; then
-    cat /tmp/upload.json >&2 || true
-    die "Asset upload failed (status: ${status})"
+    cat "${out_json}" >&2 || true
+    die "Asset upload failed for ${filename} (status: ${status})"
   fi
 
-  ASSET_ID="$(jq -r '.id // empty' /tmp/upload.json)"
-  if [[ -z "${ASSET_ID}" ]]; then
-    cat /tmp/upload.json >&2 || true
-    die "Upload response did not include an asset ID"
-  fi
+  jq -r '.id // empty' "${out_json}"
 }
 
-create_album_with_asset() {
+wait_for_asset_ready() {
+  local asset_id="$1"
+  local expect_type="${2:-}"
+  local attempt=0
+  local max_attempts=90
+
+  while (( attempt < max_attempts )); do
+    local status
+    status="$(curl -sS \
+      -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+      -o /tmp/asset-status.json \
+      -w "%{http_code}" \
+      "${IMMICH_API_URL}/assets/${asset_id}")"
+
+    if [[ "${status}" == "200" ]]; then
+      local asset_type duration
+      asset_type="$(jq -r '.type // empty' /tmp/asset-status.json)"
+      duration="$(jq -r '.duration // empty' /tmp/asset-status.json)"
+
+      if [[ -n "${expect_type}" && "${asset_type}" != "${expect_type}" ]]; then
+        attempt=$((attempt + 1))
+        sleep 2
+        continue
+      fi
+
+      if [[ "${expect_type}" == "VIDEO" && -z "${duration}" ]]; then
+        attempt=$((attempt + 1))
+        sleep 2
+        continue
+      fi
+
+      return 0
+    fi
+
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+
+  die "Asset ${asset_id} did not become ready (type=${expect_type})"
+}
+
+upload_seed_assets() {
+  log "Uploading seed assets to Immich"
+  SEED_ASSET_IDS=()
+
+  local i date_iso asset_id month
+  for ((i = 1; i <= E2E_IMAGE_COUNT; i++)); do
+    month=$(( (i % 12) + 1 ))
+    printf -v date_iso "2024-%02d-15T12:00:00Z" "${month}"
+    asset_id="$(upload_file_asset \
+      "${SEED_MEDIA_DIR}/e2e-photo-${i}.jpg" \
+      "image/jpeg" \
+      "e2e-photo-${i}.jpg" \
+      "${date_iso}" \
+      "e2e-photo-${i}-$(date -u +%s)" \
+      "/tmp/upload-${i}.json")"
+    [[ -n "${asset_id}" ]] || die "Missing asset id for image ${i}"
+    SEED_ASSET_IDS+=("${asset_id}")
+  done
+
+  date_iso="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  VIDEO_ASSET_ID="$(upload_file_asset \
+    "${SEED_MEDIA_DIR}/e2e-clip.mp4" \
+    "video/mp4" \
+    "e2e-clip.mp4" \
+    "${date_iso}" \
+    "e2e-video-$(date -u +%s)" \
+    "/tmp/upload-video.json")"
+  [[ -n "${VIDEO_ASSET_ID}" ]] || die "Missing asset id for video"
+  SEED_ASSET_IDS+=("${VIDEO_ASSET_ID}")
+
+  log "Waiting for video asset processing"
+  wait_for_asset_ready "${VIDEO_ASSET_ID}" "VIDEO"
+
+  ASSET_ID="${SEED_ASSET_IDS[0]}"
+  FIRST_ASSET_ID="${ASSET_ID}"
+  EXPECTED_ASSET_COUNT="${#SEED_ASSET_IDS[@]}"
+  log "Uploaded ${EXPECTED_ASSET_COUNT} assets (first=${FIRST_ASSET_ID}, video=${VIDEO_ASSET_ID})"
+}
+
+create_album_with_assets() {
   local album_name="$1"
   local album_description="$2"
   local output_file="$3"
   local id_var_name="$4"
+  shift 4
+  local -a album_asset_ids=("$@")
+
+  local asset_json
+  asset_json="$(asset_ids_json "${album_asset_ids[@]}")"
 
   local payload
   payload="$(jq -nc \
     --arg name "${album_name}" \
     --arg description "${album_description}" \
-    --arg asset_id "${ASSET_ID}" \
-    '{albumName: $name, description: $description, assetIds: [$asset_id]}')"
+    --argjson asset_ids "${asset_json}" \
+    '{albumName: $name, description: $description, assetIds: $asset_ids}')"
 
   local status
   status="$(json_request "POST" "/albums" "${payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "${output_file}")"
@@ -179,180 +287,83 @@ create_album_with_asset() {
     die "Album '${album_name}' response did not include an album ID"
   fi
 
-  # Defensive call to ensure the seeded asset is present in the album
-  local add_payload
-  add_payload="$(jq -nc --arg asset_id "${ASSET_ID}" '{ids: [$asset_id]}')"
-  local add_status
-  add_status="$(json_request "PUT" "/albums/${album_id}/assets" "${add_payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "/tmp/add-to-album.json")"
-  if [[ "$add_status" != "200" ]]; then
-    cat /tmp/add-to-album.json >&2 || true
-    die "Failed to ensure asset membership in album '${album_name}' (status: ${add_status})"
-  fi
-
   printf -v "${id_var_name}" '%s' "${album_id}"
 }
 
 create_test_albums() {
-  create_album_with_asset \
-    "E2E Default Flags Album" \
-    "Album used to validate Immich default shared-link flags" \
-    "/tmp/album-default.json" \
-    "DEFAULT_ALBUM_ID"
-
-  create_album_with_asset \
-    "E2E Override On Album" \
-    "Album used to validate explicit override flags set to true" \
-    "/tmp/album-override-on.json" \
-    "OVERRIDE_ON_ALBUM_ID"
-
-  create_album_with_asset \
-    "E2E Override Off Album" \
-    "Album used to validate explicit override flags set to false" \
-    "/tmp/album-override-off.json" \
-    "OVERRIDE_OFF_ALBUM_ID"
+  local name desc id_var
+  while IFS='|' read -r name id_var desc; do
+    [[ -z "${name}" ]] && continue
+    create_album_with_assets \
+      "${name}" \
+      "${desc}" \
+      "/tmp/album-${id_var}.json" \
+      "${id_var}" \
+      "${SEED_ASSET_IDS[@]}"
+  done <<'EOF'
+E2E Default Flags Album|DEFAULT_ALBUM_ID|Album used to validate Immich default shared-link flags
+E2E Override On Album|OVERRIDE_ON_ALBUM_ID|Album used to validate explicit override flags set to true
+E2E Override Off Album|OVERRIDE_OFF_ALBUM_ID|Album used to validate explicit override flags set to false
+EOF
 }
 
 create_private_album() {
+  create_album_with_assets \
+    "E2E Private Album" \
+    "Album that must NOT be reachable from public share routes" \
+    "/tmp/private-album.json" \
+    "PRIVATE_ALBUM_ID" \
+    "${ASSET_ID}"
+}
+
+create_one_shared_link() {
+  local key_var="$1"
+  local slug_var="$2"
+  local album_id="$3"
+  local slug="$4"
+  local flags_json="$5"
+  local out_file="/tmp/shared-link-${key_var}.json"
+
   local payload
   payload="$(jq -nc \
-    --arg name "E2E Private Album" \
-    --arg description "Album that must NOT be reachable from public share routes" \
-    --arg asset_id "${ASSET_ID}" \
-    '{albumName: $name, description: $description, assetIds: [$asset_id]}')"
+    --arg album_id "${album_id}" \
+    --arg slug "${slug}" \
+    --argjson flags "${flags_json}" \
+    '{type: "ALBUM", albumId: $album_id, slug: $slug} + $flags')"
 
   local status
-  status="$(json_request "POST" "/albums" "${payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "/tmp/private-album.json")"
+  status="$(json_request "POST" "/shared-links" "${payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "${out_file}")"
   if [[ "$status" != "201" ]]; then
-    cat /tmp/private-album.json >&2 || true
-    die "Failed to create private album (status: ${status})"
+    cat "${out_file}" >&2 || true
+    die "Failed to create shared link ${key_var} (status: ${status})"
   fi
 
-  PRIVATE_ALBUM_ID="$(jq -r '.id // empty' /tmp/private-album.json)"
-  if [[ -z "${PRIVATE_ALBUM_ID}" ]]; then
-    cat /tmp/private-album.json >&2 || true
-    die "Private album response did not include an album ID"
+  local share_key share_slug
+  share_key="$(jq -r '.key // empty' "${out_file}")"
+  share_slug="$(jq -r '.slug // empty' "${out_file}")"
+  if [[ -z "${share_key}" ]]; then
+    cat "${out_file}" >&2 || true
+    die "Shared link ${key_var} response did not include key"
   fi
+
+  printf -v "${key_var}" '%s' "${share_key}"
+  printf -v "${slug_var}" '%s' "${share_slug}"
 }
 
 create_shared_links() {
-  # Shared link for validating Immich defaults (do not pass flag overrides).
-  local default_payload
-  default_payload="$(jq -nc \
-    --arg album_id "${DEFAULT_ALBUM_ID}" \
-    --arg slug "${DEFAULT_SHARED_SLUG}" \
-    '{
-      type: "ALBUM",
-      albumId: $album_id,
-      slug: $slug
-    }')"
-
-  local default_status
-  default_status="$(json_request "POST" "/shared-links" "${default_payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "/tmp/shared-link-default.json")"
-  if [[ "$default_status" != "201" ]]; then
-    cat /tmp/shared-link-default.json >&2 || true
-    die "Failed to create default shared link (status: ${default_status})"
-  fi
-
-  DEFAULT_SHARE_KEY="$(jq -r '.key // empty' /tmp/shared-link-default.json)"
-  DEFAULT_SHARE_SLUG="$(jq -r '.slug // empty' /tmp/shared-link-default.json)"
-  if [[ -z "${DEFAULT_SHARE_KEY}" ]]; then
-    cat /tmp/shared-link-default.json >&2 || true
-    die "Default shared link response did not include key"
-  fi
-
-  # Shared link with explicit overrides enabled.
-  local override_on_payload
-  override_on_payload="$(jq -nc \
-    --arg album_id "${OVERRIDE_ON_ALBUM_ID}" \
-    --arg slug "${OVERRIDE_ON_SHARED_SLUG}" \
-    '{
-      type: "ALBUM",
-      albumId: $album_id,
-      allowDownload: true,
-      allowUpload: true,
-      showMetadata: true,
-      slug: $slug
-    }')"
-
-  local override_on_status
-  override_on_status="$(json_request "POST" "/shared-links" "${override_on_payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "/tmp/shared-link-override-on.json")"
-  if [[ "$override_on_status" != "201" ]]; then
-    cat /tmp/shared-link-override-on.json >&2 || true
-    die "Failed to create override-on shared link (status: ${override_on_status})"
-  fi
-
-  OVERRIDE_ON_SHARE_KEY="$(jq -r '.key // empty' /tmp/shared-link-override-on.json)"
-  OVERRIDE_ON_SHARE_SLUG="$(jq -r '.slug // empty' /tmp/shared-link-override-on.json)"
-  if [[ -z "${OVERRIDE_ON_SHARE_KEY}" ]]; then
-    cat /tmp/shared-link-override-on.json >&2 || true
-    die "Override-on shared link response did not include key"
-  fi
-
-  # Shared link with explicit overrides disabled.
-  local override_off_payload
-  override_off_payload="$(jq -nc \
-    --arg album_id "${OVERRIDE_OFF_ALBUM_ID}" \
-    --arg slug "${OVERRIDE_OFF_SHARED_SLUG}" \
-    '{
-      type: "ALBUM",
-      albumId: $album_id,
-      allowDownload: false,
-      allowUpload: false,
-      showMetadata: true,
-      slug: $slug
-    }')"
-
-  local override_off_status
-  override_off_status="$(json_request "POST" "/shared-links" "${override_off_payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "/tmp/shared-link-override-off.json")"
-  if [[ "$override_off_status" != "201" ]]; then
-    cat /tmp/shared-link-override-off.json >&2 || true
-    die "Failed to create override-off shared link (status: ${override_off_status})"
-  fi
-
-  OVERRIDE_OFF_SHARE_KEY="$(jq -r '.key // empty' /tmp/shared-link-override-off.json)"
-  OVERRIDE_OFF_SHARE_SLUG="$(jq -r '.slug // empty' /tmp/shared-link-override-off.json)"
-  if [[ -z "${OVERRIDE_OFF_SHARE_KEY}" ]]; then
-    cat /tmp/shared-link-override-off.json >&2 || true
-    die "Override-off shared link response did not include key"
-  fi
-
-  # Dedicated shared link to validate explicit metadata override=false.
-  # Keep allowDownload=true here to avoid Immich variants that may force
-  # showMetadata=true when allowDownload=false.
-  local metadata_off_payload
-  metadata_off_payload="$(jq -nc \
-    --arg album_id "${OVERRIDE_OFF_ALBUM_ID}" \
-    --arg slug "${METADATA_OFF_SHARED_SLUG}" \
-    '{
-      type: "ALBUM",
-      albumId: $album_id,
-      allowDownload: true,
-      allowUpload: false,
-      showMetadata: false,
-      slug: $slug
-    }')"
-
-  local metadata_off_status
-  metadata_off_status="$(json_request "POST" "/shared-links" "${metadata_off_payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "/tmp/shared-link-metadata-off.json")"
-  if [[ "$metadata_off_status" != "201" ]]; then
-    cat /tmp/shared-link-metadata-off.json >&2 || true
-    die "Failed to create metadata-off shared link (status: ${metadata_off_status})"
-  fi
-
-  METADATA_OFF_SHARE_KEY="$(jq -r '.key // empty' /tmp/shared-link-metadata-off.json)"
-  METADATA_OFF_SHARE_SLUG="$(jq -r '.slug // empty' /tmp/shared-link-metadata-off.json)"
-  if [[ -z "${METADATA_OFF_SHARE_KEY}" ]]; then
-    cat /tmp/shared-link-metadata-off.json >&2 || true
-    die "Metadata-off shared link response did not include key"
-  fi
+  create_one_shared_link DEFAULT_SHARE_KEY DEFAULT_SHARE_SLUG "${DEFAULT_ALBUM_ID}" "${DEFAULT_SHARED_SLUG}" '{}'
+  create_one_shared_link OVERRIDE_ON_SHARE_KEY OVERRIDE_ON_SHARE_SLUG "${OVERRIDE_ON_ALBUM_ID}" "${OVERRIDE_ON_SHARED_SLUG}" \
+    '{"allowDownload":true,"allowUpload":true,"showMetadata":true}'
+  create_one_shared_link OVERRIDE_OFF_SHARE_KEY OVERRIDE_OFF_SHARE_SLUG "${OVERRIDE_OFF_ALBUM_ID}" "${OVERRIDE_OFF_SHARED_SLUG}" \
+    '{"allowDownload":false,"allowUpload":false,"showMetadata":true}'
+  # Same album as override-off; separate link to test metadata flag in isolation.
+  create_one_shared_link METADATA_OFF_SHARE_KEY METADATA_OFF_SHARE_SLUG "${OVERRIDE_OFF_ALBUM_ID}" "${METADATA_OFF_SHARED_SLUG}" \
+    '{"allowDownload":true,"allowUpload":false,"showMetadata":false}'
 }
 
 write_runtime_file() {
   mkdir -p "$(dirname "${RUNTIME_FILE}")"
   cat > "${RUNTIME_FILE}" <<EOF
-SHARE_KEY=${DEFAULT_SHARE_KEY}
-SHARE_SLUG=${DEFAULT_SHARE_SLUG}
-ALBUM_ID=${DEFAULT_ALBUM_ID}
 DEFAULT_SHARE_KEY=${DEFAULT_SHARE_KEY}
 DEFAULT_SHARE_SLUG=${DEFAULT_SHARE_SLUG}
 OVERRIDE_ON_SHARE_KEY=${OVERRIDE_ON_SHARE_KEY}
@@ -366,6 +377,9 @@ OVERRIDE_ON_ALBUM_ID=${OVERRIDE_ON_ALBUM_ID}
 OVERRIDE_OFF_ALBUM_ID=${OVERRIDE_OFF_ALBUM_ID}
 PRIVATE_ALBUM_ID=${PRIVATE_ALBUM_ID}
 ASSET_ID=${ASSET_ID}
+FIRST_ASSET_ID=${FIRST_ASSET_ID}
+VIDEO_ASSET_ID=${VIDEO_ASSET_ID}
+EXPECTED_ASSET_COUNT=${EXPECTED_ASSET_COUNT}
 EOF
 }
 
@@ -373,8 +387,8 @@ main() {
   wait_for_immich
   create_admin
   login_admin
-  create_seed_png
-  upload_asset
+  generate_seed_media
+  upload_seed_assets
   create_test_albums
   create_private_album
   create_shared_links
@@ -383,12 +397,7 @@ main() {
   log "Seed complete"
   log "Default share key: ${DEFAULT_SHARE_KEY}"
   log "Default share slug: ${DEFAULT_SHARE_SLUG}"
-  log "Override-on share key: ${OVERRIDE_ON_SHARE_KEY}"
-  log "Override-on share slug: ${OVERRIDE_ON_SHARE_SLUG}"
-  log "Override-off share key: ${OVERRIDE_OFF_SHARE_KEY}"
-  log "Override-off share slug: ${OVERRIDE_OFF_SHARE_SLUG}"
-  log "Metadata-off share key: ${METADATA_OFF_SHARE_KEY}"
-  log "Metadata-off share slug: ${METADATA_OFF_SHARE_SLUG}"
+  log "Assets: ${EXPECTED_ASSET_COUNT} (video: ${VIDEO_ASSET_ID})"
   log "Runtime file: ${RUNTIME_FILE}"
 }
 

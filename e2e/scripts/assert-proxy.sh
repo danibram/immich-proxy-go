@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "${SCRIPT_DIR}/lib.sh"
+
 BASE_URL="${BASE_URL:-}"
 PROXY_NAME="${PROXY_NAME:-proxy}"
 SEED_FILE="${SEED_FILE:-/runtime/seed.env}"
@@ -20,15 +24,6 @@ fi
 
 # shellcheck disable=SC1090
 source "${SEED_FILE}"
-
-# Backwards-compatible aliases in case an older seed file is used.
-DEFAULT_SHARE_KEY="${DEFAULT_SHARE_KEY:-${SHARE_KEY:-}}"
-DEFAULT_ALBUM_ID="${DEFAULT_ALBUM_ID:-${ALBUM_ID:-}}"
-OVERRIDE_ON_SHARE_KEY="${OVERRIDE_ON_SHARE_KEY:-${UPLOAD_SHARE_KEY:-}}"
-OVERRIDE_OFF_SHARE_KEY="${OVERRIDE_OFF_SHARE_KEY:-${NO_DOWNLOAD_SHARE_KEY:-${METADATA_OFF_SHARE_KEY:-}}}"
-METADATA_OVERRIDE_OFF_SHARE_KEY="${METADATA_OVERRIDE_OFF_SHARE_KEY:-${METADATA_OFF_SHARE_KEY:-}}"
-OVERRIDE_ON_ALBUM_ID="${OVERRIDE_ON_ALBUM_ID:-${ALBUM_ID:-}}"
-OVERRIDE_OFF_ALBUM_ID="${OVERRIDE_OFF_ALBUM_ID:-${ALBUM_ID:-}}"
 
 log() {
   printf '[assert][%s] %s\n' "${PROXY_NAME}" "$*"
@@ -81,7 +76,7 @@ require_seed_vars() {
   [[ -n "${DEFAULT_ALBUM_ID}" ]] || die "Missing DEFAULT_ALBUM_ID in seed file"
   [[ -n "${OVERRIDE_ON_SHARE_KEY}" ]] || die "Missing OVERRIDE_ON_SHARE_KEY in seed file"
   [[ -n "${OVERRIDE_OFF_SHARE_KEY}" ]] || die "Missing OVERRIDE_OFF_SHARE_KEY in seed file"
-  [[ -n "${METADATA_OVERRIDE_OFF_SHARE_KEY}" ]] || die "Missing METADATA_OFF_SHARE_KEY in seed file"
+  [[ -n "${METADATA_OFF_SHARE_KEY}" ]] || die "Missing METADATA_OFF_SHARE_KEY in seed file"
 }
 
 extract_public_asset_id() {
@@ -95,32 +90,6 @@ extract_public_asset_id() {
     die "Could not determine an asset ID exposed by shared link payload ${json_file}"
   fi
   PUBLIC_ASSET_ID="${asset_id}"
-}
-
-global_download_enabled() {
-  [[ "${EXPECT_DOWNLOAD_STATUS}" == "200" ]]
-}
-
-global_metadata_enabled() {
-  [[ "${EXPECT_METADATA_VISIBLE}" == "true" ]]
-}
-
-expected_download_status_for_link() {
-  local link_allow_download="$1"
-  if global_download_enabled && [[ "${link_allow_download}" == "true" ]]; then
-    echo "200"
-  else
-    echo "403"
-  fi
-}
-
-expected_metadata_visible_for_link() {
-  local link_show_metadata="$1"
-  if global_metadata_enabled && [[ "${link_show_metadata}" == "true" ]]; then
-    echo "true"
-  else
-    echo "false"
-  fi
 }
 
 assert_download_for_share() {
@@ -249,14 +218,25 @@ main() {
   status="$(curl -sS -o /tmp/shared-link-override-on.json -w '%{http_code}' "${BASE_URL}/share/${OVERRIDE_ON_SHARE_KEY}/api/shared-links/me")"
   assert_status "200" "${status}" "shared-links/me override-on"
   jq -e --arg album_id "${OVERRIDE_ON_ALBUM_ID}" '.album.id == $album_id' /tmp/shared-link-override-on.json >/dev/null || die "override-on album ID mismatch"
-  jq -e '.allowDownload == true and .allowUpload == true and .showMetadata == true' /tmp/shared-link-override-on.json >/dev/null || die "override-on flags mismatch"
+  local expected_override_on_download expected_override_on_metadata global_dl global_md
+  global_dl="false"
+  global_md="false"
+  e2e_global_download_enabled && global_dl="true"
+  e2e_global_metadata_enabled && global_md="true"
+  expected_override_on_download="$(effective_bool "${global_dl}" "true")"
+  expected_override_on_metadata="$(effective_bool "${global_md}" "true")"
+  jq -e \
+    --argjson allow_download "${expected_override_on_download}" \
+    --argjson show_metadata "${expected_override_on_metadata}" \
+    '.allowDownload == $allow_download and .allowUpload == true and .showMetadata == $show_metadata' \
+    /tmp/shared-link-override-on.json >/dev/null || die "override-on effective flags mismatch"
 
   status="$(curl -sS -o /tmp/shared-link-override-off.json -w '%{http_code}' "${BASE_URL}/share/${OVERRIDE_OFF_SHARE_KEY}/api/shared-links/me")"
   assert_status "200" "${status}" "shared-links/me override-off"
   jq -e --arg album_id "${OVERRIDE_OFF_ALBUM_ID}" '.album.id == $album_id' /tmp/shared-link-override-off.json >/dev/null || die "override-off album ID mismatch"
   jq -e '.allowDownload == false and .allowUpload == false' /tmp/shared-link-override-off.json >/dev/null || die "override-off download/upload flags mismatch"
 
-  status="$(curl -sS -o /tmp/shared-link-metadata-off.json -w '%{http_code}' "${BASE_URL}/share/${METADATA_OVERRIDE_OFF_SHARE_KEY}/api/shared-links/me")"
+  status="$(curl -sS -o /tmp/shared-link-metadata-off.json -w '%{http_code}' "${BASE_URL}/share/${METADATA_OFF_SHARE_KEY}/api/shared-links/me")"
   assert_status "200" "${status}" "shared-links/me metadata-off"
   jq -e --arg album_id "${OVERRIDE_OFF_ALBUM_ID}" '.album.id == $album_id' /tmp/shared-link-metadata-off.json >/dev/null || die "metadata-off album ID mismatch"
   jq -e '.showMetadata == false' /tmp/shared-link-metadata-off.json >/dev/null || die "metadata-off showMetadata flag mismatch"
@@ -277,8 +257,10 @@ main() {
   local expected_default_metadata_visible
   expected_default_metadata_visible="$(expected_metadata_visible_for_link "${default_show_metadata}")"
   assert_metadata_for_share "${DEFAULT_SHARE_KEY}" "${expected_default_metadata_visible}" "${default_show_metadata}" "default share metadata behavior" "/tmp/default-metadata.json"
-  assert_metadata_for_share "${OVERRIDE_ON_SHARE_KEY}" "${EXPECT_METADATA_VISIBLE}" "true" "override-on share metadata behavior" "/tmp/override-on-metadata.json"
-  assert_metadata_for_share "${METADATA_OVERRIDE_OFF_SHARE_KEY}" "false" "false" "metadata-off share metadata behavior" "/tmp/override-off-metadata.json"
+  local override_on_show_metadata
+  override_on_show_metadata="$(jq -r '.showMetadata' /tmp/shared-link-override-on.json)"
+  assert_metadata_for_share "${OVERRIDE_ON_SHARE_KEY}" "${EXPECT_METADATA_VISIBLE}" "${override_on_show_metadata}" "override-on share metadata behavior" "/tmp/override-on-metadata.json"
+  assert_metadata_for_share "${METADATA_OFF_SHARE_KEY}" "false" "false" "metadata-off share metadata behavior" "/tmp/metadata-off-metadata.json"
   log "metadata behavior (defaults + overrides) OK"
 
   if [[ "${SKIP_UPLOAD_TESTS}" != "true" ]]; then

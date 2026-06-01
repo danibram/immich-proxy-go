@@ -7,86 +7,100 @@ This E2E setup brings up:
 - Reverse proxy (`caddy` and/or `traefik`)
 - Seed job that creates:
   - admin user
-  - one uploaded image
-  - three albums containing that image:
+  - **24 JPEG images** (varied sizes/orientations, spread across dates) and **1 short MP4 video**
+  - three public albums containing the full media set:
     - default-flags album (shared link created with Immich defaults)
     - override-on album (`allowDownload/allowUpload/showMetadata=true`)
     - override-off album (`allowDownload=false`, `allowUpload=false`)
-  - plus one extra metadata-off link (`showMetadata=false`, `allowDownload=true`) to validate metadata override behavior explicitly
-- Assertion job with base end-to-end checks
+  - plus one extra metadata-off link (`showMetadata=false`, `allowDownload=true`)
+  - a private album (not reachable from public share routes)
+- Shell assertion job (HTTP contract + proxy option matrix)
+- Optional **Playwright** browser tests (gallery, viewer, video, lazy loading, proxy/link UI gates)
 
 ## Prerequisites
 
 - Docker + Docker Compose plugin
+- For Playwright: `cd web && npx playwright install chromium` (or `just install-playwright`)
 
 ## Run
 
 From repository root:
 
 ```bash
+# API/contract checks only (config matrix)
 ./e2e/run.sh --proxy caddy
+
+# Full stack + Playwright UI suite (recommended)
+./e2e/run.sh --proxy caddy --with-playwright
+
+# Fast iteration: single proxy config, full Playwright
+./e2e/run.sh --proxy caddy --with-playwright --no-config-cases
 ```
 
-By default this runs a config matrix:
+Using `just`:
 
-1. `downloads-on-metadata-on` (`IPP_OPTIONS_ALLOW_DOWNLOAD=true`, `IPP_OPTIONS_SHOW_METADATA=true`)
-2. `downloads-off-metadata-on` (`IPP_OPTIONS_ALLOW_DOWNLOAD=false`, `IPP_OPTIONS_SHOW_METADATA=true`)
-3. `downloads-on-metadata-off` (`IPP_OPTIONS_ALLOW_DOWNLOAD=true`, `IPP_OPTIONS_SHOW_METADATA=false`)
+```bash
+just test-e2e-compose --proxy caddy --with-playwright
+just test-e2e-compose --proxy caddy --with-playwright --no-config-cases
+```
 
 Other modes:
 
 ```bash
-./e2e/run.sh --proxy traefik
+./e2e/run.sh --proxy traefik --with-playwright
 ./e2e/run.sh --proxy both
+./e2e/run.sh --proxy caddy --keep-up --with-playwright --no-config-cases
 ```
 
-Run with browser-level security check (Playwright):
+## Playwright Coverage
 
-```bash
-./e2e/run.sh --proxy caddy --with-playwright
-```
+When `--with-playwright` is set:
 
-Run only one scenario (no config matrix):
+| Spec | When it runs |
+|------|----------------|
+| `web/e2e/share-gallery.spec.ts` | Full UI: gallery load, slug route, lazy thumbnails, viewer navigation, video metadata |
+| `web/e2e/share-proxy-options.spec.ts` | Download/upload/info visibility per share + global proxy flags |
+| `web/e2e/public-share-security.spec.ts` | Private album isolation via browser |
 
-```bash
-./e2e/run.sh --proxy caddy --no-config-cases
-```
+On the **config matrix**, the full gallery suite runs only for `downloads-on-metadata-on`. Other matrix scenarios run `share-proxy-options.spec.ts` only (faster, still validates global gates).
 
-Keep services running after test completion:
+Smoke tests in `web/e2e/share.spec.ts` run against Vite preview (`just test-e2e`) without Docker.
 
-```bash
-./e2e/run.sh --proxy caddy --keep-up
-```
+## Config Matrix
 
-## What Is Tested
+1. `downloads-on-metadata-on` — full shell + Playwright suite
+2. `downloads-off-metadata-on` — shell checks + Playwright proxy-options only
+3. `downloads-on-metadata-off` — shell checks + Playwright proxy-options only
 
-Base scenarios:
+## What Is Tested (Shell)
 
 1. Reverse-proxied `/healthcheck` is reachable.
 2. Share page (`/share/{key}`) loads HTML UI.
 3. `GET /share/{key}/api/shared-links/me` works through the proxy.
-4. Default shared-link flags from Immich are detected and validated through behavior:
-   - download result follows `global allow_download && default allowDownload`
-   - upload follows default `allowUpload`
-   - metadata follows `global show_metadata && default showMetadata`
-5. Explicit overrides are validated:
-   - override-on share allows upload/download/metadata (subject to global gates)
-   - override-off share blocks upload/download
-   - dedicated metadata-off share blocks metadata exposure
-6. Shared-link payload redaction (`userId`, `token`, `password`, album owner).
-7. `GET /share/{key}/api/albums/{albumId}` works.
-8. A private album ID is not reachable from a public share (`404`).
-9. Invalid share key returns `404`.
+4. Default shared-link flags from Immich are detected and validated through behavior.
+5. Explicit overrides (download/upload/metadata).
+6. Shared-link payload redaction.
+7. Album endpoint and private album isolation.
+8. Invalid share key returns `404`.
 
 ## Using the Seeded Share
 
-After a run, the generated IDs are written to:
+After a run, generated IDs are written to:
 
 ```bash
 e2e/runtime/seed.env
 ```
 
-The runner also prints demo URLs, for example:
+Includes `DEFAULT_SHARE_KEY`, `DEFAULT_SHARE_SLUG`, `VIDEO_ASSET_ID`, `EXPECTED_ASSET_COUNT`, override keys, etc.
 
-- `http://localhost:8080/share/<SHARE_KEY>` (Caddy)
-- `http://localhost:8081/share/<SHARE_KEY>` (Traefik)
+Demo URLs:
+
+- `http://localhost:8080/share/<DEFAULT_SHARE_KEY>` (Caddy)
+- `http://localhost:8081/share/<DEFAULT_SHARE_KEY>` (Traefik)
+- `http://localhost:8080/s/<DEFAULT_SHARE_SLUG>` (slug route)
+
+## Environment Variables (Seed)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `E2E_IMAGE_COUNT` | `24` | Number of fake photos to generate/upload |

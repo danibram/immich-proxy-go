@@ -132,20 +132,34 @@ run_scenario() {
       -e EXPECT_METADATA_VISIBLE="${expected_metadata_visible}" \
       tester
 
-    if [[ "${WITH_PLAYWRIGHT}" == "true" && "${run_playwright}" == "true" ]]; then
-      echo "[e2e] Running Playwright security check via ${proxy_name} (${host_url}) - ${scenario_name}"
+    if [[ "${WITH_PLAYWRIGHT}" == "true" ]]; then
+      local -a playwright_specs=()
+      if [[ "${run_playwright}" == "true" ]]; then
+        playwright_specs=(
+          e2e/share-gallery.spec.ts
+          e2e/share-proxy-options.spec.ts
+          e2e/public-share-security.spec.ts
+        )
+        echo "[e2e] Running full Playwright UI suite via ${proxy_name} (${host_url}) - ${scenario_name}"
+      else
+        playwright_specs=(e2e/share-proxy-options.spec.ts)
+        echo "[e2e] Running Playwright proxy-options checks via ${proxy_name} (${host_url}) - ${scenario_name}"
+      fi
       (
         cd web
-        E2E_EXTERNAL_BASE_URL="${host_url}" \
-        SHARE_KEY="${SHARE_KEY}" \
-        PRIVATE_ALBUM_ID="${PRIVATE_ALBUM_ID}" \
-        npx playwright test e2e/public-share-security.spec.ts --project=chromium --workers=1
+        set -a
+        # shellcheck disable=SC1091
+        source "${PWD}/../e2e/runtime/seed.env"
+        export E2E_EXTERNAL_BASE_URL="${host_url}"
+        export E2E_SCENARIO="${scenario_name}"
+        set +a
+        npx playwright test "${playwright_specs[@]}" --project=chromium --workers=1
       )
     fi
   done
 
   echo "[e2e] Scenario ${scenario_name} completed"
-  echo "[e2e] Default share key: ${DEFAULT_SHARE_KEY:-${SHARE_KEY}}"
+  echo "[e2e] Default share key: ${DEFAULT_SHARE_KEY}"
   echo "[e2e] Override-on share key: ${OVERRIDE_ON_SHARE_KEY:-n/a}"
   echo "[e2e] Override-off share key: ${OVERRIDE_OFF_SHARE_KEY:-n/a}"
 }
@@ -162,11 +176,16 @@ else
   fi
 fi
 
+if [[ -f "e2e/runtime/seed.env" ]]; then
+  # shellcheck disable=SC1091
+  source e2e/runtime/seed.env
+fi
+
 if [[ "${PROXY_MODE}" == "caddy" || "${PROXY_MODE}" == "both" ]]; then
-  echo "[e2e] Caddy demo URL:   http://localhost:8080/share/${SHARE_KEY}"
+  echo "[e2e] Caddy demo URL:   http://localhost:8080/share/${DEFAULT_SHARE_KEY}"
 fi
 if [[ "${PROXY_MODE}" == "traefik" || "${PROXY_MODE}" == "both" ]]; then
-  echo "[e2e] Traefik demo URL: http://localhost:8081/share/${SHARE_KEY}"
+  echo "[e2e] Traefik demo URL: http://localhost:8081/share/${DEFAULT_SHARE_KEY}"
 fi
 
 if [[ "${KEEP_UP}" == "true" ]]; then

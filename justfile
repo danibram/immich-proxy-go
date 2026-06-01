@@ -41,6 +41,10 @@ test-e2e: build-web
 test-e2e-compose *ARGS:
     ./e2e/run.sh {{ARGS}}
 
+# Shorthand: integration E2E with Playwright UI suite (single config case)
+test-e2e-ui:
+    ./e2e/run.sh --proxy caddy --with-playwright --no-config-cases
+
 # Run tests with coverage
 test-coverage:
     cd proxy && go test ./... -cover
@@ -54,20 +58,26 @@ test-watch:
 
 # Start frontend dev server
 dev-web:
-    cd web && npm run dev
+    cd "{{ justfile_directory() }}/web" && npm run dev
 
-# Start backend dev server
-dev-proxy:
-    ./bin/immich-proxy --web-dir ./web/dist --config ./config.yaml 2>&1 | \
-    jq -r '"\(.timestamp | split("T")[1] | split("+")[0]) [\(.level | ascii_upcase)] \(.msg)"'
+# Start backend dev server for API proxying from Vite
+dev-proxy: build-proxy
+    IPP_OPTIONS_CACHE_TTL=0 "{{ justfile_directory() }}/bin/immich-proxy" --web-dir "{{ justfile_directory() }}/web/dist" --config "{{ justfile_directory() }}/config.yaml" 2>&1 | \
+    jq -r '"\(.timestamp | split("T")[1] | split("+")[0]) [\(.level | ascii_upcase)] \(.msg)\(if .error then ": " + .error else "" end)"'
+
+# Build frontend once and serve it through the Go proxy
+dev-proxy-static: build-proxy build-web
+    IPP_OPTIONS_CACHE_TTL=0 "{{ justfile_directory() }}/bin/immich-proxy" --web-dir "{{ justfile_directory() }}/web/dist" --config "{{ justfile_directory() }}/config.yaml" 2>&1 | \
+    jq -r '"\(.timestamp | split("T")[1] | split("+")[0]) [\(.level | ascii_upcase)] \(.msg)\(if .error then ": " + .error else "" end)"'
 
 # Start both frontend and backend (requires tmux or run in separate terminals)
 dev: build
     @echo "Run 'just dev-web' and 'just dev-proxy' in separate terminals"
+    @echo "Open http://localhost:5173/s/<slug> for live frontend updates"
 
 # Run the built proxy
 run *ARGS:
-    ./bin/immich-proxy --web-dir ./web/dist --config ./config.yaml {{ARGS}}
+    "{{ justfile_directory() }}/bin/immich-proxy" --web-dir "{{ justfile_directory() }}/web/dist" --config "{{ justfile_directory() }}/config.yaml" {{ARGS}}
 
 # === Docker ===
 
