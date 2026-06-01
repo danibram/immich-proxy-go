@@ -60,7 +60,7 @@ func (c *Client) GetSharedLinkWithKeyType(key string, password string, keyType K
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, wrapTransportError(err)
 	}
 	defer resp.Body.Close()
 
@@ -114,7 +114,7 @@ func (c *Client) GetAlbumWithKeyType(albumID string, key string, password string
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, wrapTransportError(err)
 	}
 	defer resp.Body.Close()
 
@@ -164,7 +164,7 @@ func (c *Client) GetAssetWithKeyType(assetID string, key string, password string
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to execute request: %w", err)
+		return nil, wrapTransportError(err)
 	}
 	defer resp.Body.Close()
 
@@ -201,7 +201,11 @@ func (c *Client) ProxyRequest(method, path string, query url.Values, headers htt
 		}
 	}
 
-	return c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, wrapTransportError(err)
+	}
+	return resp, nil
 }
 
 // GetThumbnail retrieves an asset thumbnail
