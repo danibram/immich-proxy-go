@@ -2,7 +2,7 @@
 
 immich:
   # URL to your Immich instance (internal network URL, not public)
-  url: "http://immich:2283"
+  url: "https://photos.local.dbr.io"
 
 proxy:
   # Port to run the proxy on

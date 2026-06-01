@@ -181,11 +181,17 @@ cd proxy && go test ./... -v
 # Frontend only
 cd web && npm test
 
-# E2E tests
+# E2E smoke tests (Vite preview, no Immich)
 cd web && npm run test:e2e
 
 # Full integration E2E (Immich + proxy + Caddy/Traefik in Docker Compose)
 just test-e2e-compose --proxy caddy
+
+# Integration + Playwright (gallery, video, lazy load, proxy options)
+just test-e2e-compose --proxy caddy --with-playwright
+
+# Faster Playwright iteration (single config case)
+just test-e2e-compose --proxy caddy --with-playwright --no-config-cases
 ```
 
 See [E2E stack docs](e2e/README.md) for details and Traefik mode.
