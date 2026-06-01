@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.4] - 2026-06-01
+
+### Bug Fixes
+
+- ⚡ Restore gallery scroll performance after v1.1.3 regression
+
+Stop calling loadShareLink on every thumbnail and video request. Each media
+call still forwards slug/key and password to Immich for auth; only the redundant
+upstream round-trip is removed.
+
 ## [1.1.3] - 2026-06-01
 
 ### Bug Fixes

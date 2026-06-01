@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/danibram/immich-proxy-go/internal/immich"
 	"github.com/danibram/immich-proxy-go/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -10,12 +11,9 @@ import (
 
 // GetThumbnail proxies thumbnail requests
 func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
-	_, creds, err := h.loadShareLinkFromRequest(r)
-	if err != nil {
-		h.handleError(w, err)
-		return
-	}
-
+	key := middleware.GetShareKey(r.Context())
+	password := middleware.GetPassword(r.Context())
+	keyType := h.getKeyType(r.Context())
 	assetID := chi.URLParam(r, "assetID")
 	size := r.URL.Query().Get("size")
 
@@ -31,13 +29,22 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.client.GetThumbnailWithKeyType(assetID, creds.key, creds.password, size, creds.keyType)
+	// Password/auth is enforced by Immich on the thumbnail endpoint. Calling
+	// loadShareLink here would fetch the full shared link (and often the
+	// entire album) on every thumbnail — one extra upstream round-trip per
+	// tile and it destroys scroll performance on large galleries.
+	resp, err := h.client.GetThumbnailWithKeyType(assetID, key, password, size, keyType)
 	if err != nil {
 		h.logger.Error("failed to get thumbnail", zap.Error(err))
 		http.Error(w, "Failed to get thumbnail", http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		h.handleError(w, immich.ErrPasswordRequired)
+		return
+	}
 
 	// Check if Immich returned an error (asset not in share, etc)
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
@@ -94,12 +101,9 @@ func (h *ShareHandler) GetOriginal(w http.ResponseWriter, r *http.Request) {
 
 // GetVideo proxies video playback requests
 func (h *ShareHandler) GetVideo(w http.ResponseWriter, r *http.Request) {
-	_, creds, err := h.loadShareLinkFromRequest(r)
-	if err != nil {
-		h.handleError(w, err)
-		return
-	}
-
+	key := middleware.GetShareKey(r.Context())
+	password := middleware.GetPassword(r.Context())
+	keyType := h.getKeyType(r.Context())
 	assetID := chi.URLParam(r, "assetID")
 
 	// Validate UUID format
@@ -108,13 +112,18 @@ func (h *ShareHandler) GetVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.client.GetVideoWithKeyType(assetID, creds.key, creds.password, creds.keyType)
+	resp, err := h.client.GetVideoWithKeyType(assetID, key, password, keyType)
 	if err != nil {
 		h.logger.Error("failed to get video", zap.Error(err))
 		http.Error(w, "Failed to get video", http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		h.handleError(w, immich.ErrPasswordRequired)
+		return
+	}
 
 	// Check if Immich returned an error (asset not in share, etc)
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
