@@ -62,10 +62,13 @@ type AnalyticsConfig struct {
 	PostHog PostHogConfig `mapstructure:"posthog"`
 }
 
-// PostHogConfig toggles analytics at runtime (injected into index.html).
-// API key and SDK options are set at web build time via VITE_POSTHOG_* env vars.
+// PostHogConfig is injected into index.html at runtime when the proxy serves the SPA.
 type PostHogConfig struct {
-	Enabled bool `mapstructure:"enabled"`
+	Enabled                 bool   `mapstructure:"enabled"`
+	APIKey                  string `mapstructure:"api_key"`
+	Host                    string `mapstructure:"host"`
+	DisableSessionRecording bool   `mapstructure:"disable_session_recording"`
+	Autocapture             bool   `mapstructure:"autocapture"`
 }
 
 func Load(configPath string) (*Config, error) {
@@ -92,6 +95,10 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("security.max_concurrent_download_jobs", 5)
 
 	v.SetDefault("analytics.posthog.enabled", false)
+	v.SetDefault("analytics.posthog.api_key", "")
+	v.SetDefault("analytics.posthog.host", "https://us.i.posthog.com")
+	v.SetDefault("analytics.posthog.disable_session_recording", true)
+	v.SetDefault("analytics.posthog.autocapture", false)
 
 	// Environment variables
 	v.SetEnvPrefix("IPP")
@@ -103,7 +110,6 @@ func Load(configPath string) (*Config, error) {
 	v.BindEnv("proxy.port", "IPP_PORT", "PORT")
 	v.BindEnv("proxy.public_url", "PUBLIC_BASE_URL", "PUBLIC_URL")
 	v.BindEnv("security.cookie_secret", "IPP_COOKIE_SECRET", "COOKIE_SECRET")
-	v.BindEnv("analytics.posthog.enabled", "IPP_ANALYTICS_POSTHOG_ENABLED")
 
 	// Config file
 	if configPath != "" {
@@ -129,5 +135,55 @@ func Load(configPath string) (*Config, error) {
 		return nil, err
 	}
 
+	// PostHog is config-file only (no IPP_ANALYTICS_POSTHOG_* env overrides).
+	if err := applyAnalyticsFromConfigFile(&cfg, v); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
+}
+
+func defaultAnalyticsConfig() AnalyticsConfig {
+	return AnalyticsConfig{
+		PostHog: PostHogConfig{
+			Enabled:                 false,
+			APIKey:                  "",
+			Host:                    "https://us.i.posthog.com",
+			DisableSessionRecording: true,
+			Autocapture:             false,
+		},
+	}
+}
+
+func applyAnalyticsFromConfigFile(cfg *Config, v *viper.Viper) error {
+	configFile := v.ConfigFileUsed()
+	if configFile == "" {
+		cfg.Analytics = defaultAnalyticsConfig()
+		return nil
+	}
+
+	fv := viper.New()
+	fv.SetConfigFile(configFile)
+	fv.SetDefault("analytics.posthog.enabled", false)
+	fv.SetDefault("analytics.posthog.api_key", "")
+	fv.SetDefault("analytics.posthog.host", "https://us.i.posthog.com")
+	fv.SetDefault("analytics.posthog.disable_session_recording", true)
+	fv.SetDefault("analytics.posthog.autocapture", false)
+
+	if err := fv.ReadInConfig(); err != nil {
+		return err
+	}
+
+	var section struct {
+		Analytics AnalyticsConfig `mapstructure:"analytics"`
+	}
+	if err := fv.Unmarshal(&section); err != nil {
+		return err
+	}
+
+	cfg.Analytics = section.Analytics
+	if cfg.Analytics.PostHog.Host == "" {
+		cfg.Analytics.PostHog.Host = "https://us.i.posthog.com"
+	}
+	return nil
 }

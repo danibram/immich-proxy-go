@@ -120,10 +120,14 @@ security:
   cookie_secret: ""            # Secret for signing cookies (auto-generated if empty)
   hotlink_protection: false    # Block direct URL access to API
 
-# Optional PostHog (runtime on/off; credentials at web build — see docs/specs/config.md)
+# Optional PostHog (disabled by default — see docs/specs/config.md)
 analytics:
   posthog:
     enabled: false
+    api_key: ""
+    host: "https://us.i.posthog.com"
+    disable_session_recording: true
+    autocapture: false
 ```
 
 Predefined profiles are available in [config/profiles/README.md](config/profiles/README.md):
@@ -146,17 +150,9 @@ PUBLIC_BASE_URL=https://photos.example.com
 IPP_SECURITY_ALLOWED_ORIGINS=https://photos.example.com
 IPP_SECURITY_RATE_LIMIT=100
 IPP_COOKIE_SECRET=your-secret-here
-
-# PostHog runtime toggle (proxy injects into index.html)
-IPP_ANALYTICS_POSTHOG_ENABLED=true
 ```
 
-Web build (Docker `ARG` or `web/.env` — see `web/.env.example`):
-
-```bash
-VITE_POSTHOG_API_KEY=phc_...
-VITE_POSTHOG_HOST=https://eu.i.posthog.com
-```
+PostHog is configured in `config.yaml` only (see `analytics.posthog` in the example above).
 
 ## Development
 

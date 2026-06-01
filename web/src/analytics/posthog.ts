@@ -1,5 +1,5 @@
 import posthog from 'posthog-js';
-import { isPostHogAllowed, readPostHogBuildConfig } from './env';
+import { isPostHogAllowed, readPostHogConfig } from './env';
 import type { ShareContextProperties } from './types';
 
 let initialized = false;
@@ -27,17 +27,17 @@ export function initAnalytics(): void {
     return;
   }
 
-  const build = readPostHogBuildConfig();
-  if (!build.apiKey) {
+  const phConfig = readPostHogConfig();
+  if (!phConfig.apiKey) {
     return;
   }
 
-  posthog.init(build.apiKey, {
-    api_host: build.host,
-    autocapture: build.autocapture,
+  posthog.init(phConfig.apiKey, {
+    api_host: phConfig.host,
+    autocapture: phConfig.autocapture,
     capture_pageview: false,
     capture_pageleave: true,
-    disable_session_recording: build.disableSessionRecording,
+    disable_session_recording: phConfig.disableSessionRecording,
     persistence: 'localStorage+cookie',
     respect_dnt: true,
   });

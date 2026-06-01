@@ -14,6 +14,32 @@ vi.mock('posthog-js', () => ({
   default: posthogMock,
 }));
 
+function setPostHogMetaTags(opts: {
+  enabled: string;
+  apiKey?: string;
+  host?: string;
+  disableSessionRecording?: string;
+  autocapture?: string;
+}) {
+  document.head.innerHTML = '';
+  const tags: Array<[string, string]> = [
+    ['ipp-posthog-enabled', opts.enabled],
+    ['ipp-posthog-api-key', opts.apiKey ?? ''],
+    ['ipp-posthog-host', opts.host ?? 'https://us.i.posthog.com'],
+    [
+      'ipp-posthog-disable-session-recording',
+      opts.disableSessionRecording ?? 'true',
+    ],
+    ['ipp-posthog-autocapture', opts.autocapture ?? 'false'],
+  ];
+  for (const [name, content] of tags) {
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', name);
+    meta.setAttribute('content', content);
+    document.head.appendChild(meta);
+  }
+}
+
 async function loadPosthogModule() {
   vi.resetModules();
   return import('./posthog');
@@ -30,20 +56,16 @@ describe('analytics/posthog', () => {
   beforeEach(() => {
     posthogMock.init.mockClear();
     posthogMock.capture.mockClear();
-    vi.stubGlobal('window', {
-      ...globalThis.window,
-      __IPP_POSTHOG_ENABLED__: undefined,
-    });
+    document.head.innerHTML = '';
   });
 
   afterEach(() => {
-    vi.unstubAllEnvs();
     vi.resetModules();
+    document.head.innerHTML = '';
   });
 
   it('does not init when server flag is false', async () => {
-    window.__IPP_POSTHOG_ENABLED__ = false;
-    vi.stubEnv('VITE_POSTHOG_API_KEY', 'phc_test');
+    setPostHogMetaTags({ enabled: 'false', apiKey: 'phc_test' });
 
     const { initAnalytics } = await loadPosthogModule();
     initAnalytics();
@@ -51,10 +73,12 @@ describe('analytics/posthog', () => {
     expect(posthogMock.init).not.toHaveBeenCalled();
   });
 
-  it('inits posthog when enabled and api key is set at build time', async () => {
-    window.__IPP_POSTHOG_ENABLED__ = true;
-    vi.stubEnv('VITE_POSTHOG_API_KEY', 'phc_test');
-    vi.stubEnv('VITE_POSTHOG_HOST', 'https://eu.i.posthog.com');
+  it('inits posthog when enabled via meta tags from proxy config', async () => {
+    setPostHogMetaTags({
+      enabled: 'true',
+      apiKey: 'phc_test',
+      host: 'https://eu.i.posthog.com',
+    });
 
     const { initAnalytics } = await loadPosthogModule();
     initAnalytics();
@@ -68,9 +92,8 @@ describe('analytics/posthog', () => {
     );
   });
 
-  it('does not init without api key', async () => {
-    window.__IPP_POSTHOG_ENABLED__ = true;
-    vi.stubEnv('VITE_POSTHOG_API_KEY', '');
+  it('does not init without api key in meta tags', async () => {
+    setPostHogMetaTags({ enabled: 'true', apiKey: '' });
 
     const { initAnalytics } = await loadPosthogModule();
     initAnalytics();

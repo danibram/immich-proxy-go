@@ -141,25 +141,17 @@ When `security.hotlink_protection: true`, the proxy validates that API requests 
 
 ### Analytics (PostHog)
 
-Optional product analytics and feature flags. Disabled by default.
+Optional product analytics and feature flags. Disabled by default. All settings are read from `config.yaml` only and injected into `index.html` as CSP-safe meta tags when the proxy serves the SPA. The public Docker image does not embed any PostHog credentials.
 
-**Proxy (runtime on/off only)**
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `analytics.posthog.enabled` | bool | `false` | Enable PostHog for this deployment |
+| `analytics.posthog.api_key` | string | `""` | PostHog project API key (`phc_...`) |
+| `analytics.posthog.host` | string | `https://us.i.posthog.com` | PostHog ingest host |
+| `analytics.posthog.disable_session_recording` | bool | `true` | Disable session replay |
+| `analytics.posthog.autocapture` | bool | `false` | Enable PostHog autocapture |
 
-| Option | Type | Default | Env Var | Description |
-|--------|------|---------|---------|-------------|
-| `analytics.posthog.enabled` | bool | `false` | `IPP_ANALYTICS_POSTHOG_ENABLED` | Inject `window.__IPP_POSTHOG_ENABLED__` when serving `index.html` |
-
-**Web build (`VITE_*` at `npm run build` / Docker web stage)**
-
-| Variable | Description |
-|----------|-------------|
-| `VITE_POSTHOG_API_KEY` | PostHog project API key (public client key) |
-| `VITE_POSTHOG_HOST` | e.g. `https://eu.i.posthog.com` |
-| `VITE_POSTHOG_DISABLE_SESSION_RECORDING` | Default `true` unless set to `false` |
-| `VITE_POSTHOG_AUTOCAPTURE` | `true` to enable autocapture |
-| `VITE_POSTHOG_ENABLED` | **Vite dev only** — use when `just dev` runs the UI without the Go proxy |
-
-PostHog initializes only when `analytics.posthog.enabled` is true **and** the bundle was built with `VITE_POSTHOG_API_KEY`. No extra HTTP endpoints.
+PostHog initializes only when `enabled` is true **and** `api_key` is non-empty. No extra HTTP endpoints.
 
 Events are aggregated only (no share keys, filenames, or album titles).
 

@@ -77,6 +77,10 @@ func main() {
 		logger.Warn("trust_proxy_headers is enabled - ensure this instance ONLY receives traffic through a trusted reverse proxy that strips/replaces X-Forwarded-For")
 	}
 
+	if cfg.Analytics.PostHog.Enabled && cfg.Analytics.PostHog.APIKey == "" {
+		logger.Warn("analytics.posthog.enabled is true but api_key is empty; PostHog will not initialize")
+	}
+
 	// Create Immich client
 	client := immich.NewClient(cfg.Immich.URL)
 
@@ -86,7 +90,7 @@ func main() {
 
 	// Create handlers
 	shareHandler := handlers.NewShareHandler(client, cfg, logger, cookieSecret)
-	staticHandler := handlers.NewStaticHandler(*webDir, nil, cfg.Analytics.PostHog.Enabled, cfg.Options.CacheTTL, logger)
+	staticHandler := handlers.NewStaticHandler(*webDir, nil, cfg.Analytics.PostHog, cfg.Options.CacheTTL, logger)
 
 	// Create router
 	r := chi.NewRouter()

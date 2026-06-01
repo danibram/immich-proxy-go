@@ -3,6 +3,7 @@ package handlers
 import (
 	"embed"
 	"fmt"
+	"html"
 	"io"
 	"io/fs"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/danibram/immich-proxy-go/internal/config"
 	"go.uber.org/zap"
 )
 
@@ -22,20 +24,20 @@ type StaticHandler struct {
 	embedFS        *embed.FS
 	fileServer     http.Handler
 	logger         *zap.Logger
-	posthogEnabled bool
+	posthog        config.PostHogConfig
 	cacheTTL       int
 }
 
 // NewStaticHandler creates a new static file handler
 // If webDir is provided and exists, it serves from disk
 // Otherwise, it will use the embedded filesystem if provided
-func NewStaticHandler(webDir string, embedFS *embed.FS, posthogEnabled bool, cacheTTL int, logger *zap.Logger) *StaticHandler {
+func NewStaticHandler(webDir string, embedFS *embed.FS, posthog config.PostHogConfig, cacheTTL int, logger *zap.Logger) *StaticHandler {
 	h := &StaticHandler{
-		webDir:         webDir,
-		embedFS:        embedFS,
-		logger:         logger,
-		posthogEnabled: posthogEnabled,
-		cacheTTL:       cacheTTL,
+		webDir:   webDir,
+		embedFS:  embedFS,
+		logger:   logger,
+		posthog:  posthog,
+		cacheTTL: cacheTTL,
 	}
 
 	// Try to serve from disk first
@@ -153,7 +155,7 @@ func (h *StaticHandler) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	html := injectPostHogFlag(string(content), h.posthogEnabled)
+	html := injectPostHogConfig(string(content), h.posthog)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
@@ -164,15 +166,27 @@ func (h *StaticHandler) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(html))
 }
 
-func injectPostHogFlag(html string, enabled bool) string {
-	snippet := fmt.Sprintf(
-		`<meta name="ipp-posthog-enabled" content="%s">`+"\n",
-		strconv.FormatBool(enabled),
-	)
-	if idx := strings.Index(html, posthogInjectMarker); idx != -1 {
-		return html[:idx] + snippet + html[idx:]
+func injectPostHogConfig(pageHTML string, cfg config.PostHogConfig) string {
+	host := cfg.Host
+	if host == "" {
+		host = "https://us.i.posthog.com"
 	}
-	return snippet + html
+	snippet := fmt.Sprintf(
+		`<meta name="ipp-posthog-enabled" content="%s">`+"\n"+
+			`<meta name="ipp-posthog-api-key" content="%s">`+"\n"+
+			`<meta name="ipp-posthog-host" content="%s">`+"\n"+
+			`<meta name="ipp-posthog-disable-session-recording" content="%s">`+"\n"+
+			`<meta name="ipp-posthog-autocapture" content="%s">`+"\n",
+		html.EscapeString(strconv.FormatBool(cfg.Enabled)),
+		html.EscapeString(cfg.APIKey),
+		html.EscapeString(host),
+		html.EscapeString(strconv.FormatBool(cfg.DisableSessionRecording)),
+		html.EscapeString(strconv.FormatBool(cfg.Autocapture)),
+	)
+	if idx := strings.Index(pageHTML, posthogInjectMarker); idx != -1 {
+		return pageHTML[:idx] + snippet + pageHTML[idx:]
+	}
+	return snippet + pageHTML
 }
 
 // serveFile serves a specific file from the web directory

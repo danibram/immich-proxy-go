@@ -2,7 +2,7 @@
 
 immich:
   # URL to your Immich instance (internal network URL, not public)
-  url: "https://photos.local.dbr.io"
+  url: "https://photos.example.com"
 
 proxy:
   # Port to run the proxy on
@@ -69,7 +69,11 @@ security:
   # otherwise trigger unbounded disk usage. Set to 0 to disable the cap.
   max_concurrent_download_jobs: 5
 
-# PostHog: runtime on/off only. SDK credentials are baked in at web build (VITE_POSTHOG_*).
+# PostHog (optional). Injected into index.html at runtime; disabled by default.
 analytics:
   posthog:
     enabled: false
+    api_key: ""                              # phc_... (PostHog project API key)
+    host: "https://us.i.posthog.com"
+    disable_session_recording: true
+    autocapture: false
