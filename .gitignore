@@ -50,4 +50,8 @@ yarn-error.log*
 # Misc
 *.bak
 *.tmp
+.omc/
 proxy/.omc/
+
+# Local design scratch (reference HTML/JSX; not part of the product build)
+docs/design-reference/
