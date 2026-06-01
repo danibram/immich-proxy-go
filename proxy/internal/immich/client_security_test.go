@@ -14,7 +14,9 @@ import (
 // building the album-add payload with fmt.Sprintf.
 //
 // The previous implementation was:
-//     fmt.Sprintf(`{"ids":["%s"]}`, assetID)
+//
+//	fmt.Sprintf(`{"ids":["%s"]}`, assetID)
+//
 // which lets a malicious assetID such as `"],"evil":"x` inject extra
 // JSON fields. json.Marshal escapes quotes into \" and keeps the payload
 // as a single { "ids": ["..."] } object.
@@ -112,5 +114,99 @@ func TestGetSharedLink_InvalidSlugUnauthorizedIsNotFound(t *testing.T) {
 	_, err := c.GetSharedLinkWithKeyType("mei", "", KeyTypeSlug)
 	if !errors.Is(err, ErrSharedLinkNotFound) {
 		t.Fatalf("expected ErrSharedLinkNotFound, got %v", err)
+	}
+}
+
+func TestGetSharedLink_StalePasswordOnPublicShareFallsBackToPublicSlug(t *testing.T) {
+	var seenQueries []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("slug"); got != "mei" {
+			t.Fatalf("expected slug query mei, got %q", got)
+		}
+
+		seenQueries = append(seenQueries, r.URL.RawQuery)
+		if r.URL.Query().Get("password") != "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"message":"Shared link is not password protected","error":"Bad Request","statusCode":400}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"d030e9c5-c173-40ef-8c9b-4dd1c9f88044",
+			"key":"share-key",
+			"type":"ALBUM",
+			"createdAt":"2026-06-01T15:49:19.589Z",
+			"expiresAt":null,
+			"allowUpload":false,
+			"allowDownload":false,
+			"showMetadata":false,
+			"description":"",
+			"assets":[]
+		}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	link, err := c.GetSharedLinkWithKeyType("mei", "stale-cookie-password", KeyTypeSlug)
+	if err != nil {
+		t.Fatalf("expected stale password fallback to succeed, got %v", err)
+	}
+	if link.ID != "d030e9c5-c173-40ef-8c9b-4dd1c9f88044" {
+		t.Fatalf("unexpected link id %q", link.ID)
+	}
+	if len(seenQueries) != 2 {
+		t.Fatalf("expected one password request and one fallback request, got %d: %v", len(seenQueries), seenQueries)
+	}
+	if !strings.Contains(seenQueries[0], "password=") {
+		t.Fatalf("first request should include password, got %q", seenQueries[0])
+	}
+	if strings.Contains(seenQueries[1], "password=") {
+		t.Fatalf("fallback request should drop password, got %q", seenQueries[1])
+	}
+}
+
+func TestGetThumbnail_StalePasswordOnPublicShareFallsBackToPublicSlug(t *testing.T) {
+	var seenQueries []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/assets/asset-1/thumbnail" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("slug"); got != "mei" {
+			t.Fatalf("expected slug query mei, got %q", got)
+		}
+
+		seenQueries = append(seenQueries, r.URL.RawQuery)
+		if r.URL.Query().Get("password") != "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"message":"Shared link is not password protected","error":"Bad Request","statusCode":400}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("jpeg"))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	resp, err := c.GetThumbnailWithKeyType("asset-1", "mei", "stale-cookie-password", "preview", KeyTypeSlug)
+	if err != nil {
+		t.Fatalf("expected thumbnail fallback to succeed, got %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	if len(seenQueries) != 2 {
+		t.Fatalf("expected one password request and one fallback request, got %d: %v", len(seenQueries), seenQueries)
+	}
+	if !strings.Contains(seenQueries[0], "password=") {
+		t.Fatalf("first request should include password, got %q", seenQueries[0])
+	}
+	if strings.Contains(seenQueries[1], "password=") {
+		t.Fatalf("fallback request should drop password, got %q", seenQueries[1])
 	}
 }

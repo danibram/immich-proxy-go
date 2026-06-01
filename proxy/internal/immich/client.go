@@ -45,6 +45,15 @@ func (c *Client) GetSharedLink(key string, password string) (*SharedLink, error)
 
 // GetSharedLinkWithKeyType retrieves information about a shared link using its key or slug
 func (c *Client) GetSharedLinkWithKeyType(key string, password string, keyType KeyType) (*SharedLink, error) {
+	link, err := c.getSharedLinkWithKeyType(key, password, keyType)
+	if err == nil || password == "" || !isStalePasswordOnPublicShareError(err) {
+		return link, err
+	}
+
+	return c.getSharedLinkWithKeyType(key, "", keyType)
+}
+
+func (c *Client) getSharedLinkWithKeyType(key string, password string, keyType KeyType) (*SharedLink, error) {
 	// Build URL with query parameters
 	// keyType determines whether we use 'key' or 'slug' as the param name
 	paramName := string(keyType) // "key" or "slug"
@@ -105,6 +114,15 @@ func (c *Client) GetAlbum(albumID string, key string, password string) (*Album, 
 
 // GetAlbumWithKeyType retrieves album information with specified key type
 func (c *Client) GetAlbumWithKeyType(albumID string, key string, password string, keyType KeyType) (*Album, error) {
+	album, err := c.getAlbumWithKeyType(albumID, key, password, keyType)
+	if err == nil || password == "" || !isStalePasswordOnPublicShareError(err) {
+		return album, err
+	}
+
+	return c.getAlbumWithKeyType(albumID, key, "", keyType)
+}
+
+func (c *Client) getAlbumWithKeyType(albumID string, key string, password string, keyType KeyType) (*Album, error) {
 	paramName := string(keyType)
 	reqURL := fmt.Sprintf("%s/api/albums/%s?%s=%s", c.baseURL, albumID, paramName, url.QueryEscape(key))
 	if password != "" {
@@ -219,14 +237,19 @@ func (c *Client) GetThumbnail(assetID string, key string, password string, size 
 
 // GetThumbnailWithKeyType retrieves an asset thumbnail with specified key type
 func (c *Client) GetThumbnailWithKeyType(assetID string, key string, password string, size string, keyType KeyType) (*http.Response, error) {
+	resp, err := c.getThumbnailWithKeyType(assetID, key, password, size, keyType)
+	if err != nil || password == "" || !shouldRetryShareMediaWithoutPassword(resp) {
+		return resp, err
+	}
+
+	return c.getThumbnailWithKeyType(assetID, key, "", size, keyType)
+}
+
+func (c *Client) getThumbnailWithKeyType(assetID string, key string, password string, size string, keyType KeyType) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/thumbnail", assetID)
-	query := url.Values{}
-	query.Set(string(keyType), key)
+	query := shareQuery(key, password, keyType)
 	if size != "" {
 		query.Set("size", size)
-	}
-	if password != "" {
-		query.Set("password", password)
 	}
 
 	return c.ProxyRequest("GET", path, query, nil, nil)
@@ -239,14 +262,17 @@ func (c *Client) GetOriginal(assetID string, key string, password string) (*http
 
 // GetOriginalWithKeyType retrieves the original asset file with specified key type
 func (c *Client) GetOriginalWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
-	path := fmt.Sprintf("/api/assets/%s/original", assetID)
-	query := url.Values{}
-	query.Set(string(keyType), key)
-	if password != "" {
-		query.Set("password", password)
+	resp, err := c.getOriginalWithKeyType(assetID, key, password, keyType)
+	if err != nil || password == "" || !shouldRetryShareMediaWithoutPassword(resp) {
+		return resp, err
 	}
 
-	return c.ProxyRequest("GET", path, query, nil, nil)
+	return c.getOriginalWithKeyType(assetID, key, "", keyType)
+}
+
+func (c *Client) getOriginalWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
+	path := fmt.Sprintf("/api/assets/%s/original", assetID)
+	return c.ProxyRequest("GET", path, shareQuery(key, password, keyType), nil, nil)
 }
 
 // GetVideo retrieves a video for playback
@@ -256,14 +282,17 @@ func (c *Client) GetVideo(assetID string, key string, password string) (*http.Re
 
 // GetVideoWithKeyType retrieves a video for playback with specified key type
 func (c *Client) GetVideoWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
-	path := fmt.Sprintf("/api/assets/%s/video/playback", assetID)
-	query := url.Values{}
-	query.Set(string(keyType), key)
-	if password != "" {
-		query.Set("password", password)
+	resp, err := c.getVideoWithKeyType(assetID, key, password, keyType)
+	if err != nil || password == "" || !shouldRetryShareMediaWithoutPassword(resp) {
+		return resp, err
 	}
 
-	return c.ProxyRequest("GET", path, query, nil, nil)
+	return c.getVideoWithKeyType(assetID, key, "", keyType)
+}
+
+func (c *Client) getVideoWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
+	path := fmt.Sprintf("/api/assets/%s/video/playback", assetID)
+	return c.ProxyRequest("GET", path, shareQuery(key, password, keyType), nil, nil)
 }
 
 // UploadAsset uploads an asset via a shared link (uses key by default)
@@ -346,6 +375,45 @@ func (c *Client) AddAssetToAlbumWithKeyType(albumID string, assetID string, key 
 	}
 
 	return nil
+}
+
+func shareQuery(key string, password string, keyType KeyType) url.Values {
+	query := url.Values{}
+	query.Set(string(keyType), key)
+	if password != "" {
+		query.Set("password", password)
+	}
+	return query
+}
+
+func isStalePasswordOnPublicShareError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "unexpected status code 500") ||
+		strings.Contains(msg, "unexpected status code 502") ||
+		strings.Contains(msg, "unexpected status code 503") ||
+		strings.Contains(msg, "unexpected status code 504") ||
+		(strings.Contains(msg, "unexpected status code 400") &&
+			strings.Contains(strings.ToLower(msg), "shared link is not password protected"))
+}
+
+func shouldRetryShareMediaWithoutPassword(resp *http.Response) bool {
+	if resp == nil {
+		return false
+	}
+	if resp.StatusCode >= http.StatusInternalServerError {
+		resp.Body.Close()
+		return true
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		return false
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	return strings.Contains(strings.ToLower(string(body)), "shared link is not password protected")
 }
 
 // Errors
