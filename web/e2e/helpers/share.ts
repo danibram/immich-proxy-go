@@ -15,6 +15,20 @@ export async function openShareBySlug(page: Page, slug: string) {
   await waitForGallery(page);
 }
 
+export async function expectPasswordGate(page: Page) {
+  await expect(page.getByRole('heading', { name: 'Password required' })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(page.getByTestId('share-gallery')).toHaveCount(0);
+}
+
+export async function unlockProtectedShare(page: Page, password: string) {
+  await expectPasswordGate(page);
+  await page.locator('#password').fill(password);
+  await page.getByRole('button', { name: 'Unlock album' }).click();
+  await waitForGallery(page);
+}
+
 export function trackThumbnailRequests(page: Page) {
   const urls: string[] = [];
   const handler = (req: { url: () => string }) => {

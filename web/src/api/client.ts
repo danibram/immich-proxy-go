@@ -37,13 +37,20 @@ class ApiClient {
     });
 
     if (!response.ok) {
+      const body = await response.text();
       if (response.status === 401) {
-        const data = await response.json();
-        if (data.passwordRequired) {
-          throw new PasswordRequiredError();
+        try {
+          const data = JSON.parse(body) as { passwordRequired?: boolean };
+          if (data.passwordRequired) {
+            throw new PasswordRequiredError();
+          }
+        } catch (error) {
+          if (error instanceof PasswordRequiredError) {
+            throw error;
+          }
         }
       }
-      throw new ApiError(response.status, await response.text());
+      throw new ApiError(response.status, body);
     }
 
     return response.json();

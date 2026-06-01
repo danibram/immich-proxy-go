@@ -32,6 +32,7 @@ import {
   setIsLoading,
   setLoadedSharedLink,
   setPasswordRequired,
+  setSharedLink,
   shareCapabilities,
   sharedLink,
 } from '~/store/share';
@@ -77,6 +78,7 @@ export default function SharePage() {
     setIsLoading(true);
     setError(null);
     setPasswordRequired(false);
+    setSharedLink(null);
 
     try {
       const link = await api.getSharedLink();

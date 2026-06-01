@@ -167,6 +167,73 @@ func TestGetSharedLink_StalePasswordOnPublicShareFallsBackToPublicSlug(t *testin
 	}
 }
 
+func TestGetSharedLink_StalePasswordOnProtectedShareDoesNotBypass(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("slug"); got != "protected" {
+			t.Fatalf("expected slug query protected, got %q", got)
+		}
+
+		if r.URL.Query().Get("password") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Password required"}`))
+			return
+		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"Internal server error"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	_, err := c.GetSharedLinkWithKeyType("protected", "stale-cookie-password", KeyTypeSlug)
+	if err == nil {
+		t.Fatal("must not bypass password protection by dropping password on 5xx")
+	}
+	if !strings.Contains(err.Error(), "500") {
+		t.Fatalf("expected upstream 500 to propagate, got %v", err)
+	}
+}
+
+func TestGetThumbnail_StalePasswordOnProtectedShareDoesNotBypass(t *testing.T) {
+	var seenQueries []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/assets/asset-1/thumbnail" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		if got := r.URL.Query().Get("slug"); got != "protected" {
+			t.Fatalf("expected slug query protected, got %q", got)
+		}
+
+		seenQueries = append(seenQueries, r.URL.RawQuery)
+		if r.URL.Query().Get("password") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"Internal server error"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL)
+	resp, err := c.GetThumbnailWithKeyType("asset-1", "protected", "stale-cookie-password", "preview", KeyTypeSlug)
+	if err != nil {
+		t.Fatalf("expected response without transport error, got %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("expected status 500 to propagate, got %d", resp.StatusCode)
+	}
+	if len(seenQueries) != 1 {
+		t.Fatalf("must not retry without password on 5xx, got %d requests: %v", len(seenQueries), seenQueries)
+	}
+	if !strings.Contains(seenQueries[0], "password=") {
+		t.Fatalf("request should keep password, got %q", seenQueries[0])
+	}
+}
+
 func TestGetThumbnail_StalePasswordOnPublicShareFallsBackToPublicSlug(t *testing.T) {
 	var seenQueries []string
 

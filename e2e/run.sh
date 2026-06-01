@@ -139,11 +139,15 @@ run_scenario() {
           e2e/share-gallery.spec.ts
           e2e/share-proxy-options.spec.ts
           e2e/public-share-security.spec.ts
+          e2e/share-password-security.spec.ts
         )
         echo "[e2e] Running full Playwright UI suite via ${proxy_name} (${host_url}) - ${scenario_name}"
       else
-        playwright_specs=(e2e/share-proxy-options.spec.ts)
-        echo "[e2e] Running Playwright proxy-options checks via ${proxy_name} (${host_url}) - ${scenario_name}"
+        playwright_specs=(
+          e2e/share-proxy-options.spec.ts
+          e2e/share-password-security.spec.ts
+        )
+        echo "[e2e] Running Playwright proxy-options + password security via ${proxy_name} (${host_url}) - ${scenario_name}"
       fi
       (
         cd web

@@ -52,7 +52,7 @@ describe('ApiClient', () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
-        json: async () => ({ passwordRequired: true }),
+        text: async () => JSON.stringify({ passwordRequired: true }),
       });
 
       await expect(api.getSharedLink()).rejects.toThrow(PasswordRequiredError);
@@ -86,6 +86,16 @@ describe('ApiClient', () => {
           body: JSON.stringify({ password: 'secret123' }),
         })
       );
+    });
+
+    it('should throw ApiError on invalid password', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        text: async () => 'Invalid password',
+      });
+
+      await expect(api.validatePassword('wrong')).rejects.toThrow(ApiError);
     });
   });
 

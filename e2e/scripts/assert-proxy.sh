@@ -77,6 +77,9 @@ require_seed_vars() {
   [[ -n "${OVERRIDE_ON_SHARE_KEY}" ]] || die "Missing OVERRIDE_ON_SHARE_KEY in seed file"
   [[ -n "${OVERRIDE_OFF_SHARE_KEY}" ]] || die "Missing OVERRIDE_OFF_SHARE_KEY in seed file"
   [[ -n "${METADATA_OFF_SHARE_KEY}" ]] || die "Missing METADATA_OFF_SHARE_KEY in seed file"
+  [[ -n "${PASSWORD_PROTECTED_SHARE_SLUG}" ]] || die "Missing PASSWORD_PROTECTED_SHARE_SLUG in seed file"
+  [[ -n "${PASSWORD_PROTECTED_ASSET_ID}" ]] || die "Missing PASSWORD_PROTECTED_ASSET_ID in seed file"
+  [[ -n "${E2E_SHARE_PASSWORD}" ]] || die "Missing E2E_SHARE_PASSWORD in seed file"
 }
 
 extract_public_asset_id() {
@@ -186,6 +189,123 @@ assert_upload_for_share() {
   assert_status "403" "${status}" "${label}"
 }
 
+assert_json_password_required() {
+  local json_file="$1"
+  local label="$2"
+  jq -e '.passwordRequired == true' "${json_file}" >/dev/null || die "${label}: expected passwordRequired=true"
+}
+
+assert_password_protection() {
+  local protected_slug="$1"
+  local password="$2"
+  local _asset_id="$3"
+  local public_slug="$4"
+  local status
+
+  log "password protection: unauthenticated shared-links/me is rejected"
+  status="$(curl -sS -o /tmp/password-protected-unauth.json -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_slug}/api/shared-links/me")"
+  assert_status "401" "${status}" "protected shared-links/me without password"
+  assert_json_password_required /tmp/password-protected-unauth.json "protected shared-links/me without password"
+
+  log "password protection: wrong password header is rejected"
+  status="$(curl -sS \
+    -H "X-Immich-Share-Password: definitely-wrong-password" \
+    -o /tmp/password-protected-wrong-header.json \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_slug}/api/shared-links/me")"
+  assert_status "401" "${status}" "protected shared-links/me with wrong header password"
+  assert_json_password_required /tmp/password-protected-wrong-header.json "protected shared-links/me with wrong header password"
+
+  log "password protection: thumbnail blocked before unlock"
+  status="$(curl -sS -o /tmp/password-protected-thumb-unauth.bin -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_slug}/api/assets/${_asset_id}/thumbnail?size=preview")"
+  assert_status "401" "${status}" "protected thumbnail without password"
+
+  log "password protection: wrong POST password is rejected"
+  status="$(curl -sS \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"password":"wrong-password"}' \
+    -o /tmp/password-protected-wrong-post.json \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_slug}/api/shared-links/me/password")"
+  assert_status "401" "${status}" "protected password validation wrong password"
+
+  log "password protection: correct password unlocks API + sets scoped cookie"
+  rm -f /tmp/password-protected.cookies
+  status="$(curl -sS \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -c /tmp/password-protected.cookies \
+    -D /tmp/password-protected-set-cookie.headers \
+    -d "{\"password\":\"${password}\"}" \
+    -o /tmp/password-protected-valid-post.json \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_slug}/api/shared-links/me/password")"
+  assert_status "200" "${status}" "protected password validation correct password"
+  jq -e '.valid == true' /tmp/password-protected-valid-post.json >/dev/null || die "protected password validation should return valid=true"
+  grep -qi "immich-share-password" /tmp/password-protected-set-cookie.headers || die "protected password validation must set immich-share-password cookie"
+  grep -qi "Path=/s/${protected_slug}" /tmp/password-protected-set-cookie.headers || die "password cookie must be scoped to /s/${protected_slug}"
+
+  status="$(curl -sS \
+    -b /tmp/password-protected.cookies \
+    -o /tmp/password-protected-auth.json \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_slug}/api/shared-links/me")"
+  assert_status "200" "${status}" "protected shared-links/me with unlocked cookie"
+  jq -e '.type == "ALBUM"' /tmp/password-protected-auth.json >/dev/null || die "protected shared link payload missing after unlock"
+
+  local unlocked_asset_id
+  unlocked_asset_id="$(jq -r '.album.assets[0].id // .assets[0].id // empty' /tmp/password-protected-auth.json)"
+  [[ -n "${unlocked_asset_id}" ]] || die "protected shared link payload did not expose an asset id after unlock"
+
+  local attempt=0
+  local max_attempts=30
+  while (( attempt < max_attempts )); do
+    status="$(curl -sS \
+      -b /tmp/password-protected.cookies \
+      -o /tmp/password-protected-thumb-auth.bin \
+      -w '%{http_code}' \
+      "${BASE_URL}/s/${protected_slug}/api/assets/${unlocked_asset_id}/thumbnail?size=preview")"
+    if [[ "${status}" == "200" ]]; then
+      break
+    fi
+    attempt=$((attempt + 1))
+    if (( attempt >= max_attempts )); then
+      die "protected thumbnail after unlock: expected HTTP 200, got ${status} after ${max_attempts} attempts"
+    fi
+    sleep 2
+  done
+  assert_non_empty_file /tmp/password-protected-thumb-auth.bin "protected thumbnail after unlock"
+
+  log "password protection: stale password on public share still loads"
+  status="$(curl -sS \
+    -H "X-Immich-Share-Password: stale-password-from-another-share" \
+    -o /tmp/public-stale-password.json \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${public_slug}/api/shared-links/me")"
+  assert_status "200" "${status}" "public shared-links/me with stale password header"
+  jq -e '.type == "ALBUM"' /tmp/public-stale-password.json >/dev/null || die "public share should still load with stale password header"
+
+  log "password protection: scoped cookie is not sent to public slug"
+  status="$(curl -sS \
+    -b /tmp/password-protected.cookies \
+    -o /tmp/public-with-protected-cookie-jar.json \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${public_slug}/api/shared-links/me")"
+  assert_status "200" "${status}" "public shared-links/me remains accessible"
+  jq -e '.type == "ALBUM"' /tmp/public-with-protected-cookie-jar.json >/dev/null || die "public share payload missing when protected cookie jar is present but scoped away"
+
+  log "password protection: protected slug still requires auth in a fresh session"
+  status="$(curl -sS -o /tmp/password-protected-fresh-session.json -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_slug}/api/shared-links/me")"
+  assert_status "401" "${status}" "protected shared-links/me fresh session"
+  assert_json_password_required /tmp/password-protected-fresh-session.json "protected shared-links/me fresh session"
+
+  log "password protection OK"
+}
+
 main() {
   require_seed_vars
   wait_for_proxy
@@ -281,6 +401,8 @@ main() {
   status="$(curl -sS -o /tmp/not-found.txt -w '%{http_code}' "${BASE_URL}/share/invalidsharekey123/api/shared-links/me")"
   assert_status "404" "${status}" "invalid key behavior"
   log "invalid key behavior OK"
+
+  assert_password_protection "${PASSWORD_PROTECTED_SHARE_SLUG}" "${E2E_SHARE_PASSWORD}" "${PASSWORD_PROTECTED_ASSET_ID}" "${DEFAULT_SHARE_SLUG}"
 
   log "All base scenarios passed"
 }

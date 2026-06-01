@@ -19,4 +19,7 @@ export const seed = {
   overrideOffKey: () => env('OVERRIDE_OFF_SHARE_KEY'),
   metadataOffKey: () => env('METADATA_OFF_SHARE_KEY'),
   privateAlbumId: () => env('PRIVATE_ALBUM_ID'),
+  passwordProtectedSlug: () => env('PASSWORD_PROTECTED_SHARE_SLUG'),
+  passwordProtectedAssetId: () => env('PASSWORD_PROTECTED_ASSET_ID'),
+  sharePassword: () => env('E2E_SHARE_PASSWORD'),
 };

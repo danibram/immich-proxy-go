@@ -33,6 +33,22 @@ func TestGetThumbnail_Success(t *testing.T) {
 	}
 }
 
+func TestGetThumbnail_PasswordRequired(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+
+	_, router := setupTestHandler(t, mockServer)
+
+	req := httptest.NewRequest("GET", "/api/share/password-protected/asset/"+testAssetID1+"/thumbnail", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", rec.Code)
+	}
+}
+
 func TestGetOriginal_Success(t *testing.T) {
 	mockServer := MockImmichServer(t)
 	defer mockServer.Close()

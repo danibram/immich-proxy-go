@@ -10,9 +10,12 @@ import (
 
 // GetThumbnail proxies thumbnail requests
 func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
-	key := middleware.GetShareKey(r.Context())
-	password := middleware.GetPassword(r.Context())
-	keyType := h.getKeyType(r.Context())
+	_, creds, err := h.loadShareLinkFromRequest(r)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
 	assetID := chi.URLParam(r, "assetID")
 	size := r.URL.Query().Get("size")
 
@@ -28,11 +31,7 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Note: We trust Immich to validate that this asset belongs to the shared link
-	// The share key query param ensures Immich only returns assets from the share
-	// Doing IDOR validation here would require fetching the full album which is expensive
-
-	resp, err := h.client.GetThumbnailWithKeyType(assetID, key, password, size, keyType)
+	resp, err := h.client.GetThumbnailWithKeyType(assetID, creds.key, creds.password, size, creds.keyType)
 	if err != nil {
 		h.logger.Error("failed to get thumbnail", zap.Error(err))
 		http.Error(w, "Failed to get thumbnail", http.StatusInternalServerError)
@@ -95,9 +94,12 @@ func (h *ShareHandler) GetOriginal(w http.ResponseWriter, r *http.Request) {
 
 // GetVideo proxies video playback requests
 func (h *ShareHandler) GetVideo(w http.ResponseWriter, r *http.Request) {
-	key := middleware.GetShareKey(r.Context())
-	password := middleware.GetPassword(r.Context())
-	keyType := h.getKeyType(r.Context())
+	_, creds, err := h.loadShareLinkFromRequest(r)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
 	assetID := chi.URLParam(r, "assetID")
 
 	// Validate UUID format
@@ -106,10 +108,7 @@ func (h *ShareHandler) GetVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Note: We trust Immich to validate that this asset belongs to the shared link
-	// The share key query param ensures Immich only returns assets from the share
-
-	resp, err := h.client.GetVideoWithKeyType(assetID, key, password, keyType)
+	resp, err := h.client.GetVideoWithKeyType(assetID, creds.key, creds.password, creds.keyType)
 	if err != nil {
 		h.logger.Error("failed to get video", zap.Error(err))
 		http.Error(w, "Failed to get video", http.StatusInternalServerError)

@@ -390,24 +390,16 @@ func isStalePasswordOnPublicShareError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "unexpected status code 500") ||
-		strings.Contains(msg, "unexpected status code 502") ||
-		strings.Contains(msg, "unexpected status code 503") ||
-		strings.Contains(msg, "unexpected status code 504") ||
-		(strings.Contains(msg, "unexpected status code 400") &&
-			strings.Contains(strings.ToLower(msg), "shared link is not password protected"))
+	msg := strings.ToLower(err.Error())
+	// Only retry without password when Immich explicitly says the link is
+	// public. Never drop the password on 5xx — that can bypass protection
+	// if upstream is flaky or returns inconsistent auth errors.
+	return strings.Contains(msg, "unexpected status code 400") &&
+		strings.Contains(msg, "shared link is not password protected")
 }
 
 func shouldRetryShareMediaWithoutPassword(resp *http.Response) bool {
-	if resp == nil {
-		return false
-	}
-	if resp.StatusCode >= http.StatusInternalServerError {
-		resp.Body.Close()
-		return true
-	}
-	if resp.StatusCode != http.StatusBadRequest {
+	if resp == nil || resp.StatusCode != http.StatusBadRequest {
 		return false
 	}
 

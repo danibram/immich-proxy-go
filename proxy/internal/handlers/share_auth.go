@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/danibram/immich-proxy-go/internal/immich"
+	"github.com/danibram/immich-proxy-go/internal/middleware"
 	"github.com/danibram/immich-proxy-go/internal/sharecookie"
 )
 
@@ -52,10 +53,12 @@ func (h *ShareHandler) ValidatePassword(w http.ResponseWriter, r *http.Request) 
 		r.TLS != nil ||
 		strings.HasPrefix(h.config.Proxy.PublicURL, "https://")
 
+	cookiePath := shareCookiePath(r)
+
 	http.SetCookie(w, &http.Cookie{
 		Name:     "immich-share-password",
 		Value:    signedPassword,
-		Path:     "/",
+		Path:     cookiePath,
 		HttpOnly: true,
 		Secure:   isSecure,
 		SameSite: http.SameSiteStrictMode, // Strict: never sent on cross-site requests
@@ -64,4 +67,17 @@ func (h *ShareHandler) ValidatePassword(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"valid": true})
+}
+
+// shareCookiePath scopes the password cookie to the current share URL so a
+// session unlocked on /s/album-a is not sent to /s/album-b.
+func shareCookiePath(r *http.Request) string {
+	key := middleware.GetShareKey(r.Context())
+	if key == "" {
+		return "/"
+	}
+	if middleware.GetKeyType(r.Context()) == middleware.KeyTypeSlug {
+		return "/s/" + key
+	}
+	return "/share/" + key
 }

@@ -51,7 +51,7 @@ func MockImmichServer(t *testing.T) *httptest.Server {
 		case strings.HasPrefix(r.URL.Path, "/api/albums/"):
 			handleMockAlbum(w, r, shareKey)
 		case strings.HasPrefix(r.URL.Path, "/api/assets/") && strings.HasSuffix(r.URL.Path, "/thumbnail"):
-			handleMockThumbnail(w, r, shareKey)
+			handleMockThumbnail(w, r, shareKey, sharePassword)
 		case strings.HasPrefix(r.URL.Path, "/api/assets/") && strings.HasSuffix(r.URL.Path, "/original"):
 			handleMockOriginal(w, r, shareKey)
 		case strings.HasPrefix(r.URL.Path, "/api/assets/"):
@@ -309,10 +309,14 @@ func handleMockAsset(w http.ResponseWriter, r *http.Request, shareKey string) {
 	}
 }
 
-func handleMockThumbnail(w http.ResponseWriter, r *http.Request, shareKey string) {
+func handleMockThumbnail(w http.ResponseWriter, r *http.Request, shareKey, sharePassword string) {
 	// Validate share key
 	if shareKey != "valid-key" && shareKey != "no-download" && shareKey != "password-protected" {
 		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	if shareKey == "password-protected" && sharePassword != "secret123" {
+		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	// Return a fake image

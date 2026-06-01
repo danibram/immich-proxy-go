@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2026-06-01
+
+### Bug Fixes
+
+- 🔒 Fix password-protected share bypass via stale cookies and media endpoints
+
+Scope share-password cookies per slug/key, enforce auth before thumbnails and
+video, and only drop stale passwords on Immich's explicit public-share 400.
+Fix frontend 401 handling for plain-text invalid password responses.
+
+### Tests
+
+- ✅ Add shell and Playwright e2e coverage for password-protected shares
+
 ## [1.1.2] - 2026-06-01
 
 ### Bug Fixes

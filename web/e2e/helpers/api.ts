@@ -30,3 +30,26 @@ export async function fetchSharedLink(
     albumName: json.album?.albumName ?? '',
   };
 }
+
+export async function fetchSharedLinkBySlug(
+  request: APIRequestContext,
+  slug: string,
+  expectedStatus = 200
+) {
+  const res = await request.get(`/s/${slug}/api/shared-links/me`);
+  expect(res.status()).toBe(expectedStatus);
+  return res;
+}
+
+export async function validateSharePassword(
+  request: APIRequestContext,
+  slug: string,
+  password: string,
+  expectedStatus = 200
+) {
+  const res = await request.post(`/s/${slug}/api/shared-links/me/password`, {
+    data: { password },
+  });
+  expect(res.status()).toBe(expectedStatus);
+  return res;
+}

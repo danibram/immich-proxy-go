@@ -14,6 +14,7 @@ This E2E setup brings up:
     - override-off album (`allowDownload=false`, `allowUpload=false`)
   - plus one extra metadata-off link (`showMetadata=false`, `allowDownload=true`)
   - a private album (not reachable from public share routes)
+  - a **password-protected** album/slug (`E2E_SHARE_PASSWORD`, default `e2e-secret-password`)
 - Shell assertion job (HTTP contract + proxy option matrix)
 - Optional **Playwright** browser tests (gallery, viewer, video, lazy loading, proxy/link UI gates)
 
@@ -61,8 +62,9 @@ When `--with-playwright` is set:
 | `web/e2e/share-gallery.spec.ts` | Full UI: gallery load, slug route, lazy thumbnails, viewer navigation, video metadata |
 | `web/e2e/share-proxy-options.spec.ts` | Download/upload/info visibility per share + global proxy flags |
 | `web/e2e/public-share-security.spec.ts` | Private album isolation via browser |
+| `web/e2e/share-password-security.spec.ts` | Password gate, cookie scope, stale-password regressions, thumbnail auth |
 
-On the **config matrix**, the full gallery suite runs only for `downloads-on-metadata-on`. Other matrix scenarios run `share-proxy-options.spec.ts` only (faster, still validates global gates).
+On the **config matrix**, the full gallery suite runs only for `downloads-on-metadata-on`. Other matrix scenarios run `share-proxy-options.spec.ts` only (faster, still validates global gates). Password security Playwright runs on every `--with-playwright` invocation.
 
 Smoke tests in `web/e2e/share.spec.ts` run against Vite preview (`just test-e2e`) without Docker.
 
@@ -82,6 +84,7 @@ Smoke tests in `web/e2e/share.spec.ts` run against Vite preview (`just test-e2e`
 6. Shared-link payload redaction.
 7. Album endpoint and private album isolation.
 8. Invalid share key returns `404`.
+9. Password-protected slug: 401 without auth, unlock flow, scoped cookie, stale-password regressions, thumbnail auth.
 
 ## Using the Seeded Share
 
@@ -91,7 +94,7 @@ After a run, generated IDs are written to:
 e2e/runtime/seed.env
 ```
 
-Includes `DEFAULT_SHARE_KEY`, `DEFAULT_SHARE_SLUG`, `VIDEO_ASSET_ID`, `EXPECTED_ASSET_COUNT`, override keys, etc.
+Includes `DEFAULT_SHARE_KEY`, `DEFAULT_SHARE_SLUG`, `PASSWORD_PROTECTED_SHARE_SLUG`, `E2E_SHARE_PASSWORD`, `VIDEO_ASSET_ID`, `EXPECTED_ASSET_COUNT`, override keys, etc.
 
 Demo URLs:
 

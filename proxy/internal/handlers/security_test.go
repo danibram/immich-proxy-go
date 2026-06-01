@@ -424,6 +424,9 @@ func TestValidatePassword_CookieAttributes(t *testing.T) {
 	if got.MaxAge <= 0 || got.MaxAge > 24*60*60 {
 		t.Errorf("unexpected MaxAge %d", got.MaxAge)
 	}
+	if got.Path != "/share/k" {
+		t.Errorf("cookie Path=%q, want /share/k", got.Path)
+	}
 	// The value must be the signed format, not plaintext.
 	if !strings.Contains(got.Value, ".") {
 		t.Errorf("cookie value should be signed (contain '.'), got %q", got.Value)
