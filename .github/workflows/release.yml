@@ -38,6 +38,27 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Append Docker image references
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          IFS='.' read -r major minor patch <<< "${VERSION}"
+          {
+            echo ""
+            echo "## Docker"
+            echo ""
+            echo '```bash'
+            echo "docker pull ${IMAGE}:${VERSION}"
+            echo '```'
+            echo ""
+            echo "| Tag | Image |"
+            echo "| --- | --- |"
+            echo "| \`${VERSION}\` | \`${IMAGE}:${VERSION}\` |"
+            echo "| \`${major}.${minor}\` | \`${IMAGE}:${major}.${minor}\` |"
+            echo "| \`${major}\` | \`${IMAGE}:${major}\` |"
+            echo "| \`latest\` | \`${IMAGE}:latest\` |"
+          } >> RELEASE_NOTES.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
