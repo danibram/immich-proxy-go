@@ -5,6 +5,88 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-06
+
+### Bug Fixes
+
+- 🐛 Fix uploads through slug share routes
+
+Apply share key or slug authentication atomically in both query parameters and headers. Add PNG, JPEG, and HEIC E2E coverage for long and short share URLs.
+
+
+### Features
+
+- ✨ Support Immich v3 shared-link API
+
+Immich v3.0.1 changed several shared-link contracts that broke the proxy:
+
+- Albums and shared links no longer include their assets inline
+  (assetCount > 0, assets: []). Rebuild the list through the timeline API
+  (timeline/buckets + timeline/bucket) and map the columnar payload back to
+  Asset objects. Immich v2 responses pass through unchanged.
+- Asset duration became numeric milliseconds (was "H:MM:SS" string), which
+  500'd INDIVIDUAL shares on decode. A dedicated immich.Duration type
+  accepts string, number, or null and always re-emits the classic string.
+- Password-protected shares no longer authenticate via the `password` query
+  param; clients must POST /shared-links/login and replay the
+  immich_shared_link_token cookie. Fetch and cache that token per share;
+  v2 (no login endpoint) keeps using the query param.
+- EXIF and original filename dropped out of listings. Expose a sanitized
+  GET /api/assets/{id} and have the viewer fetch details lazily, merging
+  them into the store. The timeline `ratio` field feeds gallery aspect
+  ratios so no fake EXIF is synthesized.
+
+Also fixes the video viewer collapsing to 0x0 in the flex stage and derives
+ZIP entry names from Content-Disposition when timeline assets carry no
+originalFileName.
+
+
+### Other
+
+- Merge pull request #17 from danibram/codex/fix-slug-share-uploads
+
+🐛 Fix uploads through slug share routes
+
+
+### Security
+
+- 🔒 Enforce share passwords on media endpoints under Immich v3
+
+Immich v3 stopped enforcing shared-link passwords on the media endpoints:
+/assets/{id}/thumbnail and /video/playback return 200 with just the share
+key, even for password-protected links (while /shared-links/me correctly
+401s). Because the proxy deliberately skips loading the link on those hot
+paths for scroll performance, protected thumbnails and video were served
+without a password.
+
+Authorize those requests in the proxy with a 60s per-share verdict cache,
+so a protected share still requires the password while galleries pay one
+upstream lookup per share per minute instead of one per tile.
+
+Also normalize per-asset errors: a foreign/unknown asset id now returns a
+uniform 404 "Asset not found" across every asset endpoint (was 500 on the
+info route, and the thumbnail route forwarded Immich's raw error body,
+leaking upstream phrasing). Not-found and not-permitted stay
+indistinguishable to prevent asset-id enumeration.
+
+
+### Testing
+
+- ✅ Add Immich v3 e2e coverage for downloads, asset info, and IDOR
+
+- share-download.spec.ts: single + bulk ZIP downloads through /share and /s,
+  API and real-browser UI (viewer button, single selection, multi-select),
+  asserting exact PNG/JPEG/HEIC bytes; a self-written ZIP reader avoids a new
+  dependency.
+- share-asset-info.spec.ts: sanitized asset-details endpoint and the viewer's
+  lazy EXIF sheet, plus INDIVIDUAL-share inline assets with normalized
+  durations.
+- public-share-security.spec.ts: a foreign asset id must not be reachable via
+  a valid share key across every per-asset endpoint (no 200, no 500, no
+  upstream body leak).
+- Seed an INDIVIDUAL share; shell matrix now checks EXIF on the per-asset
+  endpoint instead of the (now asset-less) listing.
+
 ## [1.1.7] - 2026-06-01
 
 ### Bug Fixes
