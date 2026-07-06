@@ -201,6 +201,32 @@ if [[ -f "e2e/runtime/seed.env" ]]; then
   source e2e/runtime/seed.env
 fi
 
+# Downloads must survive hotlink protection (the app fetches blobs; it must not
+# window.open() asset URLs, which send Sec-Fetch-Dest: document and get 403'd).
+# Recreate the proxy with hotlink on and run the dedicated download spec.
+if [[ "${WITH_PLAYWRIGHT}" == "true" && "${PLAYWRIGHT_SECURITY_ONLY}" != "true" ]]; then
+  echo "[e2e] Recreating proxy with hotlink protection enabled"
+  IPP_OPTIONS_ALLOW_DOWNLOAD="true" IPP_SECURITY_HOTLINK_PROTECTION="true" \
+    "${compose[@]}" "${profiles[@]}" up -d --force-recreate proxy
+  for target in "${test_targets[@]}"; do
+    IFS='|' read -r proxy_name _ host_url <<<"${target}"
+    echo "[e2e] Running Playwright hotlink download spec via ${proxy_name} (${host_url})"
+    (
+      cd web
+      set -a
+      # shellcheck disable=SC1091
+      source "${PWD}/../e2e/runtime/seed.env"
+      export E2E_EXTERNAL_BASE_URL="${host_url}"
+      export E2E_HOTLINK_PROTECTION="true"
+      set +a
+      npx playwright test e2e/share-download-hotlink.spec.ts --project=chromium --workers=1
+    )
+  done
+  # Restore the default (hotlink off) proxy so a --keep-up stack behaves normally.
+  IPP_OPTIONS_ALLOW_DOWNLOAD="true" IPP_SECURITY_HOTLINK_PROTECTION="false" \
+    "${compose[@]}" "${profiles[@]}" up -d --force-recreate proxy >/dev/null 2>&1 || true
+fi
+
 if [[ "${PROXY_MODE}" == "caddy" || "${PROXY_MODE}" == "both" ]]; then
   echo "[e2e] Caddy demo URL:   http://localhost:8080/share/${DEFAULT_SHARE_KEY}"
 fi

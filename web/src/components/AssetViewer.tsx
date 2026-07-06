@@ -4,6 +4,7 @@ import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
 import type { Asset } from '~/api/types';
 import { useViewerCarousel } from '~/hooks/useViewerCarousel';
+import { saveUrl } from '~/utils/bulkDownload';
 import {
   allowDownload,
   assets,
@@ -158,15 +159,20 @@ export default function AssetViewer() {
           <Show when={allowDownload()}>
             <Show when={current().id} keyed>
               {(assetId) => (
-                <a
+                <button
+                  type="button"
                   class="vw-btn"
-                  href={api.getOriginalUrl(assetId)}
-                  download={current().originalFileName}
                   aria-label="Download"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // fetch+blob instead of navigating to /original directly,
+                    // so hotlink protection (which blocks Sec-Fetch-Dest:
+                    // document) does not reject the download.
+                    void saveUrl(api.getOriginalUrl(assetId), current().originalFileName || assetId);
+                  }}
                 >
                   <Download size={22} />
-                </a>
+                </button>
               )}
             </Show>
           </Show>

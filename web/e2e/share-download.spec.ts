@@ -250,7 +250,7 @@ test.describe('Shared album downloads', () => {
         await expect(page.getByTestId('asset-viewer')).toBeVisible();
 
         const downloadPromise = page.waitForEvent('download');
-        await page.locator('[data-testid="asset-viewer"] a[aria-label="Download"]').click();
+        await page.locator('[data-testid="asset-viewer"] [aria-label="Download"]').click();
         const download = await downloadPromise;
 
         expect(download.suggestedFilename().toLowerCase()).toMatch(/\.jpe?g$/);

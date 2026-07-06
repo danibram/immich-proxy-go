@@ -28,6 +28,30 @@ function toDownloadStatus(status: string): DownloadStatus {
   return 'starting';
 }
 
+/**
+ * Save a proxied URL to disk. We fetch it as a blob (Sec-Fetch-Dest: empty)
+ * and click a synthetic <a download>, instead of window.open()-ing the URL.
+ * A direct navigation sends Sec-Fetch-Dest: document, which hotlink
+ * protection rejects with "Direct access not allowed" — so window.open
+ * breaks every download on shares that enable it.
+ */
+export async function saveUrl(url: string, fallbackName: string): Promise<void> {
+  const { blob, filename } = await api.fetchDownload(url);
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename || fallbackName;
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    // Revoke on the next tick so the browser has started the download.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10_000);
+  }
+}
+
 export async function downloadAssets(
   assetList: Asset[],
   source: DownloadSource,
@@ -42,7 +66,14 @@ export async function downloadAssets(
   });
 
   if (assetList.length === 1) {
-    window.open(api.getOriginalUrl(assetList[0].id), '_blank');
+    const asset = assetList[0];
+    try {
+      await saveUrl(api.getOriginalUrl(asset.id), asset.originalFileName || asset.id);
+      captureEvent('download_ready', { source, asset_count: 1, zip: false });
+    } catch (error) {
+      console.error('Failed to download asset:', error);
+      captureEvent('download_failed', { source, asset_count: 1, zip: false });
+    }
     return;
   }
 
@@ -61,6 +92,7 @@ export async function downloadAssets(
         });
       }
     );
+    await saveUrl(downloadUrl, 'immich-download.zip');
     onProgress({
       isOpen: true,
       progress: assetList.length,
@@ -68,7 +100,6 @@ export async function downloadAssets(
       status: 'ready',
       downloadUrl,
     });
-    window.open(downloadUrl, '_blank');
     captureEvent('download_ready', { source, asset_count: assetList.length, zip: true });
   } catch (error) {
     console.error('Failed to download ZIP:', error);
