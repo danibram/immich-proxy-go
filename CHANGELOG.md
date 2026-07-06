@@ -5,6 +5,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-07-06
+
+### Bug Fixes
+
+- 🐛 Fix downloads failing under hotlink protection
+
+Selecting photos and downloading (single original or multi-asset ZIP) hit
+"Direct access not allowed" on any share with hotlink protection enabled,
+and navigated the tab to the raw asset / job URL.
+
+The download flow used window.open() to fetch the asset and ZIP URLs. A
+window.open navigation sends Sec-Fetch-Dest: document, which the hotlink
+middleware rejects; only app-originated fetches (Sec-Fetch-Dest: empty) are
+allowed. The single working case was the viewer button, which used an
+<a download> element.
+
+Download through fetch()+blob and save via a synthetic <a download> instead,
+so every path (viewer button, single selection, multi-select ZIP) carries
+Sec-Fetch-Dest: empty and works whether or not hotlink protection is on.
+Filenames come from the response Content-Disposition, falling back to the
+original filename / a default.
+
+Coverage: this slipped through because the download e2e ran with hotlink
+protection off and via Playwright's API context (no Sec-Fetch: document).
+Add share-download-hotlink.spec.ts — asserts direct navigation is 403 and
+that viewer/single/ZIP downloads still succeed — and a hotlink-on proxy pass
+in run.sh so CI exercises it.
+
+
+### Other
+
+- Merge pull request #18 from danibram/codex/immich-v3-support
+
+✨ Immich v3 support + media password hardening (v1.2.0)
+
 ## [1.2.0] - 2026-07-06
 
 ### Bug Fixes
