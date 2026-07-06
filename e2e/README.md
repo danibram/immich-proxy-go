@@ -65,6 +65,7 @@ When `--with-playwright` is set:
 |------|----------------|
 | `web/e2e/share-gallery.spec.ts` | Full UI: gallery load, slug route, lazy thumbnails, viewer navigation, video metadata |
 | `web/e2e/share-proxy-options.spec.ts` | Download/upload/info visibility per share + global proxy flags |
+| `web/e2e/share-upload.spec.ts` | PNG/JPEG/HEIC uploads through `/share` and `/s`, album association, and exact original bytes |
 | `web/e2e/public-share-security.spec.ts` | Private album isolation via browser |
 | `web/e2e/share-password-security.spec.ts` | Password gate UI, cross-album isolation, cookie scope, stale-password regressions, no 5xx on basic routes (thumbnail cold-path checks run in shell only — see note below) |
 
