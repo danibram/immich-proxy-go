@@ -3,6 +3,7 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
 import type { Asset } from '~/api/types';
+import { t } from '~/i18n';
 import { useViewerCarousel } from '~/hooks/useViewerCarousel';
 import { saveUrl } from '~/utils/bulkDownload';
 import {
@@ -139,7 +140,7 @@ export default function AssetViewer() {
   return (
     <div class="viewer" data-testid="asset-viewer" onClick={closeViewer}>
       <div class="vw-top" onClick={(e) => e.stopPropagation()}>
-        <button type="button" class="vw-btn" aria-label="Close" onClick={closeViewer}>
+        <button type="button" class="vw-btn" aria-label={t().viewer.close} onClick={closeViewer}>
           <X size={22} />
         </button>
         <div class="vw-count" data-testid="viewer-count">
@@ -150,7 +151,7 @@ export default function AssetViewer() {
             <button
               type="button"
               class={`vw-btn ${showInfo() ? 'is-on' : ''}`}
-              aria-label="Info"
+              aria-label={t().viewer.info}
               onClick={() => setShowInfo((v) => !v)}
             >
               <Info size={22} />
@@ -162,7 +163,7 @@ export default function AssetViewer() {
                 <button
                   type="button"
                   class="vw-btn"
-                  aria-label="Download"
+                  aria-label={t().viewer.download}
                   onClick={(e) => {
                     e.stopPropagation();
                     // fetch+blob instead of navigating to /original directly,
@@ -218,7 +219,7 @@ export default function AssetViewer() {
         <button
           type="button"
           class={`vw-nav left ${carousel.hasPrev() ? '' : 'off'}`}
-          aria-label="Previous"
+          aria-label={t().viewer.previous}
           onClick={(e) => {
             e.stopPropagation();
             carousel.step(-1, true);
@@ -229,7 +230,7 @@ export default function AssetViewer() {
         <button
           type="button"
           class={`vw-nav right ${carousel.hasNext() ? '' : 'off'}`}
-          aria-label="Next"
+          aria-label={t().viewer.next}
           onClick={(e) => {
             e.stopPropagation();
             carousel.step(1, true);

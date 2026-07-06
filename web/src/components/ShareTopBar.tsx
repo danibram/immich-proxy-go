@@ -1,6 +1,7 @@
 import { Check, CheckSquare, Download, Folder, Upload, X } from 'lucide-solid';
 import { Show, type JSX } from 'solid-js';
 import { captureEvent, isFeatureEnabled } from '~/analytics';
+import { t } from '~/i18n';
 import {
   albumName,
   assets,
@@ -22,8 +23,7 @@ interface Props {
 }
 
 function itemCountLabel() {
-  const count = assets().length;
-  return `${count} ${count === 1 ? 'item' : 'items'}`;
+  return t().topbar.itemCount(assets().length);
 }
 
 function AlbumIdentity(props: { small?: boolean; dateRange?: string | null; withTestIds?: boolean }) {
@@ -68,13 +68,13 @@ function MobileHero(props: Pick<Props, 'dateRange' | 'onUploadClick' | 'onDownlo
         <Show when={caps().canDownload}>
           <button type="button" class="st-btn-dl" onClick={props.onDownloadAll}>
             <Download size={18} stroke-width={2} />
-            Download all
+            {t().topbar.downloadAll}
           </button>
         </Show>
         <Show when={showUpload()}>
           <button type="button" class="st-btn-up" onClick={() => props.onUploadClick?.()}>
             <Upload size={18} stroke-width={2} />
-            Upload items
+            {t().topbar.uploadItems}
           </button>
         </Show>
       </div>
@@ -118,24 +118,24 @@ function BrowseActions(props: Pick<Props, 'wide' | 'onUploadClick' | 'onDownload
       when={props.wide}
       fallback={
         <Show when={showSelect()}>
-          <IconBtn label="Select" onClick={enterSelect}>
+          <IconBtn label={t().topbar.select} onClick={enterSelect}>
             <CheckSquare size={22} stroke-width={2} />
           </IconBtn>
         </Show>
       }
     >
       <Show when={showSelect()}>
-        <TextBtn label="Select" onClick={enterSelect}>
+        <TextBtn label={t().topbar.select} onClick={enterSelect}>
           <CheckSquare size={18} stroke-width={2} />
         </TextBtn>
       </Show>
       <Show when={caps().canDownload}>
-        <TextBtn label="Download" onClick={props.onDownloadAll}>
+        <TextBtn label={t().topbar.download} onClick={props.onDownloadAll}>
           <Download size={18} stroke-width={2} />
         </TextBtn>
       </Show>
       <Show when={showUpload()}>
-        <TextBtn label="Upload" onClick={() => props.onUploadClick?.()} primary>
+        <TextBtn label={t().topbar.upload} onClick={() => props.onUploadClick?.()} primary>
           <Upload size={18} stroke-width={2} />
         </TextBtn>
       </Show>
@@ -145,7 +145,7 @@ function BrowseActions(props: Pick<Props, 'wide' | 'onUploadClick' | 'onDownload
 
 function SelectActions(props: Pick<Props, 'wide' | 'onDownloadSelected'>) {
   const allSelected = () => selectedCount() === assets().length && assets().length > 0;
-  const selectAllLabel = () => (allSelected() ? 'Deselect all' : 'Select all');
+  const selectAllLabel = () => (allSelected() ? t().topbar.deselectAll : t().topbar.selectAll);
   const toggleAll = () => (allSelected() ? clearSelection() : selectAll());
 
   return (
@@ -154,7 +154,7 @@ function SelectActions(props: Pick<Props, 'wide' | 'onDownloadSelected'>) {
       fallback={
         <>
           <Show when={selectedCount() > 0}>
-            <IconBtn label={`Download (${selectedCount()})`} onClick={props.onDownloadSelected}>
+            <IconBtn label={t().topbar.downloadSelected(selectedCount())} onClick={props.onDownloadSelected}>
               <Download size={22} stroke-width={2} />
             </IconBtn>
           </Show>
@@ -166,7 +166,7 @@ function SelectActions(props: Pick<Props, 'wide' | 'onDownloadSelected'>) {
     >
       <Show when={selectedCount() > 0}>
         <button type="button" class="tb-tbtn" onClick={props.onDownloadSelected}>
-          <Download size={18} stroke-width={2} /> Download ({selectedCount()})
+          <Download size={18} stroke-width={2} /> {t().topbar.downloadSelected(selectedCount())}
         </button>
       </Show>
       <button type="button" class="tb-tbtn" onClick={toggleAll}>
@@ -222,10 +222,10 @@ export default function ShareTopBar(props: Props) {
     >
       <header class="topbar is-select" data-wide={props.wide ? '1' : '0'} data-collapsed="1">
         <div class="tb-left">
-          <IconBtn label="Cancel" onClick={exitSelect}>
+          <IconBtn label={t().topbar.cancel} onClick={exitSelect}>
             <X size={22} stroke-width={2} />
           </IconBtn>
-          <span class="tb-count">{selectedCount()} selected</span>
+          <span class="tb-count">{t().topbar.selected(selectedCount())}</span>
         </div>
         <div class="tb-actions">
           <SelectActions wide={props.wide} onDownloadSelected={props.onDownloadSelected} />

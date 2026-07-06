@@ -1,5 +1,6 @@
 import { Archive, Check } from 'lucide-solid';
 import { Component, Show } from 'solid-js';
+import { t } from '~/i18n';
 import type { DownloadStatus } from '~/utils/bulkDownload';
 
 interface DownloadProgressProps {
@@ -16,12 +17,12 @@ const DownloadProgress: Component<DownloadProgressProps> = (props) => {
 
   const subtitle = () => {
     if (isReady()) {
-      return `${props.total} items · ZIP`;
+      return t().downloadProgress.itemsZip(props.total);
     }
     if (props.status === 'processing') {
-      return `Preparing ${props.progress} / ${props.total}`;
+      return t().downloadProgress.preparing(props.progress, props.total);
     }
-    return 'Starting download…';
+    return t().downloadProgress.starting;
   };
 
   return (
@@ -35,14 +36,14 @@ const DownloadProgress: Component<DownloadProgressProps> = (props) => {
               <Archive size={30} stroke-width={2.2} />
             )}
           </div>
-          <div class="dl-title">{isReady() ? 'Download ready' : 'Compressing files'}</div>
+          <div class="dl-title">{isReady() ? t().downloadProgress.ready : t().downloadProgress.compressing}</div>
           <div class="dl-sub">{subtitle()}</div>
           <div class="dl-bar">
             <div class="dl-fill" style={{ width: `${isReady() ? 100 : percentage()}%` }} />
           </div>
           <Show when={isReady()}>
             <button type="button" class="dl-done" onClick={props.onClose}>
-              Done
+              {t().downloadProgress.done}
             </button>
           </Show>
         </div>

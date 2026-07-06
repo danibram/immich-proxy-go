@@ -12,6 +12,7 @@ import {
 } from '~/analytics';
 import { api, PasswordRequiredError } from '~/api/client';
 import type { Asset } from '~/api/types';
+import { t } from '~/i18n';
 import AssetTimeline from '~/components/AssetTimeline';
 import AssetViewer from '~/components/AssetViewer';
 import DownloadProgress from '~/components/DownloadProgress';
@@ -113,7 +114,7 @@ export default function SharePage() {
           share_route_type: getShareRouteTypeFromPath(window.location.pathname),
         });
       } else {
-        setError(err instanceof Error ? err.message : 'Failed to load shared link');
+        setError(err instanceof Error ? err.message : t().share.loadFailed);
         captureEvent('share_load_failed', {
           share_route_type: getShareRouteTypeFromPath(window.location.pathname),
         });
@@ -146,7 +147,7 @@ export default function SharePage() {
 
   return (
     <>
-      <title>{sharedLink()?.album?.albumName || 'Shared Album'} - Immich Public Proxy</title>
+      <title>{sharedLink()?.album?.albumName || t().share.documentTitleFallback} - Immich Public Proxy</title>
 
       <Show when={isLoading()}>
         <div class="share-state">
@@ -154,7 +155,7 @@ export default function SharePage() {
             <div class="share-state-spinner">
               <div class="share-state-spinner-ring" />
             </div>
-            <p>Loading album…</p>
+            <p>{t().share.loading}</p>
           </div>
         </div>
       </Show>
@@ -171,10 +172,10 @@ export default function SharePage() {
             <div class="share-state-spinner share-state-spinner--error">
               <AlertCircle size={28} color="#c0392b" />
             </div>
-            <h1>Unable to load</h1>
+            <h1>{t().share.unableToLoad}</h1>
             <p>{error()}</p>
             <button type="button" class="landing-btn" onClick={() => loadSharedLink()}>
-              Try again
+              {t().share.tryAgain}
             </button>
           </div>
         </div>
@@ -200,8 +201,8 @@ export default function SharePage() {
                     <div class="gallery-empty-icon">
                       <Images size={40} color="var(--fg-3)" stroke-width={1.5} />
                     </div>
-                    <h2 class="gallery-empty-title">No items yet</h2>
-                    <p class="gallery-empty-text">This album is empty</p>
+                    <h2 class="gallery-empty-title">{t().share.emptyTitle}</h2>
+                    <p class="gallery-empty-text">{t().share.emptyText}</p>
                   </div>
                 }
               >

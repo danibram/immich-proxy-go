@@ -2,6 +2,7 @@ import { Check, Play } from 'lucide-solid';
 import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { captureEvent } from '~/analytics';
 import type { Asset } from '~/api/types';
+import { t } from '~/i18n';
 import { formatDuration, groupAssetsByDate } from '~/utils/dateUtils';
 import {
   assets,
@@ -107,7 +108,7 @@ export default function AssetTimeline(props: Props) {
                 <button
                   type="button"
                   class={`grp-sel ${isDateFullySelected(group.date) ? 'is-on' : ''}`}
-                  aria-label={`Select all from ${group.label}`}
+                  aria-label={t().selectAllFromDate(group.label)}
                   onClick={() => selectAllFromDate(group.date)}
                 >
                   <Show when={isDateFullySelected(group.date)}>
