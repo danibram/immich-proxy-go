@@ -67,8 +67,11 @@ type Asset struct {
 	IsArchived       bool       `json:"isArchived"`
 	IsTrashed        bool       `json:"isTrashed"`
 	IsOffline        bool       `json:"isOffline"`
-	Duration         string     `json:"duration"`
+	Duration         Duration   `json:"duration"`
 	ExifInfo         *ExifInfo  `json:"exifInfo,omitempty"`
+	// Ratio is the display aspect ratio (width/height) reported by the
+	// Immich v3 timeline API, which no longer exposes EXIF dimensions.
+	Ratio            float64    `json:"ratio,omitempty"`
 	LivePhotoVideoID *string    `json:"livePhotoVideoId,omitempty"`
 	People           []Person   `json:"people,omitempty"`
 	Checksum         string     `json:"checksum"`

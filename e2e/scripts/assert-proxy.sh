@@ -124,6 +124,8 @@ assert_download_for_share() {
   fi
 }
 
+# EXIF lives on the per-asset details endpoint: Immich v3 album listings no
+# longer include it, so the proxy serves it (sanitized) via /assets/{id}.
 assert_metadata_for_share() {
   local share_key="$1"
   local expected_visible="$2"
@@ -132,18 +134,25 @@ assert_metadata_for_share() {
   local out_file="$5"
   local attempts=0
   local max_attempts=30
-  local status
+  local status asset_id asset_file
 
+  status="$(curl -sS -o "${out_file}" -w '%{http_code}' "${BASE_URL}/share/${share_key}/api/shared-links/me")"
+  assert_status "200" "${status}" "${label} shared-links/me"
+
+  if [[ -n "${expected_show_metadata}" ]]; then
+    jq -e --argjson expected "${expected_show_metadata}" '.showMetadata == $expected' "${out_file}" >/dev/null || die "${label}: unexpected showMetadata flag"
+  fi
+
+  asset_id="$(jq -r '(.album.assets[0].id // .assets[0].id) // empty' "${out_file}")"
+  [[ -n "${asset_id}" ]] || die "${label}: shared link lists no assets"
+
+  asset_file="${out_file%.json}-asset.json"
   while true; do
-    status="$(curl -sS -o "${out_file}" -w '%{http_code}' "${BASE_URL}/share/${share_key}/api/shared-links/me")"
-    assert_status "200" "${status}" "${label} shared-links/me"
-
-    if [[ -n "${expected_show_metadata}" ]]; then
-      jq -e --argjson expected "${expected_show_metadata}" '.showMetadata == $expected' "${out_file}" >/dev/null || die "${label}: unexpected showMetadata flag"
-    fi
+    status="$(curl -sS -o "${asset_file}" -w '%{http_code}' "${BASE_URL}/share/${share_key}/api/assets/${asset_id}")"
+    assert_status "200" "${status}" "${label} asset details"
 
     if [[ "${expected_visible}" == "true" ]]; then
-      if jq -e '(.album.assets[0].exifInfo // .assets[0].exifInfo) != null' "${out_file}" >/dev/null; then
+      if jq -e '.exifInfo != null' "${asset_file}" >/dev/null; then
         break
       fi
       attempts=$((attempts + 1))
@@ -152,7 +161,7 @@ assert_metadata_for_share() {
       fi
       sleep 2
     else
-      jq -e '(.album.assets[0].exifInfo // .assets[0].exifInfo) == null' "${out_file}" >/dev/null || die "${label}: expected EXIF hidden"
+      jq -e '.exifInfo == null' "${asset_file}" >/dev/null || die "${label}: expected EXIF hidden"
       break
     fi
   done

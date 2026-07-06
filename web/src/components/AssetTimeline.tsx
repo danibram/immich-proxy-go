@@ -26,6 +26,10 @@ function isRotated90or270(orientation?: string): boolean {
 }
 
 function getAspectRatio(asset: Asset): number {
+  if (asset.ratio && asset.ratio > 0) {
+    return Math.max(0.4, Math.min(2.5, asset.ratio));
+  }
+
   const width = asset.exifInfo?.exifImageWidth;
   const height = asset.exifInfo?.exifImageHeight;
   const orientation = asset.exifInfo?.orientation;

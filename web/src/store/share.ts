@@ -94,6 +94,24 @@ export function setLoadedSharedLink(link: SharedLink) {
   setIsSelectionMode(false);
 }
 
+/**
+ * Merge lazily-fetched asset details (EXIF, original filename) into the
+ * shared link so the viewer and info sheet pick them up reactively.
+ */
+export function mergeAssetDetails(detail: Asset) {
+  const link = sharedLink();
+  if (!link) return;
+
+  const merge = (list: Asset[] | undefined): Asset[] =>
+    (list ?? []).map((asset) => (asset.id === detail.id ? { ...asset, ...detail } : asset));
+
+  if (link.type === 'ALBUM' && link.album) {
+    setSharedLink({ ...link, album: { ...link.album, assets: merge(link.album.assets) } });
+  } else {
+    setSharedLink({ ...link, assets: merge(link.assets) });
+  }
+}
+
 export function toggleAssetSelection(assetId: string) {
   const current = selectedAssets();
   const newSet = new Set(current);

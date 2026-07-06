@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -15,6 +16,11 @@ import (
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+
+	// Cache of Immich v3 shared-link auth tokens for password-protected
+	// shares, keyed by keyType|key|password. See share_token.go.
+	shareTokenMu sync.RWMutex
+	shareTokens  map[string]shareTokenEntry
 }
 
 // NewClient creates a new Immich API client
@@ -27,6 +33,7 @@ func NewClient(baseURL string) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		shareTokens: make(map[string]shareTokenEntry),
 	}
 }
 
@@ -53,10 +60,19 @@ func (c *Client) GetSharedLinkWithKeyType(key string, password string, keyType K
 // reports when a stale password cookie was dropped for a public share.
 func (c *Client) GetSharedLinkWithKeyTypeDroppedStalePassword(key string, password string, keyType KeyType) (*SharedLink, bool, error) {
 	link, err := c.getSharedLinkWithKeyType(key, password, keyType)
+
+	// Immich v3 silently ignores passwords on public shares, so the request
+	// succeeds — but the login probe already told us the link has no
+	// password, which makes the supplied one a stale cookie worth clearing.
+	if err == nil && password != "" && c.shareKnownPublic(key, password, keyType) {
+		return link, true, nil
+	}
+
 	if err == nil || password == "" || !isStalePasswordOnPublicShareError(err) {
 		return link, false, err
 	}
 
+	// Immich v2 signals the same condition with a 400 on the request itself.
 	link, err = c.getSharedLinkWithKeyType(key, "", keyType)
 	return link, err == nil, err
 }
@@ -135,6 +151,16 @@ func (c *Client) getAlbumWithKeyType(albumID string, key string, password string
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	// Immich v3 stopped returning the album's assets inline; rebuild the
+	// list through the timeline API so galleries and downloads keep working.
+	if len(album.Assets) == 0 && album.AssetCount > 0 {
+		assets, err := c.fetchAlbumTimelineAssets(albumID, key, password, keyType)
+		if err != nil {
+			return nil, fmt.Errorf("album %s has %d assets but none inline and the timeline fallback failed: %w", albumID, album.AssetCount, err)
+		}
+		album.Assets = assets
+	}
+
 	return &album, nil
 }
 
@@ -154,6 +180,15 @@ func (c *Client) GetAssetWithKeyType(assetID string, key string, password string
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		// Normalize the "asset not reachable through this share" family into
+		// sentinels so handlers respond with consistent, non-leaking statuses.
+		// Immich variously answers 400/403/404 for a foreign asset id.
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			return nil, ErrPasswordRequired
+		case http.StatusBadRequest, http.StatusForbidden, http.StatusNotFound:
+			return nil, ErrAssetNotFound
+		}
 		return nil, fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -194,8 +229,35 @@ func (c *Client) ProxyRequest(method, path string, query url.Values, headers htt
 
 // proxyShareRequest applies shared-link authentication as one atomic operation.
 // Keeping the query parameter and matching header together prevents key/slug
-// mismatches across individual client methods.
+// mismatches across individual client methods. For password-protected shares
+// it additionally attaches the Immich v3 shared-link token cookie (see
+// share_token.go); Immich v2 keeps working through the password parameter.
 func (c *Client) proxyShareRequest(
+	method string,
+	path string,
+	key string,
+	password string,
+	keyType KeyType,
+	query url.Values,
+	headers http.Header,
+	body io.Reader,
+) (*http.Response, error) {
+	if headers == nil {
+		headers = http.Header{}
+	}
+	headers.Del("Cookie")
+	if password != "" {
+		if token := c.sharedLinkToken(key, password, keyType); token != "" {
+			headers.Set("Cookie", sharedLinkTokenCookie+"="+token)
+		}
+	}
+	return c.proxyShareRequestWithoutToken(method, path, key, password, keyType, query, headers, body)
+}
+
+// proxyShareRequestWithoutToken applies key/slug/password authentication but
+// never attaches the shared-link token cookie. It exists so the token login
+// call itself cannot recurse.
+func (c *Client) proxyShareRequestWithoutToken(
 	method string,
 	path string,
 	key string,
@@ -345,4 +407,8 @@ func isStalePasswordOnPublicShareError(err error) bool {
 var (
 	ErrSharedLinkNotFound = fmt.Errorf("shared link not found")
 	ErrPasswordRequired   = fmt.Errorf("password required")
+	// ErrAssetNotFound means the asset is not reachable through this shared
+	// link — it does not belong to the share, or does not exist. The two are
+	// deliberately indistinguishable to avoid asset-ID enumeration.
+	ErrAssetNotFound = fmt.Errorf("asset not found")
 )

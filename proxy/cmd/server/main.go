@@ -180,6 +180,10 @@ func main() {
 				// Albums
 				r.Get("/albums/{albumID}", shareHandler.GetAlbum)
 
+				// Asset details (EXIF/filename) — fetched lazily by the viewer
+				// because Immich v3 album listings no longer include them
+				r.Get("/assets/{assetID}", shareHandler.GetAssetInfo)
+
 				// Downloads and uploads
 				r.Get("/assets/{assetID}/original", shareHandler.GetOriginal)
 				r.Get("/assets/{assetID}/video/playback", shareHandler.GetVideo)

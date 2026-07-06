@@ -363,3 +363,79 @@ func TestGetAlbum_RespectsMetadataFlags(t *testing.T) {
 		})
 	}
 }
+
+// TestGetAssetInfo_SanitizesMetadata covers the lazy asset-details endpoint
+// the viewer uses on Immich v3 (album listings no longer include EXIF):
+// metadata-on shares get EXIF with GPS always stripped; metadata-off shares
+// get no EXIF at all; internal paths never leak.
+func TestGetAssetInfo_SanitizesMetadata(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+
+	_, router := setupTestHandler(t, mockServer)
+
+	t.Run("metadata on", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/share/valid-key/asset/"+testAssetID1, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var asset immich.Asset
+		if err := json.NewDecoder(rec.Body).Decode(&asset); err != nil {
+			t.Fatalf("failed to decode: %v", err)
+		}
+		if asset.OriginalFileName != "photo1.jpg" {
+			t.Errorf("expected original filename, got %q", asset.OriginalFileName)
+		}
+		if asset.ExifInfo == nil || asset.ExifInfo.Make != "Canon" {
+			t.Errorf("expected EXIF data, got %+v", asset.ExifInfo)
+		}
+		if asset.ExifInfo.Latitude != 0 || asset.ExifInfo.Longitude != 0 {
+			t.Errorf("GPS coordinates must be stripped, got %v,%v", asset.ExifInfo.Latitude, asset.ExifInfo.Longitude)
+		}
+		if asset.OriginalPath != "" {
+			t.Errorf("internal path must not leak, got %q", asset.OriginalPath)
+		}
+	})
+
+	t.Run("metadata off", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/share/metadata-off/asset/"+testAssetID1, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+		}
+		var asset immich.Asset
+		if err := json.NewDecoder(rec.Body).Decode(&asset); err != nil {
+			t.Fatalf("failed to decode: %v", err)
+		}
+		if asset.ExifInfo != nil {
+			t.Errorf("EXIF must be stripped when metadata is off, got %+v", asset.ExifInfo)
+		}
+	})
+
+	t.Run("invalid asset id", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/share/valid-key/asset/not-a-uuid", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("expected 400 for invalid UUID, got %d", rec.Code)
+		}
+	})
+
+	// An asset that does not belong to this share must return a clean 404,
+	// not a 500 and not the upstream's raw error body (anti-enumeration +
+	// no upstream-internal leakage).
+	t.Run("foreign asset id", func(t *testing.T) {
+		foreign := "11111111-2222-3333-4444-555555555555"
+		req := httptest.NewRequest("GET", "/api/share/valid-key/asset/"+foreign, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("expected 404 for foreign asset, got %d: %s", rec.Code, rec.Body.String())
+		}
+	})
+}

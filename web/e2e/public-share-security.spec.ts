@@ -21,4 +21,24 @@ test.describe('Public Share Security', () => {
     const privateRes = await page.request.get(`/share/${shareKey()}/api/albums/${privateAlbumId()}`);
     expect(privateRes.status()).toBe(404);
   });
+
+  // A valid share key must not grant access to an asset outside its share.
+  // Immich enforces asset membership; the proxy must surface a uniform 404
+  // across every per-asset endpoint without leaking upstream error phrasing.
+  test('a foreign asset id is not reachable through a valid share key', async ({ page }) => {
+    const foreign = '11111111-2222-3333-4444-555555555555';
+    const endpoints = [
+      `/api/assets/${foreign}`,
+      `/api/assets/${foreign}/original`,
+      `/api/assets/${foreign}/thumbnail?size=thumbnail`,
+      `/api/assets/${foreign}/video/playback`,
+    ];
+
+    for (const ep of endpoints) {
+      const res = await page.request.get(`/share/${shareKey()}${ep}`);
+      expect(res.status(), `${ep} must not expose data (no 200) and must not 500`).toBe(404);
+      const body = await res.text();
+      expect(body.toLowerCase(), `${ep} must not leak upstream internals`).not.toContain('asset.');
+    }
+  });
 });

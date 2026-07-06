@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
 	"strings"
@@ -197,6 +198,20 @@ func getUniqueFilename(filename string, used map[string]int) string {
 		used[filename] = 1
 	}
 	return filename
+}
+
+// filenameFromContentDisposition extracts the filename from a
+// Content-Disposition header, returning "" when absent or unparsable.
+// The result is sanitized before use as a ZIP entry name.
+func filenameFromContentDisposition(header string) string {
+	if header == "" {
+		return ""
+	}
+	_, params, err := mime.ParseMediaType(header)
+	if err != nil {
+		return ""
+	}
+	return sanitizeFilename(params["filename"])
 }
 
 // getExtensionForMimeType returns a file extension for a MIME type

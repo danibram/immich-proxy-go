@@ -160,10 +160,18 @@ func (h *ShareHandler) processDownloadJob(job *DownloadJob, assetIDs []string, a
 			continue
 		}
 
-		// Determine filename
+		// Determine filename. Timeline-sourced assets (Immich v3) carry no
+		// originalFileName, so fall back to the upstream response headers.
 		filename := asset.OriginalFileName
 		if filename == "" {
-			filename = assetID + getExtensionForMimeType(asset.OriginalMimeType)
+			filename = filenameFromContentDisposition(resp.Header.Get("Content-Disposition"))
+		}
+		if filename == "" {
+			mimeType := asset.OriginalMimeType
+			if mimeType == "" {
+				mimeType = resp.Header.Get("Content-Type")
+			}
+			filename = assetID + getExtensionForMimeType(mimeType)
 		}
 		filename = getUniqueFilename(filename, usedFilenames)
 
