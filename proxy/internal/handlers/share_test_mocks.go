@@ -285,11 +285,12 @@ func handleMockAsset(w http.ResponseWriter, r *http.Request, shareKey string) {
 
 	now := time.Now()
 
-	if assetID == testAssetID1 && shareKey == "valid-key" {
+	if assetID == testAssetID1 && (shareKey == "valid-key" || shareKey == "metadata-off") {
 		asset := immich.Asset{
 			ID:               testAssetID1,
 			Type:             "IMAGE",
 			OriginalFileName: "photo1.jpg",
+			OriginalPath:     "/data/library/photo1.jpg",
 			FileCreatedAt:    now,
 			FileModifiedAt:   now,
 			LocalDateTime:    now,
@@ -300,6 +301,8 @@ func handleMockAsset(w http.ResponseWriter, r *http.Request, shareKey string) {
 				FocalLength: 50.0,
 				FNumber:     1.8,
 				ISO:         100,
+				Latitude:    40.4168,
+				Longitude:   -3.7038,
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")

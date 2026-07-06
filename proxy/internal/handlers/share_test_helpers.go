@@ -37,6 +37,7 @@ func setupTestHandlerWithOptions(t *testing.T, mockServer *httptest.Server, opti
 		r.Use(middleware.ExtractShareKey)
 		r.Get("/link", handler.GetSharedLink)
 		r.Get("/album/{albumID}", handler.GetAlbum)
+		r.Get("/asset/{assetID}", handler.GetAssetInfo)
 		r.Get("/asset/{assetID}/thumbnail", handler.GetThumbnail)
 		r.Get("/asset/{assetID}/original", handler.GetOriginal)
 		r.Post("/validate-password", handler.ValidatePassword)

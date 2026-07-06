@@ -8,6 +8,7 @@ import {
   allowDownload,
   assets,
   closeViewer,
+  mergeAssetDetails,
   selectAsset,
   selectedAsset,
   selectedAssetIndex,
@@ -112,6 +113,20 @@ export default function AssetViewer() {
     if (!asset) return;
     captureEvent('asset_viewed', { asset_type: asset.type });
     setShowInfo(false);
+  });
+
+  // Immich v3 album listings carry no EXIF or original filename; fetch the
+  // full details once per asset when it is opened in the viewer.
+  const detailsRequested = new Set<string>();
+  createEffect(() => {
+    const asset = current();
+    if (!asset?.id || asset.exifInfo || !showMetadata()) return;
+    if (detailsRequested.has(asset.id)) return;
+    detailsRequested.add(asset.id);
+    api
+      .getAsset(asset.id)
+      .then(mergeAssetDetails)
+      .catch(() => undefined);
   });
 
   onMount(() => window.addEventListener('keydown', handleKeydown));

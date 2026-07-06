@@ -121,6 +121,11 @@ func TestGetSharedLink_StalePasswordOnPublicShareFallsBackToPublicSlug(t *testin
 	var seenQueries []string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/shared-links/login" {
+			// Immich v2: the login endpoint does not exist.
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		if got := r.URL.Query().Get("slug"); got != "mei" {
 			t.Fatalf("expected slug query mei, got %q", got)
 		}
@@ -198,6 +203,11 @@ func TestGetThumbnail_StalePasswordOnProtectedShareDoesNotBypass(t *testing.T) {
 	var seenQueries []string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/shared-links/login" {
+			// Immich v2: the login endpoint does not exist.
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		if r.URL.Path != "/api/assets/asset-1/thumbnail" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
@@ -238,6 +248,11 @@ func TestGetThumbnail_StalePasswordOnPublicShareDoesNotRetryWithoutPassword(t *t
 	var seenQueries []string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/shared-links/login" {
+			// Immich v2: the login endpoint does not exist.
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		if r.URL.Path != "/api/assets/asset-1/thumbnail" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}

@@ -59,6 +59,8 @@ export interface Asset {
   isOffline: boolean;
   duration: string;
   exifInfo?: ExifInfo;
+  /** Display aspect ratio (width/height); provided by Immich v3, which no longer exposes EXIF dimensions in listings. */
+  ratio?: number;
   livePhotoVideoId?: string;
   people?: Person[];
   checksum: string;

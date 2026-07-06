@@ -72,6 +72,12 @@ class ApiClient {
     return this.request<Album>(`/albums/${albumId}`);
   }
 
+  // Full asset details (EXIF, original filename). Immich v3 album listings
+  // no longer include these, so the viewer fetches them lazily per asset.
+  async getAsset(assetId: string): Promise<Asset> {
+    return this.request<Asset>(`/assets/${assetId}`);
+  }
+
   getThumbnailUrl(assetId: string, size: 'preview' | 'thumbnail' = 'thumbnail'): string {
     return `${this.baseUrl}/assets/${assetId}/thumbnail?size=${size}`;
   }

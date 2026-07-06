@@ -55,6 +55,43 @@ func (h *ShareHandler) GetSharedLink(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(link)
 }
 
+// GetAssetInfo returns sanitized details (EXIF, original filename) for a
+// single asset. Immich v3 no longer includes this data in album listings, so
+// the web app fetches it lazily when an asset is opened in the viewer.
+func (h *ShareHandler) GetAssetInfo(w http.ResponseWriter, r *http.Request) {
+	assetID := chi.URLParam(r, "assetID")
+	if !middleware.IsValidUUID(assetID) {
+		http.Error(w, "Invalid asset ID format", http.StatusBadRequest)
+		return
+	}
+
+	link, creds, droppedStalePassword, err := h.loadShareLinkFromRequest(r)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+	if droppedStalePassword {
+		clearSharePasswordCookie(w, r)
+	}
+	if h.rejectIfExpired(w, link) {
+		return
+	}
+
+	// Immich validates that the asset belongs to this shared link — the same
+	// trust model as the original/thumbnail routes.
+	asset, err := h.client.GetAssetWithKeyType(assetID, creds.key, creds.password, creds.keyType)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+
+	effectiveShowMetadata := applyEffectiveShareOptions(link, h.config.Options)
+	sanitizeAsset(asset, effectiveShowMetadata)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(asset)
+}
+
 // GetAlbum returns album information
 func (h *ShareHandler) GetAlbum(w http.ResponseWriter, r *http.Request) {
 	albumID := chi.URLParam(r, "albumID")
