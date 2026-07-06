@@ -62,22 +62,9 @@ func (c *Client) GetSharedLinkWithKeyTypeDroppedStalePassword(key string, passwo
 }
 
 func (c *Client) getSharedLinkWithKeyType(key string, password string, keyType KeyType) (*SharedLink, error) {
-	// Build URL with query parameters
-	// keyType determines whether we use 'key' or 'slug' as the param name
-	paramName := string(keyType) // "key" or "slug"
-	reqURL := fmt.Sprintf("%s/api/shared-links/me?%s=%s", c.baseURL, paramName, url.QueryEscape(key))
-	if password != "" {
-		reqURL = fmt.Sprintf("%s&password=%s", reqURL, url.QueryEscape(password))
-	}
-
-	req, err := http.NewRequest("GET", reqURL, nil)
+	resp, err := c.proxyShareRequest("GET", "/api/shared-links/me", key, password, keyType, nil, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, wrapTransportError(err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -131,20 +118,10 @@ func (c *Client) GetAlbumWithKeyType(albumID string, key string, password string
 }
 
 func (c *Client) getAlbumWithKeyType(albumID string, key string, password string, keyType KeyType) (*Album, error) {
-	paramName := string(keyType)
-	reqURL := fmt.Sprintf("%s/api/albums/%s?%s=%s", c.baseURL, albumID, paramName, url.QueryEscape(key))
-	if password != "" {
-		reqURL = fmt.Sprintf("%s&password=%s", reqURL, url.QueryEscape(password))
-	}
-
-	req, err := http.NewRequest("GET", reqURL, nil)
+	path := fmt.Sprintf("/api/albums/%s", albumID)
+	resp, err := c.proxyShareRequest("GET", path, key, password, keyType, nil, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, wrapTransportError(err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -168,33 +145,10 @@ func (c *Client) GetAsset(assetID string, key string, password string) (*Asset, 
 
 // GetAssetWithKeyType retrieves asset information with explicit key type
 func (c *Client) GetAssetWithKeyType(assetID string, key string, password string, keyType KeyType) (*Asset, error) {
-	// Build query params
-	query := url.Values{}
-	if keyType == KeyTypeSlug {
-		query.Set("slug", key)
-	} else {
-		query.Set("key", key)
-	}
-	if password != "" {
-		query.Set("password", password)
-	}
-
-	reqURL := fmt.Sprintf("%s/api/assets/%s?%s", c.baseURL, assetID, query.Encode())
-
-	req, err := http.NewRequest("GET", reqURL, nil)
+	path := fmt.Sprintf("/api/assets/%s", assetID)
+	resp, err := c.proxyShareRequest("GET", path, key, password, keyType, nil, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Send both query params AND headers for maximum compatibility
-	req.Header.Set("x-immich-share-key", key)
-	if password != "" {
-		req.Header.Set("x-immich-share-password", password)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, wrapTransportError(err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -238,6 +192,51 @@ func (c *Client) ProxyRequest(method, path string, query url.Values, headers htt
 	return resp, nil
 }
 
+// proxyShareRequest applies shared-link authentication as one atomic operation.
+// Keeping the query parameter and matching header together prevents key/slug
+// mismatches across individual client methods.
+func (c *Client) proxyShareRequest(
+	method string,
+	path string,
+	key string,
+	password string,
+	keyType KeyType,
+	query url.Values,
+	headers http.Header,
+	body io.Reader,
+) (*http.Response, error) {
+	if query == nil {
+		query = url.Values{}
+	}
+	if headers == nil {
+		headers = http.Header{}
+	}
+	query.Del("key")
+	query.Del("slug")
+	query.Del("password")
+	headers.Del("x-immich-share-key")
+	headers.Del("x-immich-share-slug")
+	headers.Del("x-immich-share-password")
+
+	switch keyType {
+	case KeyTypeKey:
+		query.Set("key", key)
+		headers.Set("x-immich-share-key", key)
+	case KeyTypeSlug:
+		query.Set("slug", key)
+		headers.Set("x-immich-share-slug", key)
+	default:
+		return nil, fmt.Errorf("unsupported shared-link key type %q", keyType)
+	}
+
+	if password != "" {
+		query.Set("password", password)
+		headers.Set("x-immich-share-password", password)
+	}
+
+	return c.ProxyRequest(method, path, query, headers, body)
+}
+
 // GetThumbnail retrieves an asset thumbnail
 func (c *Client) GetThumbnail(assetID string, key string, password string, size string) (*http.Response, error) {
 	return c.GetThumbnailWithKeyType(assetID, key, password, size, KeyTypeKey)
@@ -246,12 +245,12 @@ func (c *Client) GetThumbnail(assetID string, key string, password string, size 
 // GetThumbnailWithKeyType retrieves an asset thumbnail with specified key type
 func (c *Client) GetThumbnailWithKeyType(assetID string, key string, password string, size string, keyType KeyType) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/thumbnail", assetID)
-	query := shareQuery(key, password, keyType)
+	query := url.Values{}
 	if size != "" {
 		query.Set("size", size)
 	}
 
-	return c.ProxyRequest("GET", path, query, nil, nil)
+	return c.proxyShareRequest("GET", path, key, password, keyType, query, nil, nil)
 }
 
 // GetOriginal retrieves the original asset file
@@ -262,7 +261,7 @@ func (c *Client) GetOriginal(assetID string, key string, password string) (*http
 // GetOriginalWithKeyType retrieves the original asset file with specified key type
 func (c *Client) GetOriginalWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/original", assetID)
-	return c.ProxyRequest("GET", path, shareQuery(key, password, keyType), nil, nil)
+	return c.proxyShareRequest("GET", path, key, password, keyType, nil, nil, nil)
 }
 
 // GetVideo retrieves a video for playback
@@ -273,7 +272,7 @@ func (c *Client) GetVideo(assetID string, key string, password string) (*http.Re
 // GetVideoWithKeyType retrieves a video for playback with specified key type
 func (c *Client) GetVideoWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/video/playback", assetID)
-	return c.ProxyRequest("GET", path, shareQuery(key, password, keyType), nil, nil)
+	return c.proxyShareRequest("GET", path, key, password, keyType, nil, nil, nil)
 }
 
 // UploadAsset uploads an asset via a shared link (uses key by default)
@@ -284,24 +283,10 @@ func (c *Client) UploadAsset(key string, password string, contentType string, bo
 // UploadAssetWithKeyType uploads an asset via a shared link with explicit key type
 func (c *Client) UploadAssetWithKeyType(key string, password string, contentType string, body io.Reader, keyType KeyType) (*http.Response, error) {
 	path := "/api/assets"
-	query := url.Values{}
-	if keyType == KeyTypeSlug {
-		query.Set("slug", key)
-	} else {
-		query.Set("key", key)
-	}
-	if password != "" {
-		query.Set("password", password)
-	}
-
 	headers := http.Header{}
 	headers.Set("Content-Type", contentType)
-	headers.Set("x-immich-share-key", key)
-	if password != "" {
-		headers.Set("x-immich-share-password", password)
-	}
 
-	return c.ProxyRequest("POST", path, query, headers, body)
+	return c.proxyShareRequest("POST", path, key, password, keyType, nil, headers, body)
 }
 
 // AddAssetToAlbum adds an asset to an album using the shared link key (uses key by default)
@@ -312,22 +297,8 @@ func (c *Client) AddAssetToAlbum(albumID string, assetID string, key string, pas
 // AddAssetToAlbumWithKeyType adds an asset to an album with explicit key type
 func (c *Client) AddAssetToAlbumWithKeyType(albumID string, assetID string, key string, password string, keyType KeyType) error {
 	path := fmt.Sprintf("/api/albums/%s/assets", albumID)
-	query := url.Values{}
-	if keyType == KeyTypeSlug {
-		query.Set("slug", key)
-	} else {
-		query.Set("key", key)
-	}
-	if password != "" {
-		query.Set("password", password)
-	}
-
 	headers := http.Header{}
 	headers.Set("Content-Type", "application/json")
-	headers.Set("x-immich-share-key", key)
-	if password != "" {
-		headers.Set("x-immich-share-password", password)
-	}
 
 	// SECURITY: build the JSON body with json.Marshal to guarantee proper
 	// escaping. Using fmt.Sprintf with %s lets any quote/control char in
@@ -344,7 +315,7 @@ func (c *Client) AddAssetToAlbumWithKeyType(albumID string, assetID string, key 
 	}
 	body := bytes.NewReader(bodyBytes)
 
-	resp, err := c.ProxyRequest("PUT", path, query, headers, body)
+	resp, err := c.proxyShareRequest("PUT", path, key, password, keyType, nil, headers, body)
 	if err != nil {
 		return fmt.Errorf("failed to add asset to album: %w", err)
 	}
@@ -356,15 +327,6 @@ func (c *Client) AddAssetToAlbumWithKeyType(albumID string, assetID string, key 
 	}
 
 	return nil
-}
-
-func shareQuery(key string, password string, keyType KeyType) url.Values {
-	query := url.Values{}
-	query.Set(string(keyType), key)
-	if password != "" {
-		query.Set("password", password)
-	}
-	return query
 }
 
 func isStalePasswordOnPublicShareError(err error) bool {

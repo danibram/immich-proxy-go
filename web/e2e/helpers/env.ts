@@ -16,6 +16,7 @@ export const seed = {
   shareKey: () => env('DEFAULT_SHARE_KEY'),
   shareSlug: () => env('DEFAULT_SHARE_SLUG'),
   overrideOnKey: () => env('OVERRIDE_ON_SHARE_KEY'),
+  overrideOnSlug: () => env('OVERRIDE_ON_SHARE_SLUG'),
   overrideOffKey: () => env('OVERRIDE_OFF_SHARE_KEY'),
   metadataOffKey: () => env('METADATA_OFF_SHARE_KEY'),
   privateAlbumId: () => env('PRIVATE_ALBUM_ID'),

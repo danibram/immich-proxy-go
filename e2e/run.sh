@@ -151,6 +151,7 @@ run_scenario() {
         playwright_specs=(
           e2e/share-gallery.spec.ts
           e2e/share-proxy-options.spec.ts
+          e2e/share-upload.spec.ts
           e2e/public-share-security.spec.ts
           e2e/share-password-security.spec.ts
         )
