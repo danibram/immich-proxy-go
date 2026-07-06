@@ -109,6 +109,20 @@ class ApiClient {
     return `${this.baseUrl}/download/jobs/${jobId}/file`;
   }
 
+  // Fetch a proxied URL as a Blob via fetch() so the request carries
+  // Sec-Fetch-Dest: empty. Navigating to these URLs directly (window.open,
+  // location) sends Sec-Fetch-Dest: document, which hotlink protection blocks
+  // with "Direct access not allowed". Returns the blob plus the server's
+  // suggested filename (from Content-Disposition) when present.
+  async fetchDownload(url: string): Promise<{ blob: Blob; filename?: string }> {
+    const response = await fetch(url, { credentials: 'include' });
+    if (!response.ok) {
+      throw new ApiError(response.status, await response.text());
+    }
+    const blob = await response.blob();
+    return { blob, filename: filenameFromContentDisposition(response.headers.get('Content-Disposition')) };
+  }
+
   // Download with progress tracking - returns the download URL when ready
   async downloadAsZip(
     assetIds: string[],
@@ -174,6 +188,22 @@ class ApiClient {
       xhr.send(formData);
     });
   }
+}
+
+// Parse the filename from a Content-Disposition header. Handles both
+// `filename="x"` and RFC 5987 `filename*=UTF-8''x`.
+function filenameFromContentDisposition(header: string | null): string | undefined {
+  if (!header) return undefined;
+  const star = header.match(/filename\*=(?:UTF-8'')?([^;]+)/i);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1].replace(/^"|"$/g, ''));
+    } catch {
+      // fall through to the plain form
+    }
+  }
+  const plain = header.match(/filename="?([^";]+)"?/i);
+  return plain ? plain[1] : undefined;
 }
 
 export class ApiError extends Error {
