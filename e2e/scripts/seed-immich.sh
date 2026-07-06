@@ -23,6 +23,7 @@ OVERRIDE_OFF_SHARED_SLUG="${OVERRIDE_OFF_SHARED_SLUG:-${SHARED_SLUG}-override-of
 METADATA_OFF_SHARED_SLUG="${METADATA_OFF_SHARED_SLUG:-${SHARED_SLUG}-metadata-off}"
 PASSWORD_PROTECTED_SHARED_SLUG="${PASSWORD_PROTECTED_SHARED_SLUG:-${SHARED_SLUG}-protected}"
 PASSWORD_PROTECTED_B_SHARED_SLUG="${PASSWORD_PROTECTED_B_SHARED_SLUG:-${SHARED_SLUG}-protected-b}"
+INDIVIDUAL_SHARED_SLUG="${INDIVIDUAL_SHARED_SLUG:-${SHARED_SLUG}-individual}"
 E2E_SHARE_PASSWORD="${E2E_SHARE_PASSWORD:-e2e-secret-password}"
 E2E_SHARE_PASSWORD_B="${E2E_SHARE_PASSWORD_B:-another-e2e-password}"
 
@@ -384,6 +385,33 @@ create_one_shared_link() {
   printf -v "${slug_var}" '%s' "${share_slug}"
 }
 
+# INDIVIDUAL (non-album) share with a photo and a video. Immich v3 returns
+# these assets inline with numeric durations, a decode path the album shares
+# never exercise.
+create_individual_shared_link() {
+  local out_file="/tmp/shared-link-individual.json"
+  local payload
+  payload="$(jq -nc \
+    --arg photo "${FIRST_ASSET_ID}" \
+    --arg video "${VIDEO_ASSET_ID}" \
+    --arg slug "${INDIVIDUAL_SHARED_SLUG}" \
+    '{type: "INDIVIDUAL", assetIds: [$photo, $video], slug: $slug, allowDownload: true, allowUpload: false, showMetadata: true}')"
+
+  local status
+  status="$(json_request "POST" "/shared-links" "${payload}" "Authorization: Bearer ${ACCESS_TOKEN}" "${out_file}")"
+  if [[ "$status" != "201" ]]; then
+    cat "${out_file}" >&2 || true
+    die "Failed to create INDIVIDUAL shared link (status: ${status})"
+  fi
+
+  INDIVIDUAL_SHARE_KEY="$(jq -r '.key // empty' "${out_file}")"
+  INDIVIDUAL_SHARE_SLUG="$(jq -r '.slug // empty' "${out_file}")"
+  if [[ -z "${INDIVIDUAL_SHARE_KEY}" ]]; then
+    cat "${out_file}" >&2 || true
+    die "INDIVIDUAL shared link response did not include key"
+  fi
+}
+
 create_shared_links() {
   create_one_shared_link DEFAULT_SHARE_KEY DEFAULT_SHARE_SLUG "${DEFAULT_ALBUM_ID}" "${DEFAULT_SHARED_SLUG}" '{}'
   create_one_shared_link OVERRIDE_ON_SHARE_KEY OVERRIDE_ON_SHARE_SLUG "${OVERRIDE_ON_ALBUM_ID}" "${OVERRIDE_ON_SHARED_SLUG}" \
@@ -397,6 +425,7 @@ create_shared_links() {
     '{"allowDownload":true,"allowUpload":false,"showMetadata":true}' "${E2E_SHARE_PASSWORD}"
   create_one_shared_link PASSWORD_PROTECTED_B_SHARE_KEY PASSWORD_PROTECTED_B_SHARE_SLUG "${PASSWORD_PROTECTED_B_ALBUM_ID}" "${PASSWORD_PROTECTED_B_SHARED_SLUG}" \
     '{"allowDownload":true,"allowUpload":false,"showMetadata":true}' "${E2E_SHARE_PASSWORD_B}"
+  create_individual_shared_link
 }
 
 write_runtime_file() {
@@ -422,6 +451,8 @@ PASSWORD_PROTECTED_B_SHARE_KEY=${PASSWORD_PROTECTED_B_SHARE_KEY}
 PASSWORD_PROTECTED_B_SHARE_SLUG=${PASSWORD_PROTECTED_B_SHARE_SLUG}
 PASSWORD_PROTECTED_B_ALBUM_ID=${PASSWORD_PROTECTED_B_ALBUM_ID}
 PASSWORD_PROTECTED_B_ASSET_ID=${PASSWORD_PROTECTED_B_ASSET_ID}
+INDIVIDUAL_SHARE_KEY=${INDIVIDUAL_SHARE_KEY}
+INDIVIDUAL_SHARE_SLUG=${INDIVIDUAL_SHARE_SLUG}
 E2E_SHARE_PASSWORD=${E2E_SHARE_PASSWORD}
 E2E_SHARE_PASSWORD_B=${E2E_SHARE_PASSWORD_B}
 ASSET_ID=${ASSET_ID}

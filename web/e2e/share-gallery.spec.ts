@@ -89,6 +89,10 @@ test.describe('Share gallery (integration)', () => {
     await page.waitForTimeout(400);
 
     expect(maxActiveRequests).toBeLessThanOrEqual(4);
+
+    // Thumbnail routes may still be mid-delay when the test ends; drop them
+    // quietly instead of failing the test on interrupted callbacks.
+    await page.unrouteAll({ behavior: 'ignoreErrors' });
   });
 
   test('opens viewer, navigates with keyboard, and closes', async ({ page }) => {

@@ -37,7 +37,7 @@ export interface SharedUploadResult {
   status: 'created' | 'duplicate' | 'replaced';
 }
 
-function shareApiPath(route: ShareRoute, path: string): string {
+export function shareApiPath(route: ShareRoute, path: string): string {
   return `/${route.prefix}/${encodeURIComponent(route.identifier)}/api${path}`;
 }
 
@@ -126,6 +126,40 @@ export async function downloadAssetThroughShare(
   const response = await request.get(shareApiPath(route, `/assets/${assetId}/original`));
   expect(response.status()).toBe(200);
   return response.body();
+}
+
+export async function downloadAssetsAsZipThroughShare(
+  request: APIRequestContext,
+  route: ShareRoute,
+  assetIds: string[]
+): Promise<Buffer> {
+  const start = await request.post(shareApiPath(route, '/assets/download'), {
+    data: { assetIds },
+  });
+  expect(start.status()).toBe(200);
+  const startBody = requireRecord(await start.json(), 'download start response');
+  const jobId = requireString(startBody.jobId, 'download job id');
+
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(shareApiPath(route, `/download/jobs/${jobId}`));
+        expect(response.status()).toBe(200);
+        const job = requireRecord(await response.json(), 'download job response');
+        const status = requireString(job.status, 'download job status');
+        if (status === 'failed') {
+          throw new Error(`download job failed: ${String(job.error ?? 'unknown error')}`);
+        }
+        return status;
+      },
+      { message: 'bulk download job should become ready', timeout: 30_000 }
+    )
+    .toBe('ready');
+
+  const download = await request.get(shareApiPath(route, `/download/jobs/${jobId}/file`));
+  expect(download.status()).toBe(200);
+  expect(download.headers()['content-type']).toContain('application/zip');
+  return download.body();
 }
 
 export async function fetchSharedLink(
