@@ -12,6 +12,10 @@ export default defineConfig({
   timeout: externalBaseURL ? 90_000 : 15_000,
   use: {
     baseURL: externalBaseURL || 'http://localhost:4173',
+    // Pin the browser locale so specs that assert English UI text are
+    // deterministic regardless of the CI host locale. i18n specs override
+    // this per-context with test.use({ locale }).
+    locale: 'en-US',
     trace: 'off',
     screenshot: 'off',
   },

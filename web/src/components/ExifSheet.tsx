@@ -10,6 +10,7 @@ import {
 } from 'lucide-solid';
 import { For, Show } from 'solid-js';
 import type { Asset } from '~/api/types';
+import { t } from '~/i18n';
 import type { ExifRow } from '~/utils/viewerFormat';
 import { buildExifRows, formatViewerFootDate } from '~/utils/viewerFormat';
 
@@ -57,7 +58,7 @@ function ExifRowView(props: { row: ExifRow }) {
 export default function ExifSheet(props: Props) {
   const rows = () => buildExifRows(props.asset);
   const headLabel = () => {
-    const kind = props.asset.type === 'VIDEO' ? 'Video' : 'Photo';
+    const kind = props.asset.type === 'VIDEO' ? t().exif.video : t().exif.photo;
     const date = formatViewerFootDate(props.asset);
     return date ? `${kind} · ${date}` : `${kind} · ${props.asset.originalFileName}`;
   };
@@ -80,7 +81,7 @@ export default function ExifSheet(props: Props) {
         <div class="exif-grip" />
         <div class="exif-head">
           <span>{headLabel()}</span>
-          <button type="button" class="exif-x" aria-label="Close info" onClick={props.onClose}>
+          <button type="button" class="exif-x" aria-label={t().exif.closeInfo} onClick={props.onClose}>
             <X size={18} />
           </button>
         </div>

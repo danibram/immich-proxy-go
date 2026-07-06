@@ -1,5 +1,6 @@
 import { Upload } from 'lucide-solid';
 import { Show } from 'solid-js';
+import { t } from '~/i18n';
 
 interface Props {
   hidden: boolean;
@@ -11,7 +12,7 @@ export default function UploadFab(props: Props) {
     <button
       type="button"
       class={`fab ${props.hidden ? 'is-hidden' : ''}`}
-      aria-label="Upload items"
+      aria-label={t().topbar.uploadItems}
       onClick={props.onClick}
     >
       <Show when={!props.hidden}>

@@ -5,6 +5,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-06
+
+### Features
+
+- ✨ Localize the app and detect the browser language
+
+Add a small i18n layer (English + Spanish) so the gallery UI adapts to the
+visitor's browser locale, with a manual language selector on the homepage.
+
+- i18n/: English is the source-of-truth dictionary; its shape types every
+  other locale (so a missing/renamed key is a compile error). Count- and
+  grammar-dependent strings are functions, keeping pluralization per language.
+- Locale is a reactive signal: t() reads it, so switching re-renders. It
+  resolves from an explicit stored choice, then navigator.language(s), then
+  English; document.documentElement.lang follows.
+- Wire every user-facing string (share states, password prompt, top bar,
+  viewer, EXIF sheet, upload modal, download progress, date labels) through
+  t(). Dates already used toLocaleDateString and stay locale-aware.
+- Homepage: all marketing copy is translated and a persisted <select> lets
+  visitors switch language on demand.
+
+
+### Other
+
+- Merge pull request #19 from danibram/codex/fix-download-hotlink
+
+🐛 Fix downloads under hotlink protection (v1.2.1)
+
+
+### Testing
+
+- ✅ Cover i18n with unit and e2e tests
+
+- i18n unit test: locale switching, per-language pluralization, persistence,
+  and a shape-parity check that guards the translated feature/security arrays.
+- share-i18n.spec.ts: a Spanish browser renders the share UI in Spanish, an
+  English browser in English, and the homepage selector switches + persists.
+- Pin the Playwright browser locale to en-US so specs asserting English UI
+  text are deterministic; run the i18n spec in the full suite.
+
 ## [1.2.1] - 2026-07-06
 
 ### Bug Fixes

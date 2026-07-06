@@ -1,4 +1,5 @@
 import type { Asset } from '~/api/types';
+import { t } from '~/i18n';
 
 export interface DateGroup {
   date: string;
@@ -28,8 +29,8 @@ export function formatDateLabel(date: Date): string {
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  if (date.toDateString() === today.toDateString()) return 'Today';
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  if (date.toDateString() === today.toDateString()) return t().common.today;
+  if (date.toDateString() === yesterday.toDateString()) return t().common.yesterday;
 
   return date.toLocaleDateString(undefined, {
     weekday: 'long',

@@ -2,6 +2,7 @@ import { Eye, EyeOff, Lock } from 'lucide-solid';
 import { createSignal } from 'solid-js';
 import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
+import { t } from '~/i18n';
 import { setPasswordRequired } from '~/store/share';
 
 interface Props {
@@ -18,7 +19,7 @@ export default function PasswordPrompt(props: Props) {
     e.preventDefault();
 
     if (!password().trim()) {
-      setErrorMessage('Please enter a password');
+      setErrorMessage(t().password.empty);
       return;
     }
 
@@ -34,9 +35,9 @@ export default function PasswordPrompt(props: Props) {
       const invalidPassword = err instanceof Error && err.message.includes('401');
       captureEvent('share_password_unlock', { success: false, invalid_password: invalidPassword });
       if (invalidPassword) {
-        setErrorMessage('Invalid password');
+        setErrorMessage(t().password.invalid);
       } else {
-        setErrorMessage('An error occurred. Please try again.');
+        setErrorMessage(t().password.genericError);
       }
     } finally {
       setIsValidating(false);
@@ -52,21 +53,21 @@ export default function PasswordPrompt(props: Props) {
         >
           <Lock size={32} stroke-width={1.8} />
         </div>
-        <h1>Password required</h1>
+        <h1>{t().password.title}</h1>
         <p style={{ color: 'var(--grey-4)', 'font-size': '14px', 'margin-top': '6px' }}>
-          This album is protected
+          {t().password.subtitle}
         </p>
       </div>
 
       <form onSubmit={handleSubmit}>
-        <label for="password">Password</label>
+        <label for="password">{t().password.label}</label>
         <div class="relative">
           <input
             type={showPassword() ? 'text' : 'password'}
             id="password"
             value={password()}
             onInput={(e) => setPassword(e.currentTarget.value)}
-            placeholder="Enter password"
+            placeholder={t().password.placeholder}
             disabled={isValidating()}
           />
           <button
@@ -74,7 +75,7 @@ export default function PasswordPrompt(props: Props) {
             class="absolute right-3 top-1/2 -translate-y-1/2 p-1"
             style={{ color: 'var(--grey-3)', background: 'none', border: 'none', cursor: 'pointer' }}
             onClick={() => setShowPassword(!showPassword())}
-            aria-label={showPassword() ? 'Hide password' : 'Show password'}
+            aria-label={showPassword() ? t().password.hide : t().password.show}
           >
             {showPassword() ? <EyeOff size={20} /> : <Eye size={20} />}
           </button>
@@ -83,7 +84,7 @@ export default function PasswordPrompt(props: Props) {
         {errorMessage() && <div class="password-error">{errorMessage()}</div>}
 
         <button type="submit" class="password-submit" disabled={isValidating()}>
-          {isValidating() ? 'Checking…' : 'Unlock album'}
+          {isValidating() ? t().password.checking : t().password.unlock}
         </button>
       </form>
     </div>

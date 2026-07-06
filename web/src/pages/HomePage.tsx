@@ -1,6 +1,7 @@
-import { onCleanup, onMount } from 'solid-js';
+import { For, onCleanup, onMount } from 'solid-js';
 import { captureEvent, registerPage, unregisterPage } from '~/analytics';
 import BrandMark from '~/components/BrandMark';
+import { LOCALE_NAMES, locale, setLocale, SUPPORTED_LOCALES, t, type Locale } from '~/i18n';
 
 const GITHUB_URL = 'https://github.com/danibram/immich-proxy-go';
 
@@ -21,110 +22,74 @@ function LockIcon() {
   );
 }
 
-const FEATURES = [
-  {
-    title: 'Justified gallery',
-    body: 'Flickr-style rows that keep aspect ratio, grouped by date, with lazy-loaded thumbnails and video indicators.',
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <rect x="3" y="4" width="7" height="7" rx="1.5" />
-        <rect x="14" y="4" width="7" height="4" rx="1.5" />
-        <rect x="14" y="11" width="7" height="9" rx="1.5" />
-        <rect x="3" y="14" width="7" height="6" rx="1.5" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Timeline scrubber',
-    body: 'Quick navigation with year markers, touch-drag support, and a live date label that follows your position.',
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path d="M4 6h16M4 12h16M4 18h16" />
-        <circle cx="9" cy="6" r="1.6" fill="currentColor" stroke="none" />
-        <circle cx="15" cy="12" r="1.6" fill="currentColor" stroke="none" />
-        <circle cx="7" cy="18" r="1.6" fill="currentColor" stroke="none" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Selection & download',
-    body: 'Multi-select, pick a whole day at once, then download a ZIP with live progress — when the link allows it.',
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path d="M12 3v12m0 0l-4-4m4 4l4-4" />
-        <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Full-screen viewer',
-    body: 'Full-resolution photos and video with swipe and keyboard navigation, plus an EXIF metadata panel.',
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Drag & drop upload',
-    body: 'Guests contribute to albums with batch uploads, progress, and content-type checks — enabled per link in Immich.',
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path d="M12 16V4m0 0l-4 4m4-4l4 4" />
-        <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Memorable URLs',
-    body: (
-      <>
-        Serve standard keys at <code>/share/&#123;key&#125;</code> or human-readable slugs at{' '}
-        <code>/s/&#123;slug&#125;</code>.
-      </>
-    ),
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-        <path d="M9 15l6-6" />
-        <path d="M11 6l1-1a4 4 0 016 6l-1 1" />
-        <path d="M13 18l-1 1a4 4 0 01-6-6l1-1" />
-      </svg>
-    ),
-  },
-] as const;
+// Feature/security copy is translated (see i18n dictionaries); the icons stay
+// here and are paired with the translated items by index.
+const FEATURE_ICONS = [
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+    <rect x="3" y="4" width="7" height="7" rx="1.5" />
+    <rect x="14" y="4" width="7" height="4" rx="1.5" />
+    <rect x="14" y="11" width="7" height="9" rx="1.5" />
+    <rect x="3" y="14" width="7" height="6" rx="1.5" />
+  </svg>,
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+    <path d="M4 6h16M4 12h16M4 18h16" />
+    <circle cx="9" cy="6" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="12" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="7" cy="18" r="1.6" fill="currentColor" stroke="none" />
+  </svg>,
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+    <path d="M12 3v12m0 0l-4-4m4 4l4-4" />
+    <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+  </svg>,
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>,
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+    <path d="M12 16V4m0 0l-4 4m4-4l4 4" />
+    <path d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+  </svg>,
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+    <path d="M9 15l6-6" />
+    <path d="M11 6l1-1a4 4 0 016 6l-1 1" />
+    <path d="M13 18l-1 1a4 4 0 01-6-6l1-1" />
+  </svg>,
+];
 
-const SECURITY_ITEMS = [
-  {
-    title: 'Layered request defences',
-    body: 'Per-IP rate limiting, security headers (CSP, HSTS), strict input and UUID validation on every call.',
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6z" />
-      </svg>
-    ),
-  },
-  {
-    title: 'Password-protected links',
-    body: 'HMAC-SHA256 signed cookies keep protected albums sealed between visits.',
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <rect x="4" y="10" width="16" height="11" rx="2" />
-        <path d="M8 10V7a4 4 0 018 0v3" />
-      </svg>
-    ),
-  },
-  {
-    title: 'CORS & hotlink protection',
-    body: 'Explicit origin allowlist plus optional blocking of direct API access outside the web app.',
-    icon: (
-      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-        <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
-        <path d="M10 21a2 2 0 004 0" />
-      </svg>
-    ),
-  },
-] as const;
+const SECURITY_ICONS = [
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <path d="M12 2l8 4v6c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6z" />
+  </svg>,
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <rect x="4" y="10" width="16" height="11" rx="2" />
+    <path d="M8 10V7a4 4 0 018 0v3" />
+  </svg>,
+  <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M10 21a2 2 0 004 0" />
+  </svg>,
+];
+
+function LanguageSelect() {
+  return (
+    <label class="landing-lang">
+      <span class="sr-only">{t().home.languageLabel}</span>
+      <select
+        aria-label={t().home.languageLabel}
+        value={locale()}
+        onChange={(e) => {
+          const next = e.currentTarget.value as Locale;
+          captureEvent('language_changed', { locale: next });
+          setLocale(next);
+        }}
+      >
+        <For each={SUPPORTED_LOCALES}>
+          {(loc) => <option value={loc}>{LOCALE_NAMES[loc]}</option>}
+        </For>
+      </select>
+    </label>
+  );
+}
 
 export default function HomePage() {
   onMount(() => {
@@ -136,9 +101,11 @@ export default function HomePage() {
     unregisterPage();
   });
 
+  const home = () => t().home;
+
   return (
     <>
-      <title>Immich Public Proxy — secure public sharing for your Immich albums</title>
+      <title>{home().documentTitle}</title>
 
       <header class="landing-nav">
         <nav class="landing-nav-inner">
@@ -150,11 +117,12 @@ export default function HomePage() {
           </a>
           <div class="landing-nav-right">
             <a class="txt" href="#start">
-              Quick start
+              {home().nav.quickStart}
             </a>
+            <LanguageSelect />
             <a class="landing-btn landing-btn--sm" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
               <GitHubIcon />
-              GitHub
+              {home().nav.github}
             </a>
           </div>
         </nav>
@@ -164,22 +132,19 @@ export default function HomePage() {
         <div class="landing-wrap">
           <span class="landing-eyebrow">
             <span class="dot" />
-            Open source · MIT licensed
+            {home().hero.eyebrow}
           </span>
           <h1>
-            Share your photos. <span class="dim">Keep your server private.</span>
+            {home().hero.titleLead} <span class="dim">{home().hero.titleDim}</span>
           </h1>
-          <p class="sub">
-            A secure, high-performance proxy that puts a modern web gallery in front of your shared Immich albums —
-            and exposes nothing else. Your Immich instance stays safely out of reach.
-          </p>
+          <p class="sub">{home().hero.sub}</p>
           <div class="ctas">
             <a class="landing-btn" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
               <GitHubIcon />
-              View on GitHub
+              {home().hero.viewGithub}
             </a>
             <a class="landing-btn landing-btn--ghost" href="#start">
-              Quick start
+              {home().hero.quickStart}
             </a>
           </div>
           <div class="tech">
@@ -192,7 +157,7 @@ export default function HomePage() {
             <span>Docker</span>
           </div>
 
-          <div class="landing-mock" role="img" aria-label="Preview of the public album gallery">
+          <div class="landing-mock" role="img" aria-label={home().hero.mockPreview}>
             <div class="landing-mock-bar">
               <div class="dots">
                 <i />
@@ -208,7 +173,7 @@ export default function HomePage() {
               <div class="landing-mock-scrub">
                 <span class="thumb" />
               </div>
-              <div class="landing-mock-date">Today · Lisbon</div>
+              <div class="landing-mock-date">{home().hero.mockDate}</div>
               <div class="landing-mock-grid">
                 <div class="ph ph-a" style={{ 'grid-column': 'span 4' }} />
                 <div class="ph ph-b vid" style={{ 'grid-column': 'span 5' }} />
@@ -227,19 +192,21 @@ export default function HomePage() {
           <div>
             <span class="landing-eyebrow">
               <span class="dot" />
-              Features
+              {home().features.eyebrow}
             </span>
-            <h2 class="landing-sec-title">A viewing experience guests will recognise.</h2>
-            <p class="landing-sec-lead">Built to feel like Google Photos, served entirely through the proxy.</p>
+            <h2 class="landing-sec-title">{home().features.title}</h2>
+            <p class="landing-sec-lead">{home().features.lead}</p>
           </div>
           <div class="landing-feat-grid">
-            {FEATURES.map((feat) => (
-              <article class="landing-feat">
-                {feat.icon}
-                <h3>{feat.title}</h3>
-                <p>{feat.body}</p>
-              </article>
-            ))}
+            <For each={home().features.items}>
+              {(feat, i) => (
+                <article class="landing-feat">
+                  {FEATURE_ICONS[i()]}
+                  <h3>{feat.title}</h3>
+                  <p>{feat.body}</p>
+                </article>
+              )}
+            </For>
           </div>
         </div>
       </section>
@@ -249,24 +216,24 @@ export default function HomePage() {
           <div>
             <span class="landing-eyebrow">
               <span class="dot" />
-              Secure by default · Quick start
+              {home().security.eyebrow}
             </span>
-            <h2 class="landing-sec-title">Point it at Immich, set your URL, go.</h2>
-            <p class="landing-sec-lead">
-              The proxy sits between the public internet and your server, so Immich is never exposed directly.
-            </p>
+            <h2 class="landing-sec-title">{home().security.title}</h2>
+            <p class="landing-sec-lead">{home().security.lead}</p>
           </div>
           <div class="landing-dual">
             <div>
-              {SECURITY_ITEMS.map((item) => (
-                <div class="landing-sec-item">
-                  {item.icon}
-                  <div>
-                    <h4>{item.title}</h4>
-                    <p>{item.body}</p>
+              <For each={home().security.items}>
+                {(item, i) => (
+                  <div class="landing-sec-item">
+                    {SECURITY_ICONS[i()]}
+                    <div>
+                      <h4>{item.title}</h4>
+                      <p>{item.body}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )}
+              </For>
             </div>
             <div>
               <div class="landing-code-card">
@@ -302,7 +269,7 @@ export default function HomePage() {
                 </pre>
               </div>
               <p class="landing-run">
-                Start from a profile with sensible defaults:
+                {home().security.profilesLead}
                 <br />
                 <span class="chip">read-only</span>
                 <span class="chip">family-upload</span>
@@ -322,16 +289,14 @@ export default function HomePage() {
             </div>
             <div class="flinks">
               <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
-                GitHub
+                {home().nav.github}
               </a>
               <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noopener noreferrer">
-                MIT license
+                {home().footer.mitLicense}
               </a>
             </div>
           </div>
-          <div class="legal">
-            Open-source project · MIT licensed · Not affiliated with the Immich project.
-          </div>
+          <div class="legal">{home().footer.legal}</div>
         </div>
       </footer>
     </>

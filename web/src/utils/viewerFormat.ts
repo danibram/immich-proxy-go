@@ -1,4 +1,5 @@
 import type { Asset } from '~/api/types';
+import { t } from '~/i18n';
 import { formatDuration } from '~/utils/dateUtils';
 
 export interface ExifRow {
@@ -18,7 +19,7 @@ export function formatViewerFootDate(asset: Asset): string {
   const d = assetDate(asset);
   if (!d) return '';
   const today = new Date();
-  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === today.toDateString()) return t().common.today;
 
   return d.toLocaleDateString(undefined, {
     weekday: 'long',
@@ -77,16 +78,18 @@ export function buildExifRows(asset: Asset): ExifRow[] {
   const exif = asset.exifInfo;
   const rows: ExifRow[] = [];
 
-  const camera = [exif?.make, exif?.model].filter(Boolean).join(' ');
-  if (camera) rows.push({ id: 'camera', label: 'Camera', value: camera });
+  const labels = t().exif;
 
-  if (exif?.lensModel) rows.push({ id: 'lens', label: 'Lens', value: exif.lensModel });
+  const camera = [exif?.make, exif?.model].filter(Boolean).join(' ');
+  if (camera) rows.push({ id: 'camera', label: labels.camera, value: camera });
+
+  if (exif?.lensModel) rows.push({ id: 'lens', label: labels.lens, value: exif.lensModel });
 
   const settings = formatExposureSettings(asset);
-  if (settings) rows.push({ id: 'settings', label: 'Settings', value: settings });
+  if (settings) rows.push({ id: 'settings', label: labels.settings, value: settings });
 
   if (asset.originalFileName) {
-    rows.push({ id: 'file', label: 'File', value: asset.originalFileName });
+    rows.push({ id: 'file', label: labels.file, value: asset.originalFileName });
   }
 
   const dims =
@@ -95,15 +98,15 @@ export function buildExifRows(asset: Asset): ExifRow[] {
       : '';
   const size = formatFileSize(exif?.fileSizeInByte);
   const sizeLine = [dims, size].filter(Boolean).join('  ·  ');
-  if (sizeLine) rows.push({ id: 'size', label: 'Dimensions', value: sizeLine });
+  if (sizeLine) rows.push({ id: 'size', label: labels.dimensions, value: sizeLine });
 
   const time = formatViewerFootTime(asset);
-  if (time) rows.push({ id: 'time', label: 'Time', value: time });
+  if (time) rows.push({ id: 'time', label: labels.time, value: time });
 
   const place = formatViewerPlace(asset);
-  if (place) rows.push({ id: 'place', label: 'Location', value: place });
+  if (place) rows.push({ id: 'place', label: labels.location, value: place });
 
-  if (exif?.description) rows.push({ id: 'desc', label: 'Description', value: exif.description });
+  if (exif?.description) rows.push({ id: 'desc', label: labels.description, value: exif.description });
 
   return rows;
 }

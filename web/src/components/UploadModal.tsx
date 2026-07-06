@@ -2,6 +2,7 @@ import { AlertCircle, Check, FileImage, Upload, X } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
+import { t } from '~/i18n';
 import { isUploading, setIsUploading, setSharedLink } from '~/store/share';
 
 interface UploadFile {
@@ -103,7 +104,7 @@ export default function UploadModal(props: Props) {
           failed += 1;
           updateFile(uploadFile.id, {
             status: 'error',
-            error: error instanceof Error ? error.message : 'Upload failed',
+            error: error instanceof Error ? error.message : t().upload.failed,
           });
         }
       }
@@ -157,11 +158,11 @@ export default function UploadModal(props: Props) {
         <div class="sheet scrollbar-hide">
           <div class="sheet-grip" />
           <div class="sheet-head">
-            <h2 class="sheet-title">Upload items</h2>
+            <h2 class="sheet-title">{t().upload.title}</h2>
             <button
               type="button"
               class="sheet-x"
-              aria-label="Close"
+              aria-label={t().upload.close}
               onClick={handleClose}
               disabled={isUploading()}
             >
@@ -180,8 +181,8 @@ export default function UploadModal(props: Props) {
             tabIndex={0}
           >
             <FileImage size={28} stroke-width={1.8} />
-            <span class="dz-title">{isDragging() ? 'Drop files here' : 'Drag and drop'}</span>
-            <span class="dz-sub">Photos and videos</span>
+            <span class="dz-title">{isDragging() ? t().upload.dropHere : t().upload.dragAndDrop}</span>
+            <span class="dz-sub">{t().upload.photosAndVideos}</span>
             <button
               type="button"
               class="dz-browse"
@@ -190,7 +191,7 @@ export default function UploadModal(props: Props) {
                 inputRef?.click();
               }}
             >
-              Browse files
+              {t().upload.browse}
             </button>
             <input
               ref={inputRef}
@@ -239,7 +240,7 @@ export default function UploadModal(props: Props) {
                       <button
                         type="button"
                         class="sheet-x"
-                        aria-label="Remove"
+                        aria-label={t().upload.remove}
                         onClick={() => removeFile(index())}
                       >
                         <X size={14} />
@@ -255,7 +256,7 @@ export default function UploadModal(props: Props) {
                   style={{ width: '100%' }}
                   onClick={clearCompleted}
                 >
-                  Clear completed ({completedCount()})
+                  {t().upload.clearCompleted(completedCount())}
                 </button>
               </Show>
             </div>
