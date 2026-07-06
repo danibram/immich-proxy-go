@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"mime"
 	"net/http"
 
 	"github.com/danibram/immich-proxy-go/internal/immich"
@@ -29,10 +30,14 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Password/auth is enforced by Immich on the thumbnail endpoint. Calling
-	// loadShareLink here would fetch the full shared link (and often the
-	// entire album) on every thumbnail — one extra upstream round-trip per
-	// tile and it destroys scroll performance on large galleries.
+	// Immich v3 does not enforce shared-link passwords on media endpoints,
+	// so the proxy authorizes here. The verdict is cached per share (see
+	// share_authz_cache.go), keeping scroll performance intact.
+	if err := h.authorizeShareRequest(r); err != nil {
+		h.handleError(w, err)
+		return
+	}
+
 	resp, err := h.client.GetThumbnailWithKeyType(assetID, key, password, size, keyType)
 	if err != nil {
 		h.logger.Error("failed to get thumbnail", zap.Error(err))
@@ -41,18 +46,30 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		h.handleError(w, immich.ErrPasswordRequired)
-		return
-	}
-
-	// Check if Immich returned an error (asset not in share, etc)
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
-		http.Error(w, "Asset not found", http.StatusNotFound)
+	if h.handledUpstreamMediaError(w, resp) {
 		return
 	}
 
 	h.proxyResponse(w, resp)
+}
+
+// handledUpstreamMediaError writes a clean, non-leaking response for a
+// non-success upstream media response and reports whether it did so. Media
+// handlers must never forward Immich's raw error bodies (they leak internal
+// phrasing such as "no asset.view access") or its inconsistent status codes
+// (400/403/404 all mean the same thing: the asset is not in this share).
+// 200 and 206 (ranged playback/downloads) pass through untouched.
+func (h *ShareHandler) handledUpstreamMediaError(w http.ResponseWriter, resp *http.Response) bool {
+	switch resp.StatusCode {
+	case http.StatusOK, http.StatusPartialContent:
+		return false
+	case http.StatusUnauthorized:
+		h.handleError(w, immich.ErrPasswordRequired)
+		return true
+	default:
+		http.Error(w, "Asset not found", http.StatusNotFound)
+		return true
+	}
 }
 
 // GetOriginal proxies original file requests
@@ -90,13 +107,31 @@ func (h *ShareHandler) GetOriginal(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Check if Immich returned an error (asset not in share, etc)
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
-		http.Error(w, "Asset not found", http.StatusNotFound)
+	if h.handledUpstreamMediaError(w, resp) {
 		return
 	}
 
+	// Immich serves originals with Content-Disposition: inline, which makes
+	// browsers RENDER a single downloaded photo in a tab instead of saving
+	// it. Nothing displays /original inline (the viewer uses thumbnails and
+	// video has its own playback route), so force a real download while
+	// preserving the upstream filename.
+	forceAttachmentDisposition(resp)
+
 	h.proxyResponse(w, resp)
+}
+
+// forceAttachmentDisposition rewrites an upstream Content-Disposition header
+// to attachment, keeping the filename parameter when present.
+func forceAttachmentDisposition(resp *http.Response) {
+	header := resp.Header.Get("Content-Disposition")
+	params := map[string]string{}
+	if header != "" {
+		if _, parsed, err := mime.ParseMediaType(header); err == nil {
+			params = parsed
+		}
+	}
+	resp.Header.Set("Content-Disposition", mime.FormatMediaType("attachment", params))
 }
 
 // GetVideo proxies video playback requests
@@ -112,6 +147,13 @@ func (h *ShareHandler) GetVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Same as thumbnails: Immich v3 does not enforce shared-link passwords
+	// on media endpoints, so the proxy must.
+	if err := h.authorizeShareRequest(r); err != nil {
+		h.handleError(w, err)
+		return
+	}
+
 	resp, err := h.client.GetVideoWithKeyType(assetID, key, password, keyType)
 	if err != nil {
 		h.logger.Error("failed to get video", zap.Error(err))
@@ -120,14 +162,7 @@ func (h *ShareHandler) GetVideo(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusUnauthorized {
-		h.handleError(w, immich.ErrPasswordRequired)
-		return
-	}
-
-	// Check if Immich returned an error (asset not in share, etc)
-	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusForbidden {
-		http.Error(w, "Asset not found", http.StatusNotFound)
+	if h.handledUpstreamMediaError(w, resp) {
 		return
 	}
 

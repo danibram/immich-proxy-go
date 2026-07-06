@@ -12,6 +12,7 @@ type ShareHandler struct {
 	config       *config.Config
 	logger       *zap.Logger
 	cookieSecret []byte
+	authzCache   *shareAuthzCache
 }
 
 // NewShareHandler creates a new share handler
@@ -21,5 +22,6 @@ func NewShareHandler(client *immich.Client, cfg *config.Config, logger *zap.Logg
 		config:       cfg,
 		logger:       logger,
 		cookieSecret: []byte(cookieSecret),
+		authzCache:   newShareAuthzCache(),
 	}
 }
