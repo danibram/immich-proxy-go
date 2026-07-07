@@ -161,6 +161,7 @@ func main() {
 		r.Use(middleware.ExtractShareKey)
 		r.Use(middleware.ValidateShareKey) // Validate share key format
 		r.Use(middleware.NoCache)
+		r.Use(middleware.NoIndex) // Keep shared albums out of search engines
 
 		// API endpoints
 		r.Route("/api", func(r chi.Router) {
@@ -200,9 +201,19 @@ func main() {
 			r.Get("/assets/{assetID}/thumbnail", shareHandler.GetThumbnail)
 		})
 
-		// Serve UI for all other paths under /share/{key}
-		r.Get("/*", staticHandler.ServeIndex)
-		r.Get("/", staticHandler.ServeIndex)
+		// OpenGraph cover image for link unfurling. Deliberately OUTSIDE the
+		// hotlink-protected /api group: the callers are unfurl bots (Slack,
+		// WhatsApp, …) that send no Sec-Fetch headers. It 404s for
+		// password-protected / invalid shares, so nothing leaks.
+		r.With(generalLimiter.Limit).Get("/og-cover", shareHandler.ServeOGImage)
+
+		// Serve the SPA shell for all other paths under the share. The shell is
+		// enriched with per-share OpenGraph meta for public shares.
+		serveShareIndex := func(w http.ResponseWriter, r *http.Request) {
+			staticHandler.RenderIndexWithHead(w, r, shareHandler.ShareIndexHead(r))
+		}
+		r.Get("/*", serveShareIndex)
+		r.Get("/", serveShareIndex)
 	}
 
 	r.Route("/share/{key}", shareRoutes)

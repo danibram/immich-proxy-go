@@ -70,6 +70,7 @@ When `--with-playwright` is set:
 | `web/e2e/share-download-hotlink.spec.ts` | Downloads with **hotlink protection enabled** — proves direct navigation is 403 and the app's fetch+blob viewer/selection/ZIP downloads still work (runs in a dedicated hotlink-on proxy pass) |
 | `web/e2e/share-asset-info.spec.ts` | Lazy asset-details endpoint (Immich v3): sanitized EXIF via API + viewer info sheet in the browser |
 | `web/e2e/share-i18n.spec.ts` | Locale auto-detection (Spanish vs English browser) for the share UI + homepage language selector with persistence |
+| `web/e2e/share-og.spec.ts` | OpenGraph link-unfurl meta + cover image for public shares, no leak for password-protected shares, and `X-Robots-Tag: noindex` on share routes |
 | `web/e2e/public-share-security.spec.ts` | Private album isolation via browser |
 | `web/e2e/share-password-security.spec.ts` | Password gate UI, cross-album isolation, cookie scope, stale-password regressions, no 5xx on basic routes (thumbnail cold-path checks run in shell only — see note below) |
 

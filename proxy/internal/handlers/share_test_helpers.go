@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -40,6 +41,10 @@ func setupTestHandlerWithOptions(t *testing.T, mockServer *httptest.Server, opti
 		r.Get("/asset/{assetID}", handler.GetAssetInfo)
 		r.Get("/asset/{assetID}/thumbnail", handler.GetThumbnail)
 		r.Get("/asset/{assetID}/original", handler.GetOriginal)
+		r.Get("/og-cover", handler.ServeOGImage)
+		r.Get("/og-head", func(w http.ResponseWriter, req *http.Request) {
+			_, _ = w.Write([]byte(handler.ShareIndexHead(req)))
+		})
 		r.Post("/validate-password", handler.ValidatePassword)
 	})
 
