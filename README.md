@@ -246,6 +246,32 @@ Internet → Caddy/Traefik/Nginx → immich-public-proxy → Immich
 
 See [Deployment Guide](docs/specs/deployment.md) for full configuration examples.
 
+### Edge caching thumbnails (CDN / Cloudflare)
+
+Thumbnails are the highest-volume upstream traffic — every gallery scroll
+re-fetches them from Immich. Set `options.share_media_cache_ttl` (seconds) to
+let a CDN cache them at the edge:
+
+```yaml
+options:
+  share_media_cache_ttl: 86400   # or env IPP_OPTIONS_SHARE_MEDIA_CACHE_TTL
+```
+
+The proxy then sends `Cache-Control: public, max-age=…` for thumbnails of
+**public** shares only. Password-protected shares always stay `no-store`, so a
+CDN can never serve their images to a visitor who lacks the password. Originals
+and video remain uncached (they are downloads, not repeat views).
+
+On **Cloudflare**, origin `Cache-Control` alone is not enough for these
+extensionless API paths — add a **Cache Rule** to make them eligible:
+
+- **When**: URI Path matches `/share/*/api/assets/*/thumbnail` OR `/s/*/api/assets/*/thumbnail`
+- **Then**: *Cache eligibility → Eligible for cache*, and *Edge TTL → Use cache-control header if present*
+
+Using the origin cache-control (rather than a fixed edge TTL override) is what
+keeps password-protected thumbnails out of the cache: Cloudflare honours their
+`no-store`. The share key is in the path, so cache entries never cross shares.
+
 ## Open Source
 
 - [Contributing Guide](CONTRIBUTING.md)

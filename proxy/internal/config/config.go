@@ -27,6 +27,11 @@ type OptionsConfig struct {
 	AllowDownload bool `mapstructure:"allow_download"`
 	ShowMetadata  bool `mapstructure:"show_metadata"`
 	CacheTTL      int  `mapstructure:"cache_ttl"`
+	// ShareMediaCacheTTL is the max-age (seconds) advertised for thumbnails of
+	// PUBLIC shares, so a CDN/browser can cache them and spare Immich the
+	// repeat traffic. 0 disables it (thumbnails stay no-store). Password-
+	// protected shares are NEVER publicly cached regardless of this value.
+	ShareMediaCacheTTL int `mapstructure:"share_media_cache_ttl"`
 }
 
 type SecurityConfig struct {
@@ -81,6 +86,7 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("options.allow_download", true)
 	v.SetDefault("options.show_metadata", true)
 	v.SetDefault("options.cache_ttl", 3600)
+	v.SetDefault("options.share_media_cache_ttl", 0) // off: public thumbnails are not CDN-cached unless opted in
 
 	// Security defaults
 	v.SetDefault("security.rate_limit", 1000)          // 1000 requests per minute
