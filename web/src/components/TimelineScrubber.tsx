@@ -247,6 +247,14 @@ export default function TimelineScrubber(props: Props) {
             <span class="scrub-grip" />
           </div>
         </div>
+        {/* While dragging, shield the whole viewport from hit-testing: the
+            gallery is scrolling fast under the cursor, and without this the
+            browser recomputes :hover (thumb-veil fades) on every frame,
+            which janks the scrub. Mounted only during the drag, so idle
+            clicks on photos are never intercepted. */}
+        <Show when={isDragging()}>
+          <div class="scrub-drag-shield" />
+        </Show>
       </div>
     </Show>
   );

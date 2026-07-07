@@ -249,6 +249,19 @@
   border-top: 8px solid var(--fg-1);
 }
 
+.app-share .scrub-drag-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: auto;
+  cursor: grabbing;
+  user-select: none;
+}
+
+.app-share .scrub-grip:active {
+  cursor: grabbing;
+}
+
 .app-share .scrub-bubble {
   position: absolute;
   top: 50%;
