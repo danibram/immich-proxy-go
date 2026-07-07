@@ -238,3 +238,36 @@ func TestGetThumbnail_PublicShareCacheHeaders(t *testing.T) {
 		}
 	})
 }
+
+// TestGetThumbnail_ProtectedShareBrowserCache covers option-1 caching: with
+// ProtectedMediaCacheTTL set, a password-protected share's thumbnail is
+// marked private (the authenticated visitor's browser may cache it) but never
+// public (shared caches / CDNs must not, or they'd serve it without the
+// password).
+func TestGetThumbnail_ProtectedShareBrowserCache(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+	_, router := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+		AllowDownload:          true,
+		ShowMetadata:           true,
+		ProtectedMediaCacheTTL: 1800,
+	})
+
+	req := httptest.NewRequest("GET", "/api/share/password-protected/asset/"+testAssetID1+"/thumbnail", nil)
+	req.AddCookie(&http.Cookie{
+		Name:  "immich-share-password",
+		Value: sharecookie.Sign(middleware.CookieSecret, "secret123"),
+	})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	cc := rec.Header().Get("Cache-Control")
+	if cc != "private, max-age=1800" {
+		t.Errorf("expected private browser cache, got %q", cc)
+	}
+	if strings.Contains(cc, "public") {
+		t.Error("protected thumbnail must never be publicly cacheable")
+	}
+}

@@ -32,6 +32,12 @@ type OptionsConfig struct {
 	// repeat traffic. 0 disables it (thumbnails stay no-store). Password-
 	// protected shares are NEVER publicly cached regardless of this value.
 	ShareMediaCacheTTL int `mapstructure:"share_media_cache_ttl"`
+	// ProtectedMediaCacheTTL is the max-age (seconds) for thumbnails of
+	// PASSWORD-PROTECTED shares. These are marked Cache-Control: private, so
+	// only the authenticated visitor's own browser caches them — shared caches
+	// (CDNs) must not, which prevents serving them without the password. 0
+	// disables it (thumbnails stay no-store).
+	ProtectedMediaCacheTTL int `mapstructure:"protected_media_cache_ttl"`
 }
 
 type SecurityConfig struct {
@@ -86,7 +92,8 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("options.allow_download", true)
 	v.SetDefault("options.show_metadata", true)
 	v.SetDefault("options.cache_ttl", 3600)
-	v.SetDefault("options.share_media_cache_ttl", 0) // off: public thumbnails are not CDN-cached unless opted in
+	v.SetDefault("options.share_media_cache_ttl", 0)     // off: public thumbnails are not CDN-cached unless opted in
+	v.SetDefault("options.protected_media_cache_ttl", 0) // off: protected thumbnails stay no-store unless opted in
 
 	// Security defaults
 	v.SetDefault("security.rate_limit", 1000)          // 1000 requests per minute
