@@ -5,6 +5,7 @@ import (
 	"mime"
 	"net/http"
 
+	"github.com/danibram/immich-proxy-go/internal/config"
 	"github.com/danibram/immich-proxy-go/internal/immich"
 	"github.com/danibram/immich-proxy-go/internal/middleware"
 	"github.com/go-chi/chi/v5"
@@ -51,18 +52,30 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Let a CDN (e.g. Cloudflare) cache thumbnails of PUBLIC shares so Immich
-	// is not re-hit on every gallery view. Only when there is no password on
-	// the request: a password-protected share must never be publicly cached,
-	// or the CDN would serve it to visitors who never entered the password.
-	cacheControl := ""
-	if ttl := h.config.Options.ShareMediaCacheTTL; ttl > 0 &&
-		resp.StatusCode == http.StatusOK &&
-		middleware.GetPassword(r.Context()) == "" {
-		cacheControl = fmt.Sprintf("public, max-age=%d", ttl)
-	}
+	h.proxyResponseWithCache(w, resp, thumbnailCacheControl(r, resp.StatusCode, h.config.Options))
+}
 
-	h.proxyResponseWithCache(w, resp, cacheControl)
+// thumbnailCacheControl decides how a thumbnail may be cached:
+//   - PUBLIC share (no password): "public, max-age" so a CDN (Cloudflare) can
+//     edge-cache it and spare Immich the repeat traffic.
+//   - PASSWORD-PROTECTED share: "private, max-age" so only the authenticated
+//     visitor's own browser caches it — shared caches must not, or they would
+//     serve it to visitors who never entered the password.
+//   - otherwise: "" (the no-store default).
+func thumbnailCacheControl(r *http.Request, statusCode int, opts config.OptionsConfig) string {
+	if statusCode != http.StatusOK {
+		return ""
+	}
+	if middleware.GetPassword(r.Context()) == "" {
+		if opts.ShareMediaCacheTTL > 0 {
+			return fmt.Sprintf("public, max-age=%d", opts.ShareMediaCacheTTL)
+		}
+		return ""
+	}
+	if opts.ProtectedMediaCacheTTL > 0 {
+		return fmt.Sprintf("private, max-age=%d", opts.ProtectedMediaCacheTTL)
+	}
+	return ""
 }
 
 // handledUpstreamMediaError writes a clean, non-leaking response for a

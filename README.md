@@ -272,6 +272,12 @@ Using the origin cache-control (rather than a fixed edge TTL override) is what
 keeps password-protected thumbnails out of the cache: Cloudflare honours their
 `no-store`. The share key is in the path, so cache entries never cross shares.
 
+For **password-protected** shares, `options.protected_media_cache_ttl` lets the
+authenticated visitor's *own browser* cache thumbnails without exposing them to
+shared caches: the proxy sends `Cache-Control: private, max-age=…`, which
+Cloudflare (a shared cache) will not store but the browser will. This speeds up
+re-scrolling within a session at zero leak risk. It is off by default.
+
 ## Open Source
 
 - [Contributing Guide](CONTRIBUTING.md)

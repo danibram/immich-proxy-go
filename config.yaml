@@ -23,6 +23,10 @@ options:
   # every gallery view. 0 disables it. Password-protected shares are NEVER
   # publicly cached, regardless of this value. Originals/video stay no-store.
   share_media_cache_ttl: 0
+  # Max-age (seconds) for thumbnails of PASSWORD-PROTECTED shares. Marked
+  # Cache-Control: private, so only the authenticated visitor's own browser
+  # caches them; shared caches (CDNs) must not. 0 disables it (no-store).
+  protected_media_cache_ttl: 0
 
 security:
   # Rate limit: requests per minute for general endpoints

@@ -123,9 +123,10 @@ func (h *ShareHandler) proxyResponseWithCache(w http.ResponseWriter, resp *http.
 	}
 
 	if cacheControl != "" {
-		// Overrides the NoCache middleware for cacheable public content.
+		// Overrides the NoCache middleware for cacheable content.
 		w.Header().Set("Cache-Control", cacheControl)
 		w.Header().Del("Pragma")
+		w.Header().Del("Expires")
 	} else {
 		// Share content should NOT be cached by proxies/browsers by default.
 		// NoCache middleware already sets these headers, but we reinforce here.
