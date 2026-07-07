@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 2026-07-07
+
+### Bug Fixes
+
+- 🐛 Shield the viewport from hover hit-testing while scrubbing
+
+Since the scrubber track stopped capturing pointer events (1.7.1), the
+cursor hit-tests straight into the gallery during a drag. The gallery is
+scrolling fast underneath, so the browser recomputes :hover every frame
+and fades thumb-veils in/out on each tile streaming past the cursor —
+visible jank that didn't happen when the wide track soaked up the events.
+
+Mount a transparent full-viewport shield only while isDragging: it
+absorbs hit-testing (no :hover churn), keeps cursor: grabbing, and
+unmounts on release, so idle clicks on photos are still never
+intercepted. Strictly better than pre-1.7.1, where horizontal drift
+during a drag already hovered the gallery outside the 64px strip.
+
+
+### Other
+
+- Merge pull request #26 from danibram/codex/scrub-drag-shield
+
+🐛 Shield the viewport from hover hit-testing while scrubbing
+
 ## [1.7.1] - 2026-07-07
 
 ### Bug Fixes
