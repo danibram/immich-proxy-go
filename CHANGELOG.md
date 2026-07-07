@@ -5,6 +5,31 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-07-07
+
+### Bug Fixes
+
+- 🐛 Restrict timeline scrubber hit area to the grip
+
+The scrubber track was a full-height, 64px-wide strip fixed to the right
+edge with pointer-events enabled — and invisible (opacity 0) while idle.
+Clicks meant for photos near the right edge were captured by the
+invisible track and jumped the gallery to another date.
+
+Make the track a positioning rail only (pointer-events: none) and
+re-enable events solely on the 48px grip pill (the visible handle with
+the arrows), moving touch-action/cursor there. The bubble label is
+explicitly non-interactive. Dragging is unaffected: once the grip
+starts a drag, movement is tracked at document level, and the scrubber
+still fades in on scroll.
+
+
+### Other
+
+- Merge pull request #25 from danibram/codex/scrubber-hit-area
+
+🐛 Restrict timeline scrubber hit area to the grip
+
 ## [1.7.0] - 2026-07-07
 
 ### Features
