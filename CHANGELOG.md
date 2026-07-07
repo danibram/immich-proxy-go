@@ -5,6 +5,60 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-07-07
+
+### Features
+
+- ✨ Extensioned thumbnail URLs for default Cloudflare edge caching
+
+Cloudflare's DEFAULT cache eligibility is extension-based: webp/jpg/jpeg/
+avif/png are cached (and origin Cache-Control is honoured), while
+extensionless API paths are marked DYNAMIC and never cached — regardless
+of the Cache-Control the proxy sends. Until now, edge-caching thumbnails
+required a manual Cache Rule in the Cloudflare dashboard.
+
+Add a canonical extensioned route alongside the legacy one:
+
+  GET /api/assets/{assetID}/thumbnail.{ext}   (ext ∈ webp|jpg → else 404)
+
+registered in both share route groups (/share/{key} and /s/{slug}),
+outside the rate-limited group like the legacy route. The handler is a
+pure alias of GetThumbnail: same authorization, same passthrough of
+Immich's response including Content-Type — the extension is advisory
+for CDNs, the header wins.
+
+The viewer now builds thumbnail URLs as thumbnail.webp?size=thumbnail
+and thumbnail.jpg?size=preview, mirroring Immich's per-size encoding.
+The extension is never derived from the asset's original filename:
+iPhone HEIC originals would produce .heic URLs, which Cloudflare's
+default list excludes.
+
+Invariants kept:
+- Legacy extensionless /thumbnail keeps working (old cached HTML/JS).
+- thumbnailCacheControl untouched: public shares → public,max-age;
+  password-protected → private,max-age (or no-store); the extension
+  changes cache *eligibility*, never the *directives*, so protected
+  thumbnails stay out of shared caches.
+
+Tests: Go handler tests pin byte/header parity with the legacy route,
+auth enforcement and cache headers on the extensioned route, and
+rejection of .heic/.png/etc. Compose e2e security matrix gains the
+same checks against a real Immich. README's Cloudflare section now
+documents that no Cache Rule is needed on default setups, keeps the
+old instructions for pre-1.7 clients / non-default CDNs, and warns
+against Edge-TTL overrides that ignore origin cache-control.
+
+
+### Other
+
+- Merge pull request #23 from danibram/codex/protected-browser-cache
+
+✨ Browser-cache protected-share thumbnails (private) (v1.6.0)
+
+- Merge pull request #24 from danibram/codex/thumbnail-extension-urls
+
+✨ Extensioned thumbnail URLs for default Cloudflare edge caching
+
 ## [1.6.0] - 2026-07-07
 
 ### Features
