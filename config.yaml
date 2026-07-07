@@ -18,6 +18,11 @@ options:
   show_metadata: true
   # Cache TTL in seconds for static assets
   cache_ttl: 3600
+  # Max-age (seconds) advertised for thumbnails of PUBLIC shares, letting a
+  # CDN (e.g. Cloudflare) cache them at the edge so Immich is not re-hit on
+  # every gallery view. 0 disables it. Password-protected shares are NEVER
+  # publicly cached, regardless of this value. Originals/video stay no-store.
+  share_media_cache_ttl: 0
 
 security:
   # Rate limit: requests per minute for general endpoints

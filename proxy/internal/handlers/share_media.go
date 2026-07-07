@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"mime"
 	"net/http"
 
@@ -50,7 +51,18 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.proxyResponse(w, resp)
+	// Let a CDN (e.g. Cloudflare) cache thumbnails of PUBLIC shares so Immich
+	// is not re-hit on every gallery view. Only when there is no password on
+	// the request: a password-protected share must never be publicly cached,
+	// or the CDN would serve it to visitors who never entered the password.
+	cacheControl := ""
+	if ttl := h.config.Options.ShareMediaCacheTTL; ttl > 0 &&
+		resp.StatusCode == http.StatusOK &&
+		middleware.GetPassword(r.Context()) == "" {
+		cacheControl = fmt.Sprintf("public, max-age=%d", ttl)
+	}
+
+	h.proxyResponseWithCache(w, resp, cacheControl)
 }
 
 // handledUpstreamMediaError writes a clean, non-leaking response for a

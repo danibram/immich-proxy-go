@@ -88,8 +88,18 @@ func (h *ShareHandler) getKeyType(ctx context.Context) immich.KeyType {
 	return immich.KeyTypeKey
 }
 
-// proxyResponse copies the response from Immich to the client
+// proxyResponse copies the response from Immich to the client, marking it
+// uncacheable (the default for private share content).
 func (h *ShareHandler) proxyResponse(w http.ResponseWriter, resp *http.Response) {
+	h.proxyResponseWithCache(w, resp, "")
+}
+
+// proxyResponseWithCache is like proxyResponse but lets the caller advertise a
+// specific Cache-Control (e.g. "public, max-age=…" for a PUBLIC share's
+// thumbnails). An empty cacheControl keeps the safe no-store default. Callers
+// must only pass a public directive when the content is genuinely public —
+// otherwise a CDN would serve it to visitors who lack the share password.
+func (h *ShareHandler) proxyResponseWithCache(w http.ResponseWriter, resp *http.Response, cacheControl string) {
 	// Allowlist of headers to copy from upstream (safe headers only)
 	// This prevents leaking sensitive info and hop-by-hop header issues
 	allowedHeaders := map[string]bool{
@@ -112,11 +122,16 @@ func (h *ShareHandler) proxyResponse(w http.ResponseWriter, resp *http.Response)
 		}
 	}
 
-	// Share content should NOT be cached by proxies/browsers
-	// This prevents accidental caching of private content
-	// NoCache middleware already sets these headers, but we reinforce here
-	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
-	w.Header().Set("Pragma", "no-cache")
+	if cacheControl != "" {
+		// Overrides the NoCache middleware for cacheable public content.
+		w.Header().Set("Cache-Control", cacheControl)
+		w.Header().Del("Pragma")
+	} else {
+		// Share content should NOT be cached by proxies/browsers by default.
+		// NoCache middleware already sets these headers, but we reinforce here.
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+		w.Header().Set("Pragma", "no-cache")
+	}
 
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)

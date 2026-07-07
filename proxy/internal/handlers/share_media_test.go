@@ -193,3 +193,48 @@ func TestGetThumbnail_EnforcesPasswordWhenUpstreamDoesNot(t *testing.T) {
 		t.Errorf("expected upstream media fetch after authorization, got %d", mediaCalls)
 	}
 }
+
+// TestGetThumbnail_PublicShareCacheHeaders covers the CDN caching model: with
+// ShareMediaCacheTTL set, a public share's thumbnail is publicly cacheable so
+// a CDN (Cloudflare) spares Immich the repeat traffic; a password-protected
+// share's thumbnail must stay no-store or the CDN would serve it without the
+// password.
+func TestGetThumbnail_PublicShareCacheHeaders(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+	_, router := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+		AllowDownload:      true,
+		ShowMetadata:       true,
+		ShareMediaCacheTTL: 3600,
+	})
+
+	t.Run("public share is publicly cacheable", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/share/valid-key/asset/"+testAssetID1+"/thumbnail", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		cc := rec.Header().Get("Cache-Control")
+		if cc != "public, max-age=3600" {
+			t.Errorf("expected public cache header, got %q", cc)
+		}
+	})
+
+	t.Run("password-protected share is never publicly cached", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/share/password-protected/asset/"+testAssetID1+"/thumbnail", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "immich-share-password",
+			Value: sharecookie.Sign(middleware.CookieSecret, "secret123"),
+		})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 with password cookie, got %d: %s", rec.Code, rec.Body.String())
+		}
+		cc := rec.Header().Get("Cache-Control")
+		if !strings.Contains(cc, "no-store") {
+			t.Errorf("protected thumbnail must not be publicly cacheable, got %q", cc)
+		}
+	})
+}
