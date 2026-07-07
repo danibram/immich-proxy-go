@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-07-07
+
+### Features
+
+- ✨ Edge-cache public thumbnails via Cache-Control
+
+Every gallery scroll re-fetches thumbnails from Immich; behind a CDN we can
+serve them from the edge instead. New options.share_media_cache_ttl makes the
+proxy advertise Cache-Control: public, max-age=<ttl> for thumbnails — but only
+for PUBLIC shares (no password on the request). Password-protected shares
+always stay no-store, so a CDN can never hand their images to a visitor who
+never entered the password. Originals and video remain uncached (downloads,
+not repeat views). Defaults to 0 (off) — no behavior change unless enabled.
+
+README documents the Cloudflare Cache Rule (match the thumbnail paths, honor
+the origin cache-control) that keeps protected thumbnails out of the edge.
+
+
+### Other
+
+- Merge pull request #21 from danibram/codex/link-previews-multiarch
+
+✨ Link previews (OpenGraph) + noindex + multi-arch images (v1.4.0)
+
 ## [1.4.0] - 2026-07-07
 
 ### Features
