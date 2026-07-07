@@ -196,9 +196,12 @@
   right: 0;
   bottom: 0;
   width: 64px;
-  pointer-events: auto;
-  touch-action: none;
-  cursor: grab;
+  /* The track is a positioning rail only. It must NOT capture pointer
+     events: it overlays the photo grid full-height, and when the scrubber
+     is idle it is invisible (opacity 0) — an invisible strip that eats
+     clicks sends users to another date when they meant to open a photo.
+     Only the grip (the pill with the arrows) is interactive. */
+  pointer-events: none;
 }
 
 .app-share .scrub-thumb-wrap {
@@ -211,6 +214,10 @@
   display: block;
   width: 48px;
   height: 48px;
+  /* Re-enable events here: the grip is the ONLY scrub handle. */
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px 0 0 999px;
   background: color-mix(in srgb, var(--bg) 94%, white);
@@ -246,6 +253,7 @@
   position: absolute;
   top: 50%;
   right: 60px;
+  pointer-events: none;
   transform: translateY(-50%);
   background: var(--accent);
   color: #fff;
