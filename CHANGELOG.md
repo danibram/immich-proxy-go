@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-07-07
+
+### Features
+
+- ✨ Browser-cache thumbnails of password-protected shares
+
+Extends media caching to protected shares safely. New
+options.protected_media_cache_ttl marks their thumbnails
+Cache-Control: private, max-age=<ttl> — so only the authenticated visitor's
+own browser caches them (speeding up re-scrolling within a session), while
+shared caches (CDNs) must not store them and therefore can never serve them
+to a visitor who lacks the password. Pragma/Expires are cleared so the
+directive is honored. Defaults to 0 (off); public-share edge caching is
+unchanged.
+
+
+### Other
+
+- Merge pull request #22 from danibram/codex/cdn-thumbnail-cache
+
+✨ Edge-cache public thumbnails (Cloudflare-friendly) (v1.5.0)
+
 ## [1.5.0] - 2026-07-07
 
 ### Features
