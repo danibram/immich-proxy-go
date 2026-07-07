@@ -142,6 +142,13 @@ func (h *StaticHandler) ServeIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *StaticHandler) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
+	h.RenderIndexWithHead(w, r, "")
+}
+
+// RenderIndexWithHead serves index.html with an optional extra chunk of HTML
+// injected into <head> (e.g. per-share OpenGraph tags built by the share
+// handler). extraHead is inserted verbatim, so callers must pre-escape it.
+func (h *StaticHandler) RenderIndexWithHead(w http.ResponseWriter, r *http.Request, extraHead string) {
 	if h.webDir == "" {
 		http.Error(w, "Static files not configured", http.StatusNotFound)
 		return
@@ -155,15 +162,27 @@ func (h *StaticHandler) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	html := injectPostHogConfig(string(content), h.posthog)
+	page := injectPostHogConfig(string(content), h.posthog)
+	if extraHead != "" {
+		page = injectHead(page, extraHead)
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
-	w.Header().Set("Content-Length", strconv.Itoa(len(html)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(page)))
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(html))
+	w.Write([]byte(page))
+}
+
+// injectHead inserts snippet just before </head> (or prepends it if the page
+// has no head marker).
+func injectHead(pageHTML, snippet string) string {
+	if idx := strings.Index(pageHTML, posthogInjectMarker); idx != -1 {
+		return pageHTML[:idx] + snippet + pageHTML[idx:]
+	}
+	return snippet + pageHTML
 }
 
 func injectPostHogConfig(pageHTML string, cfg config.PostHogConfig) string {

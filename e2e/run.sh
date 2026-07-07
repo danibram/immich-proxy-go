@@ -155,6 +155,7 @@ run_scenario() {
           e2e/share-download.spec.ts
           e2e/share-asset-info.spec.ts
           e2e/share-i18n.spec.ts
+          e2e/share-og.spec.ts
           e2e/public-share-security.spec.ts
           e2e/share-password-security.spec.ts
         )

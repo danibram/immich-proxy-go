@@ -1,7 +1,9 @@
 # Multi-stage build for Immich Public Proxy
 
 # Stage 1: Build the web UI
-FROM node:22-alpine AS web-builder
+# Pinned to the build host's platform: the output is static JS/CSS (arch
+# independent), so there is no need to emulate npm on the target arch.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web-builder
 
 WORKDIR /app/web
 
@@ -18,7 +20,12 @@ COPY web/ ./
 RUN npm run build
 
 # Stage 2: Build the Go proxy
-FROM golang:1.22-alpine AS go-builder
+# Runs on the build host's platform and cross-compiles to the target arch
+# (TARGETOS/TARGETARCH are provided by buildx), so no QEMU-emulated compile.
+FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS go-builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
@@ -35,8 +42,9 @@ RUN go mod download
 # Copy source files
 COPY proxy/ ./
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/immich-proxy ./cmd/server/
+# Build the binary (cross-compiled to the requested platform)
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -a -installsuffix cgo -o /app/immich-proxy ./cmd/server/
 
 # Stage 3: Final image
 FROM alpine:3.19
