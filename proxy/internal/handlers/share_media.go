@@ -55,6 +55,29 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 	h.proxyResponseWithCache(w, resp, thumbnailCacheControl(r, resp.StatusCode, h.config.Options))
 }
 
+// GetThumbnailExt serves /thumbnail.{ext} — the same passthrough as
+// GetThumbnail, but with a file extension in the path. The extension exists
+// purely so CDNs with extension-based cache eligibility (Cloudflare's default
+// setup caches .webp/.jpg but marks extensionless API paths DYNAMIC) treat the
+// URL as a cacheable image and honour the origin Cache-Control emitted by
+// thumbnailCacheControl. The extension is advisory only: Immich's Content-Type
+// header wins, and the response bytes are identical to the legacy route.
+func (h *ShareHandler) GetThumbnailExt(w http.ResponseWriter, r *http.Request) {
+	if !isAllowedThumbnailExt(chi.URLParam(r, "ext")) {
+		http.NotFound(w, r)
+		return
+	}
+	h.GetThumbnail(w, r)
+}
+
+// isAllowedThumbnailExt allows only the extensions Immich actually produces
+// for resized thumbnails (webp for size=thumbnail, jpg for size=preview).
+// Anything else — notably .heic, which Cloudflare's default cache list
+// excludes — is rejected so URLs never advertise formats we don't serve.
+func isAllowedThumbnailExt(ext string) bool {
+	return ext == "webp" || ext == "jpg"
+}
+
 // thumbnailCacheControl decides how a thumbnail may be cached:
 //   - PUBLIC share (no password): "public, max-age" so a CDN (Cloudflare) can
 //     edge-cache it and spare Immich the repeat traffic.

@@ -31,6 +31,7 @@ test.describe('Public Share Security', () => {
       `/api/assets/${foreign}`,
       `/api/assets/${foreign}/original`,
       `/api/assets/${foreign}/thumbnail?size=thumbnail`,
+      `/api/assets/${foreign}/thumbnail.webp?size=thumbnail`,
       `/api/assets/${foreign}/video/playback`,
     ];
 

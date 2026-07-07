@@ -97,7 +97,7 @@ describe('LazyThumbnail', () => {
 
     await waitFor(() => {
       const image = getByTestId('gallery-thumb') as HTMLImageElement;
-      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=preview');
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail.jpg?size=preview');
     });
   });
 
@@ -126,7 +126,7 @@ describe('LazyThumbnail', () => {
     TestIntersectionObserver.instances[0]?.trigger();
     await waitFor(() => {
       const image = getByTestId('gallery-thumb') as HTMLImageElement;
-      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=preview');
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail.jpg?size=preview');
     });
 
     top = 2600;
@@ -135,7 +135,7 @@ describe('LazyThumbnail', () => {
 
     await waitFor(() => {
       const image = getByTestId('gallery-thumb') as HTMLImageElement;
-      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=preview');
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail.jpg?size=preview');
     });
 
     top = 120;
@@ -144,7 +144,7 @@ describe('LazyThumbnail', () => {
 
     await waitFor(() => {
       const image = getByTestId('gallery-thumb') as HTMLImageElement;
-      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=preview');
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail.jpg?size=preview');
     });
   });
 
@@ -172,14 +172,14 @@ describe('LazyThumbnail', () => {
 
     await waitFor(() => {
       const image = getByTestId('gallery-thumb') as HTMLImageElement;
-      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=preview');
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail.jpg?size=preview');
     });
 
     fireEvent.error(getByTestId('gallery-thumb'));
 
     await waitFor(() => {
       const image = getByTestId('gallery-thumb') as HTMLImageElement;
-      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail?size=thumbnail');
+      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail.webp?size=thumbnail');
     });
   });
 });

@@ -67,7 +67,7 @@ test.describe('Share gallery (integration)', () => {
     let activeRequests = 0;
     let maxActiveRequests = 0;
 
-    await page.route('**/thumbnail?size=preview', async (route) => {
+    await page.route('**/thumbnail.jpg?size=preview', async (route) => {
       activeRequests += 1;
       maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
 
