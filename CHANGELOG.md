@@ -5,6 +5,46 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-07
+
+### Features
+
+- ✨ Unfurl shared links and keep them out of search engines
+
+Two additions to the public surface of a shared link:
+
+- OpenGraph / Twitter-card meta. The proxy injects per-share <head> tags
+  (album name, description, cover image, canonical URL) into the SPA shell so
+  a shared link previews properly in Slack, WhatsApp, iMessage, etc. The cover
+  is served by a dedicated /{share}/og-cover endpoint kept OUTSIDE the
+  hotlink-protected /api group, because unfurl bots send no Sec-Fetch headers.
+  Security: meta is only emitted, and the cover only served, when the link
+  loads without interactive input — a password-protected album's name and
+  cover never leak from its bare URL (a bot carries no password cookie).
+
+- X-Robots-Tag: noindex, nofollow on every /share and /s response. A "public"
+  album is meant to be shared by URL, not indexed by Google. The header covers
+  crawlers that never run the SPA's JS.
+
+Covered by Go tests (public emits OG, protected leaks nothing, cover 200 vs
+404) and share-og.spec.ts in the e2e suite.
+
+
+### Other
+
+- Merge pull request #20 from danibram/codex/i18n-locale-detection
+
+✨ Localization: browser locale detection + homepage language selector (v1.3.0)
+
+- 📦 Publish multi-arch (amd64 + arm64) images
+
+Self-hosters commonly run on ARM (Raspberry Pi, ARM VPS, Apple Silicon) but
+the release only built for the runner's arch. Build and push
+linux/amd64,linux/arm64 via buildx + QEMU, and cross-compile the Go binary
+on the build host (TARGETOS/TARGETARCH) instead of emulating the compile, so
+the multi-arch build stays fast. The web build (static assets) is pinned to
+the build platform for the same reason.
+
 ## [1.3.0] - 2026-07-06
 
 ### Features
