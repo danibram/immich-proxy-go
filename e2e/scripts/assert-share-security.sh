@@ -118,6 +118,20 @@ assert_share_security_matrix() {
     die "protected A thumbnail without auth must not return 200"
   fi
 
+  # The CDN-friendly extensioned route must enforce the same auth as the
+  # legacy extensionless one (the extension changes cache eligibility only).
+  log "security: protected A extensioned thumbnail blocked without auth"
+  status="$(curl -sS \
+    "${thumb_headers[@]}" \
+    -H "Referer: ${BASE_URL}/s/${protected_a_slug}" \
+    -o /tmp/sec-protected-a-thumb-ext-unauth.bin \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_a_slug}/api/assets/${protected_asset_id}/thumbnail.jpg?size=preview")"
+  assert_not_server_error "${status}" "protected A extensioned thumbnail without auth"
+  if [[ "${status}" == "200" ]]; then
+    die "protected A extensioned thumbnail without auth must not return 200"
+  fi
+
   log "security: wrong POST password rejected for protected A"
   status="$(curl -sS \
     -X POST \
@@ -206,6 +220,26 @@ assert_share_security_matrix() {
   extract_public_asset_id /tmp/sec-public-asset-source.json
   public_asset_id="${PUBLIC_ASSET_ID}"
 
+  log "security: public extensioned thumbnail serves same bytes as legacy route"
+  status="$(curl -sS \
+    "${thumb_headers[@]}" \
+    -H "Referer: ${BASE_URL}/s/${public_slug}" \
+    -o /tmp/sec-public-thumb-legacy.bin \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail?size=preview")"
+  assert_not_server_error "${status}" "public legacy thumbnail"
+  assert_status "200" "${status}" "public legacy thumbnail"
+  status="$(curl -sS \
+    "${thumb_headers[@]}" \
+    -H "Referer: ${BASE_URL}/s/${public_slug}" \
+    -o /tmp/sec-public-thumb-ext.bin \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail.jpg?size=preview")"
+  assert_not_server_error "${status}" "public extensioned thumbnail"
+  assert_status "200" "${status}" "public extensioned thumbnail"
+  cmp -s /tmp/sec-public-thumb-legacy.bin /tmp/sec-public-thumb-ext.bin \
+    || die "public extensioned thumbnail bytes differ from legacy route"
+
   log "security: stale cookie on public slug thumbnail must not bypass via retry (not 200)"
   status="$(curl -sS \
     "${thumb_headers[@]}" \
@@ -269,6 +303,30 @@ assert_share_security_matrix() {
     fi
     sleep 2
   done
+
+  log "security: protected A extensioned thumbnail after unlock matches legacy"
+  status="$(curl -sS \
+    "${thumb_headers[@]}" \
+    -H "Referer: ${BASE_URL}/s/${protected_a_slug}" \
+    -b /tmp/sec-protected-a.cookies \
+    -o /tmp/sec-protected-a-thumb-ext.bin \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_a_slug}/api/assets/${unlocked_asset_id}/thumbnail.jpg?size=preview")"
+  assert_not_server_error "${status}" "protected A extensioned thumbnail after unlock"
+  assert_status "200" "${status}" "protected A extensioned thumbnail after unlock"
+  cmp -s /tmp/sec-protected-a-thumb.bin /tmp/sec-protected-a-thumb-ext.bin \
+    || die "extensioned thumbnail bytes differ from legacy route"
+
+  log "security: unsupported thumbnail extension is rejected"
+  status="$(curl -sS \
+    "${thumb_headers[@]}" \
+    -H "Referer: ${BASE_URL}/s/${protected_a_slug}" \
+    -b /tmp/sec-protected-a.cookies \
+    -o /tmp/sec-protected-a-thumb-heic.bin \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${protected_a_slug}/api/assets/${unlocked_asset_id}/thumbnail.heic?size=preview")"
+  assert_not_server_error "${status}" "thumbnail.heic rejection"
+  assert_status "404" "${status}" "thumbnail.heic rejection"
 
   log "=== share security matrix OK ==="
 }

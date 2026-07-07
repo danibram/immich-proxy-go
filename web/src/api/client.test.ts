@@ -134,12 +134,12 @@ describe('ApiClient', () => {
 
     it('should generate correct thumbnail URL', () => {
       const url = api.getThumbnailUrl('asset-123');
-      expect(url).toBe('/share/my-share-key/api/assets/asset-123/thumbnail?size=thumbnail');
+      expect(url).toBe('/share/my-share-key/api/assets/asset-123/thumbnail.webp?size=thumbnail');
     });
 
     it('should generate correct preview URL', () => {
       const url = api.getThumbnailUrl('asset-123', 'preview');
-      expect(url).toBe('/share/my-share-key/api/assets/asset-123/thumbnail?size=preview');
+      expect(url).toBe('/share/my-share-key/api/assets/asset-123/thumbnail.jpg?size=preview');
     });
 
     it('should generate correct original URL', () => {

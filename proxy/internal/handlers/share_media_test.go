@@ -194,6 +194,120 @@ func TestGetThumbnail_EnforcesPasswordWhenUpstreamDoesNot(t *testing.T) {
 	}
 }
 
+// TestGetThumbnailExt_MatchesLegacy pins the CDN-friendly extensioned route:
+// /thumbnail.webp and /thumbnail.jpg must be byte- and header-identical to the
+// legacy extensionless /thumbnail (the extension only exists so Cloudflare's
+// default extension-based cache list makes the URL edge-cacheable), and the
+// legacy route must keep working for old clients.
+func TestGetThumbnailExt_MatchesLegacy(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+
+	_, router := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+		AllowDownload:      true,
+		ShowMetadata:       true,
+		ShareMediaCacheTTL: 3600,
+	})
+
+	get := func(t *testing.T, path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest("GET", path, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	legacy := get(t, "/api/share/valid-key/asset/"+testAssetID1+"/thumbnail?size=thumbnail")
+	if legacy.Code != http.StatusOK {
+		t.Fatalf("legacy route: expected 200, got %d", legacy.Code)
+	}
+
+	for _, ext := range []string{"webp", "jpg"} {
+		t.Run(ext, func(t *testing.T) {
+			rec := get(t, "/api/share/valid-key/asset/"+testAssetID1+"/thumbnail."+ext+"?size=thumbnail")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d", rec.Code)
+			}
+			if got, want := rec.Body.String(), legacy.Body.String(); got != want {
+				t.Errorf("body differs from legacy route: got %q, want %q", got, want)
+			}
+			// Content-Type comes from Immich's response, never from the
+			// extension: the extension is advisory for CDNs, the header wins.
+			if got, want := rec.Header().Get("Content-Type"), legacy.Header().Get("Content-Type"); got != want {
+				t.Errorf("Content-Type differs from legacy route: got %q, want %q", got, want)
+			}
+			if got, want := rec.Header().Get("Cache-Control"), legacy.Header().Get("Cache-Control"); got != want {
+				t.Errorf("Cache-Control differs from legacy route: got %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+// TestGetThumbnailExt_InvalidExtension rejects extensions the proxy never
+// serves. Notably .heic must 404: iPhone originals are HEIC, and advertising
+// that extension would both lie about the payload and fall outside
+// Cloudflare's default cacheable-extension list.
+func TestGetThumbnailExt_InvalidExtension(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+
+	_, router := setupTestHandler(t, mockServer)
+
+	for _, ext := range []string{"heic", "png", "exe", "jpeg", "webp2"} {
+		req := httptest.NewRequest("GET", "/api/share/valid-key/asset/"+testAssetID1+"/thumbnail."+ext, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("thumbnail.%s: expected 404, got %d", ext, rec.Code)
+		}
+	}
+}
+
+// TestGetThumbnailExt_PasswordProtected mirrors the legacy-route auth tests on
+// the extensioned route: no password → 401, valid signed password cookie →
+// 200 with the private (browser-only) cache header. The extension changes CDN
+// cache *eligibility*, never the Cache-Control *directives*, so protected
+// thumbnails stay out of shared caches.
+func TestGetThumbnailExt_PasswordProtected(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+
+	_, router := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+		AllowDownload:          true,
+		ShowMetadata:           true,
+		ProtectedMediaCacheTTL: 1800,
+	})
+
+	t.Run("blocked without password", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/share/password-protected/asset/"+testAssetID1+"/thumbnail.webp", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 without password, got %d", rec.Code)
+		}
+	})
+
+	t.Run("served privately with password", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/share/password-protected/asset/"+testAssetID1+"/thumbnail.webp", nil)
+		req.AddCookie(&http.Cookie{
+			Name:  "immich-share-password",
+			Value: sharecookie.Sign(middleware.CookieSecret, "secret123"),
+		})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200 with password cookie, got %d: %s", rec.Code, rec.Body.String())
+		}
+		cc := rec.Header().Get("Cache-Control")
+		if cc != "private, max-age=1800" {
+			t.Errorf("expected private browser cache, got %q", cc)
+		}
+		if strings.Contains(cc, "public") {
+			t.Error("protected thumbnail must never be publicly cacheable")
+		}
+	})
+}
+
 // TestGetThumbnail_PublicShareCacheHeaders covers the CDN caching model: with
 // ShareMediaCacheTTL set, a public share's thumbnail is publicly cacheable so
 // a CDN (Cloudflare) spares Immich the repeat traffic; a password-protected

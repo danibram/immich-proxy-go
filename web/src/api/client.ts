@@ -78,8 +78,16 @@ class ApiClient {
     return this.request<Asset>(`/assets/${assetId}`);
   }
 
+  // The extension makes the URL eligible for Cloudflare's DEFAULT edge cache
+  // (extension-based list; extensionless API paths are marked DYNAMIC and the
+  // origin Cache-Control is ignored). It mirrors what Immich actually encodes
+  // per size (webp thumbnails, jpeg previews) and is advisory only — the
+  // response Content-Type wins. Never derive it from the asset's original
+  // filename: iPhone HEIC originals would yield .heic URLs, which Cloudflare's
+  // default cacheable-extension list excludes.
   getThumbnailUrl(assetId: string, size: 'preview' | 'thumbnail' = 'thumbnail'): string {
-    return `${this.baseUrl}/assets/${assetId}/thumbnail?size=${size}`;
+    const ext = size === 'preview' ? 'jpg' : 'webp';
+    return `${this.baseUrl}/assets/${assetId}/thumbnail.${ext}?size=${size}`;
   }
 
   getOriginalUrl(assetId: string): string {

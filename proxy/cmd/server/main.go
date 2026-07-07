@@ -199,6 +199,11 @@ func main() {
 
 			// Thumbnails - NO rate limiting (needed for smooth scrolling)
 			r.Get("/assets/{assetID}/thumbnail", shareHandler.GetThumbnail)
+			// Extensioned variant (thumbnail.webp / thumbnail.jpg) so CDNs with
+			// extension-based cache eligibility (Cloudflare default) edge-cache
+			// thumbnails without a custom Cache Rule. Same handler behavior;
+			// the legacy extensionless route stays for old clients.
+			r.Get("/assets/{assetID}/thumbnail.{ext}", shareHandler.GetThumbnailExt)
 		})
 
 		// OpenGraph cover image for link unfurling. Deliberately OUTSIDE the

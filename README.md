@@ -262,15 +262,31 @@ The proxy then sends `Cache-Control: public, max-age=…` for thumbnails of
 CDN can never serve their images to a visitor who lacks the password. Originals
 and video remain uncached (they are downloads, not repeat views).
 
-On **Cloudflare**, origin `Cache-Control` alone is not enough for these
-extensionless API paths — add a **Cache Rule** to make them eligible:
+The web viewer requests thumbnails with an image extension in the path —
+`…/thumbnail.webp?size=thumbnail` and `…/thumbnail.jpg?size=preview` — because
+Cloudflare's **default** cache eligibility is extension-based (webp/jpg are on
+the list; extensionless API paths are marked `DYNAMIC` and never cached). With
+these URLs a default Cloudflare setup edge-caches public thumbnails out of the
+box — **no Cache Rule needed**. For eligible paths Cloudflare honours the
+origin `Cache-Control`, which is exactly what keeps password-protected
+thumbnails out of the cache (`no-store`, or `private` — see below). The
+extension is advisory only: it always reflects Immich's thumbnail encoding
+(never the original filename — iPhone HEIC originals would not be on
+Cloudflare's default list), and the response `Content-Type` header wins. The
+share key is in the path, so cache entries never cross shares.
+
+Only for **pre-1.7 clients** (old cached HTML/JS still requesting the legacy
+extensionless `…/thumbnail` path, which keeps working) or CDNs with
+**non-default** eligibility config do you still need a **Cache Rule**:
 
 - **When**: URI Path matches `/share/*/api/assets/*/thumbnail` OR `/s/*/api/assets/*/thumbnail`
 - **Then**: *Cache eligibility → Eligible for cache*, and *Edge TTL → Use cache-control header if present*
 
-Using the origin cache-control (rather than a fixed edge TTL override) is what
-keeps password-protected thumbnails out of the cache: Cloudflare honours their
-`no-store`. The share key is in the path, so cache entries never cross shares.
+> **Warning**: never configure a global Edge TTL **override** that ignores the
+> origin cache-control. It would make Cloudflare cache password-protected
+> thumbnails (which the proxy marks `no-store`/`private`) and serve them to
+> visitors who never entered the password. Always use *"Use cache-control
+> header if present"*.
 
 For **password-protected** shares, `options.protected_media_cache_ttl` lets the
 authenticated visitor's *own browser* cache thumbnails without exposing them to
