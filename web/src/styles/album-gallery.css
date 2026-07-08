@@ -6,14 +6,22 @@
   padding: 10px 44px 150px 18px;
 }
 
-.app-share .grp {
-  margin-top: 10px;
+/* The virtual timeline box: rows are absolutely positioned inside it and
+   its height is set from the computed layout. The horizontal inset is a
+   margin (not padding) so the measured clientWidth equals the row width
+   the layout math uses. Group spacing lives in the layout (--grp-space). */
+.app-share .vtl {
+  margin: 0 var(--gallery-inset);
 }
 
+/* Header rows get an explicit height (--grp-head-h) from the layout; the
+   paddings below must add up so the label keeps its old baseline. */
 .app-share .grp-head {
   display: flex;
   align-items: center;
   gap: 10px;
+  height: 100%;
+  box-sizing: border-box;
   padding: 14px 16px 9px;
 }
 
@@ -51,33 +59,12 @@
   font-size: 18px;
 }
 
-.app-share .just-rows {
-  display: flex;
-  flex-direction: column;
-  padding: 0 3px;
-}
-
-.app-share .album[data-wide='1'] .just-rows {
-  padding: 0;
-}
-
-.app-share .gallery-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  margin: calc(var(--gallery-gap) * -0.5);
-}
-
-.app-share .gallery-wrap::after {
-  content: '';
-  flex-grow: 1000000;
-}
-
+/* Tiles are placed by the layout engine: left/width/height are inline
+   styles computed from the asset ratios, so the placeholder box always has
+   the final image dimensions (zero CLS). */
 .app-share .gallery-item {
-  margin: calc(var(--gallery-gap) * 0.5);
-  height: var(--gallery-row-height);
-  flex-grow: calc(var(--ratio) * 100);
-  flex-basis: calc(var(--ratio) * var(--gallery-row-height));
-  position: relative;
+  position: absolute;
+  top: 0;
   cursor: pointer;
   overflow: hidden;
   border-radius: 3px;
