@@ -5,6 +5,134 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-07-08
+
+### Other
+
+- 💄 Shorten OG fallback description to "Shared album"
+
+- Merge pull request #27 from danibram/codex/scrub-load-gating
+
+⚡️ Gate thumbnail loads on scroll settle while scrubbing
+
+- Merge pull request #29 from danibram/codex/viewport-tracker
+
+♻️ Extract gallery-level viewportTracker: one sweep owner instead of N observers
+
+
+### Performance
+
+- ⚡️ Gate thumbnail loads on scroll settle while scrubbing
+
+Dragging the timeline scrubber through a 525-photo album teleports
+scrollTop ~850px per mousemove; every LazyThumbnail passing through the
+preload zone enqueued a load, mounted an <img> and fetched — ~506
+thumbnail requests in one drag, dropping it to ~140ms/frame (~7fps).
+The fetch/decode/raster storm was the cost: main-thread JS stayed ~90ms
+for the whole drag.
+
+Three coordinated changes, all at loader altitude:
+
+- ThumbnailLoader.hold(settleMs): the scrubber renews a 150ms hold on
+  every drag scroll write, so nothing starts mid-drag but the queue
+  drains ~150ms after the grip stops — even mid-drag with the button
+  still down. Wheel scrolling is untouched (only the scrubber holds).
+- In-flight cancellation: LazyThumbnail now cancels 'loading' items
+  that leave the 2.5-viewport cancel zone (previously only 'queued'
+  ones), clearing img.src so the browser aborts the fetch and the
+  loader slot frees for the visible viewport.
+- Deferred, coalesced pump: starting the next job synchronously from a
+  cancel let a scroll-jump sweep start stale queued jobs (pre-jump
+  priorities) that the very next component's check aborted — a burst of
+  ~11 doomed requests per teleport. One pump deferred to a fresh task
+  runs after the whole sweep.
+
+Measured on the e2e stack (525 assets, cold page, 60-move ~5s drag,
+shield on, 2 runs):
+
+                        before          after
+  thumb reqs in drag    506             0-4
+  avg frame during drag 138-150ms       55-60ms
+  p95 frame             192-217ms       83ms
+  frames >33ms          95-100%         71-79%
+  first load after drop n/a (all sent)  91-97ms
+  viewport filled after 0 (pre-loaded)  ~170ms
+
+Holding the grip still mid-drag starts visible loads within ~100ms.
+Gentle wheel scrolling is unchanged: same 514 requests, zero blank
+visible tiles in both builds, frame stats within noise.
+
+The fast-scroll concurrency e2e spec now counts live requests via
+network events (request/requestfinished/requestfailed) instead of
+inside the delayed route callback, which kept aborted requests
+"active" until their artificial delay unwound.
+
+
+### Refactor
+
+- ♻️ Unify loader deferral, make cancel always reject, single reset path
+
+Three internal simplifications, no behavior change intended:
+
+- ThumbnailLoader: replace the two timer mechanisms (hold's settle
+  timer + schedulePump's coalescing macrotask) with one deadline-based
+  deferPump(). Deletes held/holdTimer/pumpScheduled and the !held check
+  in pump(). An enqueue or release during a settle window can never
+  shorten it: earlier-or-equal deadlines are already covered by the
+  pending timer.
+
+- ThumbnailLoader: cancel() now always rejects with AbortError. Task
+  promises resolve only on release() (starts are signalled via onStart,
+  which nothing awaited on the promise anyway), so cancelling a started
+  job frees its slot and rejects instead of resolving silently. Deletes
+  the started-branch in cancelJob that routed through releaseJob. The
+  only consumer bumps its requestId before every cancel, so the
+  rejections stay swallowed.
+
+- LazyThumbnail: collapse the duplicated reset paths (asset change,
+  cancel-zone exit) into abortToIdle(), and replace the status-based
+  guards in handleImgLoad/handleImgError with the equivalent
+  currentTask null check (non-null exactly while queued/loading,
+  nulled on every cancel path).
+
+Also un-exports SCROLL_SETTLE_MS (no external users) and fixes a
+garbled comment in share-gallery.spec.ts.
+
+- ♻️ Extract gallery-level viewportTracker to own the position sweep
+
+Each LazyThumbnail owned an IntersectionObserver, a container scroll
+listener, a window resize listener and an rAF-coalesced check — N photos
+meant N of each, and the position-evaluation sweep was emergent rather
+than owned. viewportTracker now owns it: ONE scroll listener, ONE
+rAF-coalesced sweep and ONE IntersectionObserver per scroll root, running
+opaque evaluate callbacks and ending each sweep with a loader pump.
+
+Deleted from LazyThumbnail (~50 lines): the per-instance observer,
+scroll/resize listeners, frameId/scheduleNearCheck plumbing and their
+cleanup. Kept: the load-lifecycle state machine, the no-IO fallback
+(load unconditionally) and effect re-registration when the
+scrollContainer accessor changes.
+
+Kept deliberately: the loader's deferred single-timer pump (now the
+public pump(), the tracker's sweep-end entry) because it is the one
+mechanism that both coalesces mid-sweep cancels and gates starts behind
+a pending hold() deadline; and the scrubber's explicit hold() call,
+because scrollTop-delta teleport detection cannot distinguish a scrub
+teleport (~880px/frame, must gate) from a fast wheel fling
+(~600px/frame, must keep loading).
+
+
+### Testing
+
+- ✅ Handle cancelled-task rejection synchronously in sweep test
+
+stale.cancel() rejects its promise at cancel time; the rejects
+expectation was attached only after an await, so vitest flagged an
+unhandled rejection and failed the CI run despite 127/127 passing.
+Attach the handler in the same synchronous block, and assert the
+already-started job resolves (cancelling an active job releases its
+slot rather than rejecting).
+
 ## [1.7.2] - 2026-07-07
 
 ### Bug Fixes
