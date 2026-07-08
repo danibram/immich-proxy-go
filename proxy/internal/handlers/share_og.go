@@ -39,7 +39,7 @@ func (h *ShareHandler) ShareIndexHead(r *http.Request) string {
 		title = "Shared Album"
 	}
 	if description == "" {
-		description = "Shared through Immich Public Proxy"
+		description = "Shared album"
 	}
 
 	base := absoluteBaseURL(r, h.config.Proxy.PublicURL)
