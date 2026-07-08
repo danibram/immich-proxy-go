@@ -3,6 +3,7 @@ import { fetchSharedLink } from './helpers/api';
 import { isIntegrationE2E, requireEnv, seed } from './helpers/env';
 import {
   countLoadedThumbs,
+  countVisibleLoadedThumbs,
   openShareByKey,
   openShareBySlug,
   scrollGalleryToEnd,
@@ -25,8 +26,20 @@ test.describe('Share gallery (integration)', () => {
 
     await expect(page.getByTestId('album-title')).toHaveText(link.albumName);
     await expect(page.getByTestId('album-meta')).toContainText(`${link.assetCount} items`);
-    await expect(page.getByTestId('gallery-item')).toHaveCount(link.assetCount);
+
+    // The gallery virtualizes rows: only the window around the viewport is
+    // in the DOM, never more than the album itself.
+    const rendered = await page.getByTestId('gallery-item').count();
+    expect(rendered).toBeGreaterThan(0);
+    expect(rendered).toBeLessThanOrEqual(link.assetCount);
     expect(await page.locator('.grp').count()).toBeGreaterThan(1);
+
+    // Every asset stays reachable: scrolling to the end renders and loads
+    // tiles at the bottom of the album.
+    await scrollGalleryToEnd(page);
+    await expect
+      .poll(async () => countVisibleLoadedThumbs(page), { timeout: 10_000 })
+      .toBeGreaterThan(0);
   });
 
   test('loads album via /s/{slug}', async ({ page, request }) => {
@@ -38,67 +51,65 @@ test.describe('Share gallery (integration)', () => {
     await expect(page.getByTestId('album-title')).toHaveText(link.albumName);
   });
 
-  test('lazy-loads thumbnails as user scrolls', async ({ page }) => {
+  test('lazy-loads thumbnails as user scrolls', async ({ page, request }) => {
     const shareKey = requireEnv('DEFAULT_SHARE_KEY');
+    const link = await fetchSharedLink(request, shareKey);
     const thumbs = trackThumbnailRequests(page);
 
     try {
       await openShareByKey(page, shareKey);
+      test.skip(link.assetCount < 10, 'Need many assets for lazy-load test');
 
-      const totalItems = await page.getByTestId('gallery-item').count();
-      test.skip(totalItems < 10, 'Need many assets for lazy-load test');
+      // Only the virtual window loads on open, not the whole album.
+      await expect.poll(async () => countLoadedThumbs(page)).toBeGreaterThan(0);
+      const initialRequests = new Set(thumbs.urls).size;
+      expect(initialRequests).toBeGreaterThan(0);
+      expect(initialRequests).toBeLessThan(link.assetCount);
 
-      const initialThumbs = await countLoadedThumbs(page);
-      expect(initialThumbs).toBeGreaterThan(0);
-      expect(initialThumbs).toBeLessThan(totalItems);
-
+      // Scrolling to the end pulls in assets that were never requested
+      // before, and the viewport ends up fully loaded.
       await scrollGalleryToEnd(page);
       await expect
-        .poll(async () => countLoadedThumbs(page), { timeout: 10_000 })
-        .toBeGreaterThan(initialThumbs);
-      expect(thumbs.urls.length).toBeGreaterThan(initialThumbs);
+        .poll(async () => new Set(thumbs.urls).size, { timeout: 10_000 })
+        .toBeGreaterThan(initialRequests);
+      await expect
+        .poll(async () => countVisibleLoadedThumbs(page), { timeout: 10_000 })
+        .toBeGreaterThan(0);
     } finally {
       thumbs.stop();
     }
   });
 
-  test('caps concurrent thumbnail work during a fast scroll', async ({ page }) => {
+  test('bounds thumbnail work to the virtual window during a fast scroll', async ({ page, request }) => {
     const shareKey = requireEnv('DEFAULT_SHARE_KEY');
+    const link = await fetchSharedLink(request, shareKey);
 
-    // Count live requests via network events rather than inside the route
-    // callback: loads that the gallery aborts (in-flight cancellation outside
-    // the cancel zone) must stop counting the moment they fail, not when
-    // their delayed route callback unwinds.
-    const isThumb = (req: { url: () => string }) => req.url().includes('thumbnail.jpg?size=preview');
-    const active = new Set<unknown>();
-    let maxActiveRequests = 0;
-    page.on('request', (req) => {
-      if (!isThumb(req)) return;
-      active.add(req);
-      maxActiveRequests = Math.max(maxActiveRequests, active.size);
-    });
-    page.on('requestfinished', (req) => active.delete(req));
-    page.on('requestfailed', (req) => active.delete(req));
+    // Mount = load: there is no client-side request queue anymore, the
+    // virtual window itself is the bound. A full-album teleport must not
+    // re-request tiles (each URL at most once) and must keep the DOM to
+    // the window, not the album.
+    const thumbs = trackThumbnailRequests(page);
 
-    // Stretch each load out so concurrency pressure is observable.
-    await page.route('**/thumbnail.jpg?size=preview', async (route) => {
-      await page.waitForTimeout(150);
-      await route.continue();
-    });
+    try {
+      await openShareByKey(page, shareKey);
+      test.skip(link.assetCount < 10, 'Need many assets for fast-scroll test');
 
-    await openShareByKey(page, shareKey);
+      await scrollGalleryToEnd(page);
+      await page.waitForTimeout(600);
 
-    const totalItems = await page.getByTestId('gallery-item').count();
-    test.skip(totalItems < 10, 'Need many assets for fast-scroll test');
+      const counts = new Map<string, number>();
+      for (const url of thumbs.urls) counts.set(url, (counts.get(url) ?? 0) + 1);
+      const repeated = [...counts.entries()].filter(([, n]) => n > 1);
+      expect(repeated).toEqual([]);
 
-    await scrollGalleryToEnd(page);
-    await page.waitForTimeout(400);
-
-    expect(maxActiveRequests).toBeLessThanOrEqual(4);
-
-    // Thumbnail routes may still be mid-delay when the test ends; drop them
-    // quietly instead of failing the test on interrupted callbacks.
-    await page.unrouteAll({ behavior: 'ignoreErrors' });
+      // Total work is bounded by the album (each asset at most once)...
+      expect(counts.size).toBeLessThanOrEqual(link.assetCount);
+      // ...and the DOM stays a window, it never accumulates every tile.
+      const mounted = await page.getByTestId('gallery-item').count();
+      expect(mounted).toBeLessThan(link.assetCount);
+    } finally {
+      thumbs.stop();
+    }
   });
 
   test('opens viewer, navigates with keyboard, and closes', async ({ page }) => {

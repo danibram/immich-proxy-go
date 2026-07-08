@@ -1,15 +1,21 @@
 import type { Accessor } from 'solid-js';
 import { batch, createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import type { DateGroup } from '~/utils/dateUtils';
-import { thumbnailLoader } from './thumbnailLoader';
+import { findGroupAt, type TimelineLayout } from './timeline/layout';
 
 interface Props {
   scrollContainer?: Accessor<HTMLDivElement | undefined>;
   groupedAssets: Accessor<DateGroup[]>;
+  /** Computed timeline geometry — date labels map to exact offsets. */
+  layout: Accessor<TimelineLayout>;
+  /** Offset of the layout box inside the scroll container's content. */
+  layoutTop: Accessor<number>;
 }
 
 const PADDING_TOP = 40;
 const PADDING_BOTTOM = 96;
+/** A group is "current" once its top is within this many px of the viewport top. */
+const GROUP_TOP_BIAS = 150;
 
 export default function TimelineScrubber(props: Props) {
   let scrubberRef: HTMLDivElement | undefined;
@@ -49,6 +55,24 @@ export default function TimelineScrubber(props: Props) {
     });
   }
 
+  /**
+   * The date group at a given container scrollTop, straight from the
+   * computed layout — no DOM scans, exact offsets.
+   */
+  function getGroupAtScrollTop(scrollTop: number): DateGroup | undefined {
+    const containerRef = getScrollContainer();
+    const shape = props.layout();
+    if (shape.groups.length === 0) return undefined;
+
+    if (containerRef) {
+      const scrolledToBottom =
+        scrollTop + containerRef.clientHeight >= containerRef.scrollHeight - 100;
+      if (scrolledToBottom) return shape.groups[shape.groups.length - 1].group;
+    }
+
+    return findGroupAt(shape, scrollTop - props.layoutTop() + GROUP_TOP_BIAS)?.group;
+  }
+
   function updateScrollPosition() {
     const containerRef = getScrollContainer();
     if (!containerRef || !scrubberRef) return;
@@ -57,37 +81,12 @@ export default function TimelineScrubber(props: Props) {
     const scrollRatio = maxScroll > 0 ? containerRef.scrollTop / maxScroll : 0;
     const scrubberHeight = scrubberRef.clientHeight - PADDING_TOP - PADDING_BOTTOM;
 
-    const groups = props.groupedAssets();
-    const domGroups = containerRef.querySelectorAll('[data-group-date]');
-    let visibleGroup: Element | null = null;
-    let lastGroup: Element | null = null;
-    const containerTop = containerRef.getBoundingClientRect().top;
-
-    for (const group of domGroups) {
-      const rect = group.getBoundingClientRect();
-      lastGroup = group;
-      if (rect.top <= containerTop + 150) {
-        visibleGroup = group;
-      }
-    }
-
-    const scrolledToBottom =
-      containerRef.scrollTop + containerRef.clientHeight >= containerRef.scrollHeight - 100;
-    if (scrolledToBottom && lastGroup) {
-      visibleGroup = lastGroup;
-    }
-
-    if (visibleGroup) {
-      const date = visibleGroup.getAttribute('data-group-date');
-      const groupIndex = groups.findIndex((g) => g.date === date);
-      const group = groups[groupIndex];
-
-      if (group) {
-        batch(() => {
-          setCurrentLabel(group.scrubberLabel);
-          setScrubberY(Math.min(scrollRatio * scrubberHeight, scrubberHeight));
-        });
-      }
+    const group = getGroupAtScrollTop(containerRef.scrollTop);
+    if (group) {
+      batch(() => {
+        setCurrentLabel(group.scrubberLabel);
+        setScrubberY(Math.min(scrollRatio * scrubberHeight, scrubberHeight));
+      });
     }
   }
 
@@ -117,35 +116,12 @@ export default function TimelineScrubber(props: Props) {
       });
 
       if (isDrag && scrollContainer) {
-        // Every drag move teleports scrollTop by hundreds of px; loading
-        // thumbnails for each intermediate position is wasted work that
-        // janks the drag. Hold the loader until the position settles.
-        thumbnailLoader.hold();
+        // Teleport freely: the gallery derives its render window from
+        // scrollTop and defers image loads while the position is jumping,
+        // so no per-move throttling is needed here.
         scrollContainer.scrollTop = targetScrollTop;
       }
     }
-  }
-
-  function getGroupAtScrollTop(scrollTop: number): DateGroup | undefined {
-    const scrollContainer = getScrollContainer();
-    const groups = props.groupedAssets();
-    if (!scrollContainer) return groups[0];
-
-    let activeGroup = groups[0];
-    const containerTop = scrollContainer.getBoundingClientRect().top;
-    for (const group of groups) {
-      const element = document.getElementById(`group-${group.date}`);
-      if (!element) continue;
-
-      const elementTop = element.getBoundingClientRect().top - containerTop + scrollContainer.scrollTop;
-      if (elementTop <= scrollTop + 150) {
-        activeGroup = group;
-      } else {
-        break;
-      }
-    }
-
-    return activeGroup;
   }
 
   function handleScrubberMouseDown(e: MouseEvent) {

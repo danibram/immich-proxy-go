@@ -31,16 +31,23 @@ body {
   display: none;
 }
 
-/* Justified gallery — share album */
+/* Justified gallery — share album.
+   The virtual timeline (AssetTimeline readMetrics) reads these vars to
+   compute row geometry in JS; keep them in sync with the rendered chrome. */
 .app-share {
   --gallery-row-height: 118px;
   --gallery-gap: 2px;
+  --grp-head-h: 47px;
+  --grp-space: 10px;
+  --gallery-inset: 3px;
 }
 
 @media (min-width: 820px) {
   .app-share {
     --gallery-row-height: 176px;
     --gallery-gap: 3px;
+    --grp-head-h: 63px;
+    --gallery-inset: 0px;
   }
 }
 
