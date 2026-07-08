@@ -162,11 +162,38 @@ export default function AssetTimeline(props: Props) {
   let frameId: number | null = null;
   let lastScrollTop: number | null = null;
   let pendingAnchor: ScrollAnchor | null = null;
+  // Offset of the layout box inside the scroll content. Measuring it forces
+  // a reflow, so it is cached and refreshed only on measure/settle — the
+  // overscan absorbs the few px it can drift while the top bar collapses.
+  let cachedBoxTop = 0;
 
-  function boxTopIn(container: HTMLElement): number {
+  function measureBoxTop(container: HTMLElement): number {
     const el = box();
-    if (!el) return 0;
-    return el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    if (!el) return cachedBoxTop;
+    cachedBoxTop =
+      el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+    return cachedBoxTop;
+  }
+
+  function armSettleTimer() {
+    if (settleTimer !== null) clearTimeout(settleTimer);
+    settleTimer = window.setTimeout(() => {
+      settleTimer = null;
+      // Don't settle straight from the timer: after a main-thread stall the
+      // timer fires ahead of a queue of pending mousemove teleports, and
+      // settling here would load a full window mid-drag. Verify on the next
+      // frame — if those moves re-armed the timer, stay frozen.
+      requestAnimationFrame(() => {
+        if (settleTimer !== null) return;
+        const container = getScrollContainer();
+        if (container) measureBoxTop(container);
+        // syncScroll re-arms the timer if the position teleported again
+        // (queued moves that dispatched after the timer fired) — in that
+        // case stay frozen.
+        syncScroll();
+        if (settleTimer === null) setFastScroll(false);
+      });
+    }, SETTLE_MS);
   }
 
   function syncScroll() {
@@ -174,17 +201,13 @@ export default function AssetTimeline(props: Props) {
     const el = box();
     if (!container || !el) return;
 
-    const top = container.scrollTop - boxTopIn(container);
+    const top = container.scrollTop - cachedBoxTop;
     const delta = lastScrollTop === null ? 0 : Math.abs(top - lastScrollTop);
     lastScrollTop = top;
 
     if (delta > viewportH() * FAST_SCROLL_VIEWPORT_FRACTION) {
       setFastScroll(true);
-      if (settleTimer !== null) clearTimeout(settleTimer);
-      settleTimer = window.setTimeout(() => {
-        settleTimer = null;
-        setFastScroll(false);
-      }, SETTLE_MS);
+      armSettleTimer();
     }
 
     setLayoutScrollTop(top);
@@ -207,6 +230,8 @@ export default function AssetTimeline(props: Props) {
       cancelAnimationFrame(frameId);
       frameId = null;
     }
+    const container = getScrollContainer();
+    if (container) measureBoxTop(container);
     syncScroll();
     setFastScroll(false);
   }
@@ -228,6 +253,7 @@ export default function AssetTimeline(props: Props) {
       setMetrics(readMetrics(el));
       setWidth(nextWidth);
       if (container) {
+        measureBoxTop(container);
         setViewportH(container.clientHeight || window.innerHeight);
       }
     });
@@ -244,7 +270,7 @@ export default function AssetTimeline(props: Props) {
     requestAnimationFrame(() => {
       const target = restoreAnchor(layout(), anchor);
       if (target === null) return;
-      container.scrollTop = target + boxTopIn(container);
+      container.scrollTop = target + measureBoxTop(container);
       settleNow();
     });
   });
@@ -266,21 +292,23 @@ export default function AssetTimeline(props: Props) {
     if (!container || !virtualize) return;
 
     const onScroll = () => scheduleSync();
-    const onScrollEnd = () => settleNow();
     const onResize = () => {
       measure();
       scheduleSync();
     };
 
+    // No `scrollend` listener on purpose: Chromium fires scrollend after
+    // every programmatic scrollTop assignment, so during a scrubber drag
+    // (one teleport per mousemove) it would end the fast-scroll freeze
+    // between every move and load a window per intermediate position. The
+    // settle timer ("no teleport for SETTLE_MS") is the reliable signal.
     container.addEventListener('scroll', onScroll, { passive: true });
-    container.addEventListener('scrollend', onScrollEnd, { passive: true });
     window.addEventListener('resize', onResize);
     measure();
     syncScroll();
 
     onCleanup(() => {
       container.removeEventListener('scroll', onScroll);
-      container.removeEventListener('scrollend', onScrollEnd);
       window.removeEventListener('resize', onResize);
     });
   });
@@ -456,10 +484,7 @@ export default function AssetTimeline(props: Props) {
         scrollContainer={props.scrollContainer}
         groupedAssets={groupedAssets}
         layout={layout}
-        layoutTop={() => {
-          const container = getScrollContainer();
-          return container ? boxTopIn(container) : 0;
-        }}
+        layoutTop={() => cachedBoxTop}
       />
     </>
   );

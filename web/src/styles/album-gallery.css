@@ -12,6 +12,13 @@
    the layout math uses. Group spacing lives in the layout (--grp-space). */
 .app-share .vtl {
   margin: 0 var(--gallery-inset);
+  contain: layout style;
+}
+
+/* Rows have explicit geometry, so their layout and paint never leak out —
+   containment keeps window shifts (mount/unmount at the edges) local. */
+.app-share .vrow {
+  contain: layout style;
 }
 
 /* Header rows get an explicit height (--grp-head-h) from the layout; the
