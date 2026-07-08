@@ -22,11 +22,8 @@ export default function LazyThumbnail(props: Props) {
 
   createEffect(() => {
     props.asset.id;
-    currentRequestId += 1;
     requestedSize = 'preview';
-    cancelLoad();
-    setSrc('');
-    setStatus('idle');
+    abortToIdle();
   });
 
   onCleanup(() => {
@@ -37,6 +34,21 @@ export default function LazyThumbnail(props: Props) {
   function cancelLoad() {
     currentTask?.cancel();
     currentTask = null;
+  }
+
+  // The single reset path: invalidates the in-flight request (the requestId
+  // bump makes its promise rejection a no-op), cancels the queued/started
+  // loader job and returns the slot to 'idle'.
+  function abortToIdle(abortImg = false) {
+    currentRequestId += 1;
+    // Clearing the element's src makes the browser abort an in-flight
+    // fetch; merely unmounting the <img> would let it keep downloading.
+    // Abort before cancelLoad() so the freed slot's next load never
+    // overlaps with the stale request.
+    if (abortImg && imgRef) imgRef.src = '';
+    cancelLoad();
+    setSrc('');
+    setStatus('idle');
   }
 
   function isWithinViewportMargin(root: HTMLDivElement | undefined, multiplier: number): boolean {
@@ -110,14 +122,15 @@ export default function LazyThumbnail(props: Props) {
   function handleImgLoad() {
     // Ignore events from an <img> whose load was cancelled from
     // evaluatePosition; acting on them would strand the slot in 'loaded'
-    // with an empty src.
-    if (untrack(status) !== 'loading') return;
+    // with an empty src. currentTask is non-null exactly while a request
+    // is queued/loading and nulled on every cancel path.
+    if (!currentTask) return;
     releaseCurrentTask();
     setStatus('loaded');
   }
 
   function handleImgError() {
-    if (untrack(status) !== 'loading') return;
+    if (!currentTask) return;
     releaseCurrentTask();
     setSrc('');
 
@@ -136,15 +149,7 @@ export default function LazyThumbnail(props: Props) {
     const inCancelZone = isWithinViewportMargin(root, 2.5);
 
     if ((currentStatus === 'queued' || currentStatus === 'loading') && !inCancelZone) {
-      currentRequestId += 1;
-      // Clearing the element's src makes the browser abort an in-flight
-      // fetch; merely unmounting the <img> would let it keep downloading.
-      // Abort before cancelLoad() so the freed slot's next load never
-      // overlaps with the stale request.
-      if (currentStatus === 'loading' && imgRef) imgRef.src = '';
-      cancelLoad();
-      setSrc('');
-      setStatus('idle');
+      abortToIdle(true);
       return;
     }
 

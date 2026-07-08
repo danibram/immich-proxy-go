@@ -1,4 +1,10 @@
 export interface ThumbnailTask {
+  /**
+   * Settles once: resolves on release() (the load ran to completion),
+   * rejects with an AbortError on cancel() — whether the job was still
+   * queued or already started. Job starts are signalled via onStart,
+   * not via this promise.
+   */
   promise: Promise<void>;
   cancel: () => void;
   release: () => void;
@@ -20,7 +26,7 @@ function createAbortError() {
   return new DOMException('Thumbnail request aborted', 'AbortError');
 }
 
-export const SCROLL_SETTLE_MS = 150;
+const SCROLL_SETTLE_MS = 150;
 
 export class ThumbnailLoader {
   private readonly maxConcurrent: number;
@@ -28,12 +34,39 @@ export class ThumbnailLoader {
   private nextId = 1;
   private touchSeq = 1;
   private queue: QueueJob[] = [];
-  private held = false;
-  private holdTimer: ReturnType<typeof setTimeout> | null = null;
-  private pumpScheduled = false;
+  private pumpTimer: ReturnType<typeof setTimeout> | null = null;
+  private pumpDeadline = 0;
 
   constructor(maxConcurrent = 4) {
     this.maxConcurrent = maxConcurrent;
+  }
+
+  /**
+   * Defers the next pump until `delayMs` from now, keeping at most one
+   * pending timer: an earlier-or-equal deadline is already covered by the
+   * pending one, a later deadline replaces it. This means an enqueue or
+   * release during a hold's settle window can never shorten the window.
+   *
+   * Even `delayMs = 0` starts are deferred to a macrotask, never run
+   * synchronously. When a scroll jump lands, every thumbnail re-evaluates
+   * its position in the same frame: pumping synchronously from each cancel
+   * would start stale queued jobs (their priorities predate the jump) only
+   * for the next component's sweep to abort them — a burst of doomed
+   * requests. A microtask would not help either, because microtasks drain
+   * between each item's rAF callback; only a macrotask coalesces the whole
+   * sweep so that just the jobs that survived it start.
+   */
+  private deferPump(delayMs = 0) {
+    const deadline = Date.now() + delayMs;
+    if (this.pumpTimer !== null) {
+      if (deadline <= this.pumpDeadline) return; // already covered
+      clearTimeout(this.pumpTimer);
+    }
+    this.pumpDeadline = deadline;
+    this.pumpTimer = setTimeout(() => {
+      this.pumpTimer = null;
+      this.pump();
+    }, delayMs);
   }
 
   /**
@@ -45,30 +78,7 @@ export class ThumbnailLoader {
    * Queued jobs can still be cancelled or re-prioritized while held.
    */
   hold(settleMs = SCROLL_SETTLE_MS) {
-    this.held = true;
-    if (this.holdTimer !== null) clearTimeout(this.holdTimer);
-    this.holdTimer = setTimeout(() => {
-      this.holdTimer = null;
-      this.held = false;
-      this.schedulePump();
-    }, settleMs);
-  }
-
-  /**
-   * Starts are deferred to a fresh task and coalesced. When a scroll jump
-   * lands, every thumbnail re-evaluates its position in the same frame:
-   * pumping synchronously from each cancel would start stale queued jobs
-   * (their priorities predate the jump) only for the next component's
-   * sweep to abort them — a burst of doomed requests. One deferred pump
-   * runs after the whole sweep, so only jobs that survived it start.
-   */
-  private schedulePump() {
-    if (this.pumpScheduled) return;
-    this.pumpScheduled = true;
-    setTimeout(() => {
-      this.pumpScheduled = false;
-      this.pump();
-    }, 0);
+    this.deferPump(settleMs);
   }
 
   enqueue(priority: number, onStart?: () => void): ThumbnailTask {
@@ -86,7 +96,7 @@ export class ThumbnailLoader {
         onStart,
       };
       this.queue.push(job);
-      this.schedulePump();
+      this.deferPump();
     });
 
     return {
@@ -103,17 +113,19 @@ export class ThumbnailLoader {
     job.touchedAt = this.touchSeq++;
   }
 
+  // Cancel always rejects with AbortError, whether the job was still
+  // queued or already started; a started job's slot is freed as well.
+  // Release (load finished) is the only path that resolves.
   private cancelJob(job: QueueJob) {
     if (job.settled) return;
 
-    if (!job.started) {
-      this.queue = this.queue.filter((entry) => entry.id !== job.id);
-      job.settled = true;
-      job.reject(createAbortError());
-      return;
+    job.settled = true;
+    this.queue = this.queue.filter((entry) => entry.id !== job.id);
+    if (job.started) {
+      this.activeCount = Math.max(0, this.activeCount - 1);
+      this.deferPump();
     }
-
-    this.releaseJob(job);
+    job.reject(createAbortError());
   }
 
   private releaseJob(job: QueueJob) {
@@ -122,11 +134,12 @@ export class ThumbnailLoader {
     job.settled = true;
     this.activeCount = Math.max(0, this.activeCount - 1);
     this.queue = this.queue.filter((entry) => entry.id !== job.id);
-    this.schedulePump();
+    job.resolve();
+    this.deferPump();
   }
 
   private pump() {
-    while (!this.held && this.activeCount < this.maxConcurrent) {
+    while (this.activeCount < this.maxConcurrent) {
       const job = this.queue
         .filter((entry) => !entry.started && !entry.settled)
         .sort((a, b) => {
@@ -138,7 +151,6 @@ export class ThumbnailLoader {
       job.started = true;
       this.activeCount += 1;
       job.onStart?.();
-      job.resolve();
     }
   }
 }

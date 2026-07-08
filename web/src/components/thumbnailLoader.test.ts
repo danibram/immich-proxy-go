@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThumbnailLoader } from './thumbnailLoader';
 
-// Starts are deferred to a coalesced macrotask (see schedulePump), so tests
+// Starts are deferred to a coalesced macrotask (see deferPump), so tests
 // flush one task before asserting which jobs began.
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -47,10 +47,12 @@ describe('ThumbnailLoader', () => {
     second.cancel();
 
     await expect(second.promise).rejects.toMatchObject({ name: 'AbortError' });
+    await tick();
+    first.release();
     await expect(first.promise).resolves.toBeUndefined();
   });
 
-  it('releases active requests and frees a slot for the next task', async () => {
+  it('cancelling an active request rejects it and frees a slot for the next task', async () => {
     let secondStarted = false;
     const loader = new ThumbnailLoader(1);
     const first = loader.enqueue(10);
@@ -61,9 +63,12 @@ describe('ThumbnailLoader', () => {
     });
 
     first.cancel();
+    const firstRejects = expect(first.promise).rejects.toMatchObject({ name: 'AbortError' });
     await tick();
     expect(secondStarted).toBe(true);
-    await expect(first.promise).resolves.toBeUndefined();
+    await firstRejects;
+
+    second.release();
     await expect(second.promise).resolves.toBeUndefined();
   });
 
@@ -72,10 +77,13 @@ describe('ThumbnailLoader', () => {
     const first = loader.enqueue(10);
     await tick();
     first.cancel();
+    const firstRejects = expect(first.promise).rejects.toMatchObject({ name: 'AbortError' });
 
     const second = loader.enqueue(10);
 
-    await expect(first.promise).resolves.toBeUndefined();
+    await firstRejects;
+    await tick();
+    second.release();
     await expect(second.promise).resolves.toBeUndefined();
   });
 
@@ -98,6 +106,7 @@ describe('ThumbnailLoader', () => {
     await tick();
     expect(started).toEqual([2, 3, 1]);
 
+    first.release();
     await expect(first.promise).resolves.toBeUndefined();
     await expect(second.promise).resolves.toBeUndefined();
     await expect(third.promise).resolves.toBeUndefined();
@@ -113,20 +122,20 @@ describe('ThumbnailLoader', () => {
     await tick();
     expect(started).toEqual([1]);
 
-    // A scroll-jump sweep: the active job is released and the stale queued
-    // job is cancelled before the deferred pump runs. Attach the rejection
-    // expectations before yielding so both AbortErrors are handled by the
-    // time the microtask queue drains (vitest fails the run on unhandled
-    // rejections even when every assertion passes).
+    // A scroll-jump sweep: the active job and the stale queued job are both
+    // cancelled before the deferred pump runs. Cancel always rejects, so
+    // attach the rejection expectations before yielding (vitest fails the
+    // run on unhandled rejections even when every assertion passes).
     active.cancel();
     stale.cancel();
+    const activeRejects = expect(active.promise).rejects.toMatchObject({ name: 'AbortError' });
     const staleRejects = expect(stale.promise).rejects.toMatchObject({ name: 'AbortError' });
     await tick();
 
     expect(started).toEqual([1, 3]);
+    await activeRejects;
     await staleRejects;
-    // Cancelling an already-started job releases its slot and resolves.
-    await expect(active.promise).resolves.toBeUndefined();
+    fresh.release();
     await expect(fresh.promise).resolves.toBeUndefined();
   });
 

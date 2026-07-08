@@ -66,9 +66,9 @@ test.describe('Share gallery (integration)', () => {
     const shareKey = requireEnv('DEFAULT_SHARE_KEY');
 
     // Count live requests via network events rather than inside the route
-    // callback: loads the gallery aborts (in-flight cancellation outside the
-    // cancel zone) must stop counting the moment they fail, not when their
-    // delayed route callback unwinds.
+    // callback: loads that the gallery aborts (in-flight cancellation outside
+    // the cancel zone) must stop counting the moment they fail, not when
+    // their delayed route callback unwinds.
     const isThumb = (req: { url: () => string }) => req.url().includes('thumbnail.jpg?size=preview');
     const active = new Set<unknown>();
     let maxActiveRequests = 0;
