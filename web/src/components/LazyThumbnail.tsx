@@ -3,6 +3,7 @@ import type { Accessor } from 'solid-js';
 import { api } from '~/api/client';
 import type { Asset } from '~/api/types';
 import { thumbnailLoader, type ThumbnailTask } from './thumbnailLoader';
+import { viewportTracker } from './viewportTracker';
 
 interface Props {
   asset: Asset;
@@ -14,10 +15,9 @@ export default function LazyThumbnail(props: Props) {
   const [src, setSrc] = createSignal('');
   let itemRef: HTMLDivElement | undefined;
   let imgRef: HTMLImageElement | undefined;
-  let frameId: number | null = null;
   let currentTask: ThumbnailTask | null = null;
   let currentRequestId = 0;
-  let currentRoot: HTMLDivElement | undefined;
+  let currentRoot: HTMLElement | undefined;
   let requestedSize: 'preview' | 'thumbnail' = 'preview';
 
   createEffect(() => {
@@ -51,7 +51,7 @@ export default function LazyThumbnail(props: Props) {
     setStatus('idle');
   }
 
-  function isWithinViewportMargin(root: HTMLDivElement | undefined, multiplier: number): boolean {
+  function isWithinViewportMargin(root: HTMLElement | undefined, multiplier: number): boolean {
     if (!itemRef) return false;
 
     const itemRect = itemRef.getBoundingClientRect();
@@ -73,7 +73,7 @@ export default function LazyThumbnail(props: Props) {
     return error instanceof DOMException && error.name === 'AbortError';
   }
 
-  function getViewportPriority(root: HTMLDivElement | undefined): number {
+  function getViewportPriority(root: HTMLElement | undefined): number {
     if (!itemRef) return Number.MAX_SAFE_INTEGER;
 
     const itemRect = itemRef.getBoundingClientRect();
@@ -87,7 +87,7 @@ export default function LazyThumbnail(props: Props) {
     return Math.round(Math.abs(itemCenter - rootCenter));
   }
 
-  function requestLoad(root: HTMLDivElement | undefined, size: 'preview' | 'thumbnail' = requestedSize) {
+  function requestLoad(root: HTMLElement | undefined, size: 'preview' | 'thumbnail' = requestedSize) {
     if (currentTask || status() === 'loaded') return;
 
     requestedSize = size;
@@ -143,7 +143,7 @@ export default function LazyThumbnail(props: Props) {
     setStatus('error');
   }
 
-  function evaluatePosition(root: HTMLDivElement | undefined) {
+  function evaluatePosition(root: HTMLElement | undefined) {
     const currentStatus = untrack(status);
     const inPreloadZone = isWithinViewportMargin(root, 1);
     const inCancelZone = isWithinViewportMargin(root, 2.5);
@@ -163,57 +163,23 @@ export default function LazyThumbnail(props: Props) {
     }
   }
 
-  function scheduleNearCheck(root: HTMLDivElement | undefined) {
-    if (frameId !== null) return;
-    frameId = requestAnimationFrame(() => {
-      frameId = null;
-      evaluatePosition(root);
-    });
-  }
-
   createEffect(() => {
     const root = props.scrollContainer?.();
     currentRoot = root;
     if (!itemRef) return;
 
+    // No IntersectionObserver (SSR, old jsdom): position can't be tracked,
+    // so load unconditionally rather than never.
     if (typeof IntersectionObserver === 'undefined') {
-      requestLoad(root, 'preview');
+      untrack(() => requestLoad(root, 'preview'));
       return;
     }
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          evaluatePosition(root);
-        }
-      },
-      {
-        root: root ?? null,
-        rootMargin: '100% 0px',
-        threshold: 0.01,
-      }
-    );
-
-    observer.observe(itemRef);
-    scheduleNearCheck(root);
-
-    const onScroll = () => scheduleNearCheck(root);
-    const onResize = () => scheduleNearCheck(root);
-
-    root?.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onResize);
-
-    untrack(() => evaluatePosition(root));
-
-    onCleanup(() => {
-      observer.disconnect();
-      root?.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onResize);
-      if (frameId !== null) {
-        cancelAnimationFrame(frameId);
-        frameId = null;
-      }
-    });
+    // register() evaluates synchronously; untrack so the signals it reads
+    // don't re-run this effect. Re-runs when the scrollContainer accessor
+    // changes, re-registering against the new root.
+    const unregister = untrack(() => viewportTracker.register(itemRef!, root, evaluatePosition));
+    onCleanup(unregister);
   });
 
   return (
