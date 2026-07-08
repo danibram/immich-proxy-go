@@ -13,6 +13,7 @@ export default function LazyThumbnail(props: Props) {
   const [status, setStatus] = createSignal<'idle' | 'queued' | 'loading' | 'loaded' | 'error'>('idle');
   const [src, setSrc] = createSignal('');
   let itemRef: HTMLDivElement | undefined;
+  let imgRef: HTMLImageElement | undefined;
   let frameId: number | null = null;
   let currentTask: ThumbnailTask | null = null;
   let currentRequestId = 0;
@@ -107,11 +108,16 @@ export default function LazyThumbnail(props: Props) {
   }
 
   function handleImgLoad() {
+    // Ignore events from an <img> whose load was cancelled from
+    // evaluatePosition; acting on them would strand the slot in 'loaded'
+    // with an empty src.
+    if (untrack(status) !== 'loading') return;
     releaseCurrentTask();
     setStatus('loaded');
   }
 
   function handleImgError() {
+    if (untrack(status) !== 'loading') return;
     releaseCurrentTask();
     setSrc('');
 
@@ -129,8 +135,13 @@ export default function LazyThumbnail(props: Props) {
     const inPreloadZone = isWithinViewportMargin(root, 1);
     const inCancelZone = isWithinViewportMargin(root, 2.5);
 
-    if (currentStatus === 'queued' && !inCancelZone) {
+    if ((currentStatus === 'queued' || currentStatus === 'loading') && !inCancelZone) {
       currentRequestId += 1;
+      // Clearing the element's src makes the browser abort an in-flight
+      // fetch; merely unmounting the <img> would let it keep downloading.
+      // Abort before cancelLoad() so the freed slot's next load never
+      // overlaps with the stale request.
+      if (currentStatus === 'loading' && imgRef) imgRef.src = '';
       cancelLoad();
       setSrc('');
       setStatus('idle');
@@ -204,6 +215,7 @@ export default function LazyThumbnail(props: Props) {
     <div ref={itemRef} class="thumb-img-slot" data-testid="gallery-thumb-slot">
       <Show when={(status() === 'loading' || status() === 'loaded') && src()}>
         <img
+          ref={imgRef}
           data-testid="gallery-thumb"
           src={src()}
           alt=""

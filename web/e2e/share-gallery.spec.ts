@@ -64,20 +64,26 @@ test.describe('Share gallery (integration)', () => {
 
   test('caps concurrent thumbnail work during a fast scroll', async ({ page }) => {
     const shareKey = requireEnv('DEFAULT_SHARE_KEY');
-    let activeRequests = 0;
+
+    // Count live requests via network events rather than inside the route
+    // callback: loads the gallery aborts (in-flight cancellation outside the
+    // cancel zone) must stop counting the moment they fail, not when their
+    // delayed route callback unwinds.
+    const isThumb = (req: { url: () => string }) => req.url().includes('thumbnail.jpg?size=preview');
+    const active = new Set<unknown>();
     let maxActiveRequests = 0;
+    page.on('request', (req) => {
+      if (!isThumb(req)) return;
+      active.add(req);
+      maxActiveRequests = Math.max(maxActiveRequests, active.size);
+    });
+    page.on('requestfinished', (req) => active.delete(req));
+    page.on('requestfailed', (req) => active.delete(req));
 
+    // Stretch each load out so concurrency pressure is observable.
     await page.route('**/thumbnail.jpg?size=preview', async (route) => {
-      activeRequests += 1;
-      maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
-
       await page.waitForTimeout(150);
-
-      try {
-        await route.continue();
-      } finally {
-        activeRequests -= 1;
-      }
+      await route.continue();
     });
 
     await openShareByKey(page, shareKey);

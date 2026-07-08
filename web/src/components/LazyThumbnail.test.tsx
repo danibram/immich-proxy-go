@@ -101,9 +101,9 @@ describe('LazyThumbnail', () => {
     });
   });
 
-  it('keeps an in-flight image mounted when it moves far away and still shows it again later', async () => {
+  it('cancels an in-flight image that leaves the cancel zone and reloads it when it returns', async () => {
     let rootRef: HTMLDivElement | undefined;
-    const { getByTestId } = render(() => (
+    const { getByTestId, queryByTestId } = render(() => (
       <div ref={rootRef} data-testid="scroll-root">
         <LazyThumbnail asset={asset} scrollContainer={() => rootRef} />
       </div>
@@ -134,8 +134,7 @@ describe('LazyThumbnail', () => {
     fireEvent.scroll(root);
 
     await waitFor(() => {
-      const image = getByTestId('gallery-thumb') as HTMLImageElement;
-      expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail.jpg?size=preview');
+      expect(queryByTestId('gallery-thumb')).toBeNull();
     });
 
     top = 120;

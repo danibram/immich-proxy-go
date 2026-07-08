@@ -1,6 +1,7 @@
 import type { Accessor } from 'solid-js';
 import { batch, createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import type { DateGroup } from '~/utils/dateUtils';
+import { thumbnailLoader } from './thumbnailLoader';
 
 interface Props {
   scrollContainer?: Accessor<HTMLDivElement | undefined>;
@@ -116,6 +117,10 @@ export default function TimelineScrubber(props: Props) {
       });
 
       if (isDrag && scrollContainer) {
+        // Every drag move teleports scrollTop by hundreds of px; loading
+        // thumbnails for each intermediate position is wasted work that
+        // janks the drag. Hold the loader until the position settles.
+        thumbnailLoader.hold();
         scrollContainer.scrollTop = targetScrollTop;
       }
     }
