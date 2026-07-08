@@ -42,21 +42,22 @@ export class ThumbnailLoader {
   }
 
   /**
-   * Defers the next pump until `delayMs` from now, keeping at most one
+   * Schedules the next pump for `delayMs` from now, keeping at most one
    * pending timer: an earlier-or-equal deadline is already covered by the
    * pending one, a later deadline replaces it. This means an enqueue or
    * release during a hold's settle window can never shorten the window.
    *
    * Even `delayMs = 0` starts are deferred to a macrotask, never run
-   * synchronously. When a scroll jump lands, every thumbnail re-evaluates
-   * its position in the same frame: pumping synchronously from each cancel
-   * would start stale queued jobs (their priorities predate the jump) only
-   * for the next component's sweep to abort them — a burst of doomed
-   * requests. A microtask would not help either, because microtasks drain
-   * between each item's rAF callback; only a macrotask coalesces the whole
-   * sweep so that just the jobs that survived it start.
+   * synchronously. The viewport tracker's sweep cancels and enqueues jobs
+   * for many thumbnails in one pass: pumping synchronously from an early
+   * cancel would start stale queued jobs (their priorities predate the
+   * scroll jump) only for a later evaluate in the same sweep to abort
+   * them — a burst of doomed requests. Deferring to a macrotask lets the
+   * whole sweep finish first, so only the jobs that survived it start.
+   * This one timer is also what makes hold() gate every other pump
+   * trigger, so the sweep-end pump must go through it too.
    */
-  private deferPump(delayMs = 0) {
+  pump(delayMs = 0) {
     const deadline = Date.now() + delayMs;
     if (this.pumpTimer !== null) {
       if (deadline <= this.pumpDeadline) return; // already covered
@@ -65,7 +66,7 @@ export class ThumbnailLoader {
     this.pumpDeadline = deadline;
     this.pumpTimer = setTimeout(() => {
       this.pumpTimer = null;
-      this.pump();
+      this.startJobs();
     }, delayMs);
   }
 
@@ -78,7 +79,7 @@ export class ThumbnailLoader {
    * Queued jobs can still be cancelled or re-prioritized while held.
    */
   hold(settleMs = SCROLL_SETTLE_MS) {
-    this.deferPump(settleMs);
+    this.pump(settleMs);
   }
 
   enqueue(priority: number, onStart?: () => void): ThumbnailTask {
@@ -96,7 +97,7 @@ export class ThumbnailLoader {
         onStart,
       };
       this.queue.push(job);
-      this.deferPump();
+      this.pump();
     });
 
     return {
@@ -123,7 +124,7 @@ export class ThumbnailLoader {
     this.queue = this.queue.filter((entry) => entry.id !== job.id);
     if (job.started) {
       this.activeCount = Math.max(0, this.activeCount - 1);
-      this.deferPump();
+      this.pump();
     }
     job.reject(createAbortError());
   }
@@ -135,10 +136,10 @@ export class ThumbnailLoader {
     this.activeCount = Math.max(0, this.activeCount - 1);
     this.queue = this.queue.filter((entry) => entry.id !== job.id);
     job.resolve();
-    this.deferPump();
+    this.pump();
   }
 
-  private pump() {
+  private startJobs() {
     while (this.activeCount < this.maxConcurrent) {
       const job = this.queue
         .filter((entry) => !entry.started && !entry.settled)

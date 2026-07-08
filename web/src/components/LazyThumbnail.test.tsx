@@ -1,9 +1,14 @@
 import { fireEvent, render, waitFor } from '@solidjs/testing-library';
+import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '~/api/client';
 import type { Asset } from '~/api/types';
 import LazyThumbnail from './LazyThumbnail';
 
+// Thumbnails no longer own an IntersectionObserver each: the shared
+// viewportTracker creates ONE per scroll root, so instances[0] is the
+// tracker's observer for the test's root and triggering it sweeps every
+// registered thumbnail.
 class TestIntersectionObserver {
   static instances: TestIntersectionObserver[] = [];
 
@@ -145,6 +150,39 @@ describe('LazyThumbnail', () => {
       const image = getByTestId('gallery-thumb') as HTMLImageElement;
       expect(image.getAttribute('src')).toBe('/share/share-key/api/assets/asset-1/thumbnail.jpg?size=preview');
     });
+  });
+
+  it('registers every thumbnail with one shared IntersectionObserver', () => {
+    const secondAsset = { ...asset, id: 'asset-2' };
+    let rootRef: HTMLDivElement | undefined;
+    render(() => (
+      <div ref={rootRef} data-testid="scroll-root">
+        <LazyThumbnail asset={asset} scrollContainer={() => rootRef} />
+        <LazyThumbnail asset={secondAsset} scrollContainer={() => rootRef} />
+      </div>
+    ));
+
+    expect(TestIntersectionObserver.instances).toHaveLength(1);
+    expect(TestIntersectionObserver.instances[0].observe).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-registers against the new root when the scroll container changes', () => {
+    const firstRoot = document.createElement('div');
+    const secondRoot = document.createElement('div');
+    const [root, setRoot] = createSignal<HTMLDivElement>(firstRoot);
+
+    render(() => <LazyThumbnail asset={asset} scrollContainer={root} />);
+    expect(TestIntersectionObserver.instances).toHaveLength(1);
+    expect(TestIntersectionObserver.instances[0].options?.root).toBe(firstRoot);
+
+    setRoot(secondRoot);
+
+    // The old root's group was the thumbnail's only registration, so it is
+    // torn down and a fresh observer is created for the new root.
+    expect(TestIntersectionObserver.instances[0].disconnect).toHaveBeenCalledTimes(1);
+    expect(TestIntersectionObserver.instances).toHaveLength(2);
+    expect(TestIntersectionObserver.instances[1].options?.root).toBe(secondRoot);
+    expect(TestIntersectionObserver.instances[1].observe).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to thumbnail size when preview fails', async () => {
