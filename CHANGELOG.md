@@ -5,6 +5,80 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-07-08
+
+### Features
+
+- ✨ Add pure timeline layout engine (justified rows, window math, anchoring)
+
+computeTimelineLayout: date groups + asset ratios + container width ->
+absolute row offsets and total height (greedy justified rows, ratio
+clamps, per-group sections with headers). computeRowRange: binary search
+of the visible row window. captureAnchor/restoreAnchor: keep the
+top-visible asset stable across relayouts. Pure functions, unit tested.
+
+
+### Other
+
+- Merge pull request #30 from danibram/codex/virtual-window
+
+♻️ Virtual window timeline: derive the gallery from scrollTop
+
+
+### Performance
+
+- ⚡️ Harden drag settle detection and cut per-frame reflow
+
+- No scrollend listener: Chromium fires it after every programmatic
+  scrollTop assignment, which ended the fast-scroll freeze between
+  scrubber moves and loaded a window per intermediate position
+  (497 requests per drag on the 520-asset album; 0 after this fix).
+- Settle timer verifies on the next frame before unfreezing, so a
+  main-thread stall with queued mousemove teleports can no longer
+  burst-load mid-drag.
+- boxTop (layout box offset in the scroll content) is cached and
+  refreshed on measure/settle instead of forcing a reflow per scroll
+  frame; rows get CSS containment so edge mounts stay local.
+
+
+### Refactor
+
+- ♻️ Derive the gallery from scrollTop: virtual window replaces per-tile lazy loading
+
+The timeline now renders only the rows inside visible±1.5 viewports,
+absolutely positioned inside a spacer of exact layout height. Mount =
+load (img src set on mount), unmount = gone; image loads are deferred
+while scrollTop teleports (scrubber drags) by freezing the load window
+until scroll settles (scrollend or 150ms). Any transient glitch heals on
+the next derivation pass because no per-tile load state accumulates.
+
+Deleted: LazyThumbnail 5-state machine, viewportTracker sweep,
+thumbnailLoader priority queue (+ their tests) and the scrubber's
+hold() coupling. The scrubber now maps dates to exact layout offsets
+instead of scanning the DOM.
+
+
+### Testing
+
+- ✅ Align gallery e2e assertions with the virtual window
+
+- 'expected asset count' now asserts the meta count plus a bounded DOM
+  (windowed gallery never mounts the whole album) and that the album end
+  loads after scrolling there.
+- lazy-load spec asserts request counts (window-sized on open, growing
+  after scroll) instead of mounted-node counts.
+- the concurrency-cap spec is replaced: with mount=load there is no
+  client queue; the invariant is that a full-album teleport requests
+  each thumbnail at most once and keeps the DOM window-sized.
+
+- ✅ Add blank-tile stress spec + large-album seeder
+
+5 cycles of aggressive scrubber drags (varying speeds and random
+midpoints) then slow wheel through random sections on a ~520-asset
+album; after every settle each visible tile must decode within 2s.
+This is the regression class the derived window kills by construction.
+Skips unless LARGE_SHARE_KEY is seeded (e2e/scripts/seed-large-album.sh).
+
 ## [1.8.0] - 2026-07-08
 
 ### Other
