@@ -47,6 +47,23 @@ export async function countLoadedThumbs(page: Page) {
   return page.getByTestId('gallery-thumb').count();
 }
 
+/** Thumbnails inside the scroll viewport that have finished decoding. */
+export async function countVisibleLoadedThumbs(page: Page) {
+  return page.evaluate(() => {
+    const scroll = document.querySelector('.album-scroll');
+    if (!scroll) return 0;
+    const bounds = scroll.getBoundingClientRect();
+    let loaded = 0;
+    for (const img of document.querySelectorAll('img[data-testid="gallery-thumb"]')) {
+      const rect = img.getBoundingClientRect();
+      if (rect.bottom < bounds.top || rect.top > bounds.bottom) continue;
+      const el = img as HTMLImageElement;
+      if (el.complete && el.naturalWidth > 0) loaded++;
+    }
+    return loaded;
+  });
+}
+
 export async function scrollGalleryToEnd(page: Page) {
   await page.getByTestId('share-gallery').evaluate((el) => {
     const scrollParent = el.closest('.album-scroll') as HTMLElement | null;
