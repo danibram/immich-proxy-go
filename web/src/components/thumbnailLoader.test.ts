@@ -114,13 +114,19 @@ describe('ThumbnailLoader', () => {
     expect(started).toEqual([1]);
 
     // A scroll-jump sweep: the active job is released and the stale queued
-    // job is cancelled before the deferred pump runs.
+    // job is cancelled before the deferred pump runs. Attach the rejection
+    // expectations before yielding so both AbortErrors are handled by the
+    // time the microtask queue drains (vitest fails the run on unhandled
+    // rejections even when every assertion passes).
     active.cancel();
     stale.cancel();
+    const staleRejects = expect(stale.promise).rejects.toMatchObject({ name: 'AbortError' });
     await tick();
 
     expect(started).toEqual([1, 3]);
-    await expect(stale.promise).rejects.toMatchObject({ name: 'AbortError' });
+    await staleRejects;
+    // Cancelling an already-started job releases its slot and resolves.
+    await expect(active.promise).resolves.toBeUndefined();
     await expect(fresh.promise).resolves.toBeUndefined();
   });
 
