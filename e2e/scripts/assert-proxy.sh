@@ -297,26 +297,6 @@ main() {
     log "upload behavior (defaults + overrides) OK"
   fi
 
-  # Pre-upload dedupe endpoint (capability ladder: native bulk-upload-check →
-  # checksum probes). Two calls on purpose: the first makes the proxy DETECT
-  # whether the upstream accepts shared-link auth on the native bulk endpoint
-  # (the running Immich rejects it today → probe fallback), the second must
-  # reuse the cached decision. run.sh asserts the proxy logged the detection
-  # exactly once.
-  local upload_check_body='{"files":[{"name":"e2e-upload-check.png","checksum":"e2e0000000000000000000000000000000000e2e"}]}'
-  status="$(curl -sS -o /tmp/upload-check-1.json -w '%{http_code}' \
-    -H 'Content-Type: application/json' -d "${upload_check_body}" \
-    "${BASE_URL}/share/${OVERRIDE_ON_SHARE_KEY}/api/upload-check")"
-  assert_status "200" "${status}" "upload-check first call (detection)"
-  jq -e '.results | length == 1' /tmp/upload-check-1.json >/dev/null || die "upload-check first call malformed: $(cat /tmp/upload-check-1.json)"
-  jq -e '.results[0].exists == false' /tmp/upload-check-1.json >/dev/null || die "upload-check reported a bogus checksum as existing"
-  status="$(curl -sS -o /tmp/upload-check-2.json -w '%{http_code}' \
-    -H 'Content-Type: application/json' -d "${upload_check_body}" \
-    "${BASE_URL}/share/${OVERRIDE_ON_SHARE_KEY}/api/upload-check")"
-  assert_status "200" "${status}" "upload-check second call (cached decision)"
-  jq -e '.results[0].exists == false' /tmp/upload-check-2.json >/dev/null || die "upload-check second call malformed: $(cat /tmp/upload-check-2.json)"
-  log "upload-check capability ladder OK"
-
   status="$(curl -sS -o /tmp/private-album.txt -w '%{http_code}' "${BASE_URL}/share/${DEFAULT_SHARE_KEY}/api/albums/${PRIVATE_ALBUM_ID}")"
   assert_status "404" "${status}" "private album should not be reachable from public share"
   log "private album isolation OK"

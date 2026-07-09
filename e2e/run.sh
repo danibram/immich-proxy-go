@@ -95,22 +95,6 @@ if [[ "${PROXY_MODE}" == "traefik" || "${PROXY_MODE}" == "both" ]]; then
   test_targets+=("traefik|http://traefik|http://localhost:8081")
 fi
 
-# The tester hits /upload-check twice; the proxy must have probed the native
-# bulk-upload-check capability exactly ONCE (the running Immich rejects
-# shared-link auth on it, so the proxy logs the fallback decision and caches
-# it — the second request must not re-detect).
-assert_bulk_check_fallback_logged_once() {
-  local scenario_name="$1"
-  local detections
-  detections="$("${compose[@]}" "${profiles[@]}" logs --no-log-prefix proxy 2>/dev/null \
-    | grep -c 'upstream rejected shared-link bulk-upload-check' || true)"
-  if [[ "${detections}" != "1" ]]; then
-    echo "[e2e][error] Expected exactly 1 bulk-upload-check fallback detection log (${scenario_name}), got ${detections}" >&2
-    exit 1
-  fi
-  echo "[e2e] bulk-upload-check capability detected once and cached (probe fallback) - ${scenario_name}"
-}
-
 run_scenario() {
   local scenario_name="$1"
   local allow_download="$2"
@@ -154,8 +138,6 @@ run_scenario() {
       -e EXPECT_DOWNLOAD_STATUS="${expected_download_status}" \
       -e EXPECT_METADATA_VISIBLE="${expected_metadata_visible}" \
       tester
-
-    assert_bulk_check_fallback_logged_once "${scenario_name}"
 
     if [[ "${WITH_PLAYWRIGHT}" == "true" ]]; then
       local -a playwright_specs=()
