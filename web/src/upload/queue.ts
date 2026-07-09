@@ -8,8 +8,12 @@ import { AdaptiveConcurrencyPolicy } from './pool';
 // Per-file lifecycle:
 //   pending → hashing → checking → queued → uploading → done
 //                                        ↘ duplicate (zero bytes uploaded)
-//                              uploading ↘ failed | too-large  (queue advances)
+//                              uploading ↘ failed  (queue advances; see failureKind)
 //                              uploading → queued  (failure while offline: not a verdict)
+//
+// The retry loop lives HERE, not in the API client: the queue owns attempt
+// state (rendered by the UI), notifies the adaptive policy, and fires the
+// analytics hook — one attempt = one deps.uploadFile call.
 
 export type UploadItemStatus =
   | 'pending'
@@ -19,8 +23,21 @@ export type UploadItemStatus =
   | 'uploading'
   | 'done'
   | 'duplicate'
-  | 'failed'
-  | 'too-large';
+  | 'failed';
+
+/** Why a failed item failed, classified at the edge — never a raw message. */
+export type UploadFailureKind = 'too-large' | 'error';
+
+export interface UploadFailure {
+  kind: UploadFailureKind;
+  /** Optional short display detail (e.g. "HTTP 500"). Never a response body. */
+  detail?: string;
+}
+
+export const isTerminal = (status: UploadItemStatus): boolean =>
+  status === 'done' || status === 'duplicate' || status === 'failed';
+
+export const isFailed = (status: UploadItemStatus): boolean => status === 'failed';
 
 export interface UploadQueueItem {
   id: number;
@@ -29,7 +46,8 @@ export interface UploadQueueItem {
   /** Upload progress 0–100 (percent of this file's bytes). */
   progress: number;
   checksum?: string;
-  error?: string;
+  failureKind?: UploadFailureKind;
+  failureDetail?: string;
   attempt?: number;
   maxAttempts?: number;
   assetId?: string;
@@ -52,22 +70,25 @@ export interface UploadQueueDeps {
   checkExisting(
     files: Array<{ name: string; checksum: string }>
   ): Promise<Map<string, { exists: boolean; assetId?: string }>>;
+  /** Single upload attempt; the queue drives retries around it. */
   uploadFile(
     file: File,
     opts: {
       checksum?: string;
       onProgress: (percent: number) => void;
-      onRetry: (attempt: number, maxAttempts: number) => void;
     }
   ): Promise<UploadOutcome>;
-  /** 413-style "file too large" classification. */
-  isTooLarge(error: unknown): boolean;
-  /** Retryable-class errors feed the adaptive policy when retries exhaust. */
+  /** Classify a terminal failure for display. */
+  classifyFailure(error: unknown): UploadFailure;
+  /** Retryable-class errors get more attempts and feed the adaptive policy. */
   isRetryable(error: unknown): boolean;
+  /** Backoff schedule between attempts; attempts = length + 1. Default: no retries. */
+  retryDelaysMs?: () => number[];
   isOnline?: () => boolean;
   onChange?: (items: UploadQueueItem[]) => void;
   /** Fires each time the queue drains to idle after doing work. */
   onSettled?: (summary: UploadQueueSummary) => void;
+  /** A retryable failure scheduled another attempt (1-based, for analytics/UI). */
   onRetryScheduled?: (attempt: number, maxAttempts: number) => void;
   policy?: AdaptiveConcurrencyPolicy;
 }
@@ -143,12 +164,8 @@ export class UploadQueue {
   retryFailed(): number {
     let requeued = 0;
     for (const item of this.items) {
-      if (item.status === 'failed' || item.status === 'too-large') {
-        item.status = 'queued';
-        item.progress = 0;
-        item.error = undefined;
-        item.attempt = undefined;
-        item.maxAttempts = undefined;
+      if (isFailed(item.status)) {
+        this.park(item);
         requeued += 1;
       }
     }
@@ -160,7 +177,7 @@ export class UploadQueue {
     return requeued;
   }
 
-  /** Remove a single not-in-flight item. Returns it for cleanup (object URLs). */
+  /** Remove a single not-in-flight item. Returns it when removed. */
   remove(id: number): UploadQueueItem | undefined {
     const index = this.items.findIndex((item) => item.id === id);
     if (index === -1 || this.items[index].status === 'uploading') return undefined;
@@ -169,7 +186,7 @@ export class UploadQueue {
     return removed;
   }
 
-  /** Remove finished items (done + duplicate). Returns them for cleanup. */
+  /** Remove finished items (done + duplicate). Returns them. */
   clearCompleted(): UploadQueueItem[] {
     const cleared = this.items.filter(
       (item) => item.status === 'done' || item.status === 'duplicate'
@@ -181,7 +198,7 @@ export class UploadQueue {
     return cleared;
   }
 
-  /** Drop everything (modal closed while idle). Returns items for cleanup. */
+  /** Drop everything (modal closed while idle). Returns the dropped items. */
   reset(): UploadQueueItem[] {
     const all = this.items;
     this.items = [];
@@ -199,8 +216,7 @@ export class UploadQueue {
     return {
       done: this.items.filter((item) => item.status === 'done').length,
       duplicates: this.items.filter((item) => item.status === 'duplicate').length,
-      failed: this.items.filter((item) => item.status === 'failed' || item.status === 'too-large')
-        .length,
+      failed: this.items.filter((item) => isFailed(item.status)).length,
     };
   }
 
@@ -267,43 +283,48 @@ export class UploadQueue {
 
     // Start queued items in order while the policy allows. A blocked large
     // file is skipped (not a barrier) so photos keep flowing around a video.
+    const running = this.items.filter((item) => item.status === 'uploading');
     for (const item of this.items) {
-      const running = this.items.filter((i) => i.status === 'uploading');
       if (running.length >= this.policy.concurrency) break;
       if (item.status !== 'queued') continue;
       if (!this.policy.canStart(running.map((i) => ({ bytes: i.file.size })), { bytes: item.file.size })) {
         continue;
       }
-      this.start(item);
+      running.push(item);
+      void this.runUpload(item);
     }
   }
 
-  private start(item: UploadQueueItem): void {
+  /** Reset an item to queued with a clean slate (offline park, manual retry). */
+  private park(item: UploadQueueItem): void {
+    item.status = 'queued';
+    item.progress = 0;
+    item.failureKind = undefined;
+    item.failureDetail = undefined;
+    item.attempt = undefined;
+    item.maxAttempts = undefined;
+  }
+
+  private async runUpload(item: UploadQueueItem): Promise<void> {
+    const delays = this.deps.retryDelaysMs?.() ?? [];
+    const maxAttempts = delays.length + 1;
     item.status = 'uploading';
     item.progress = 0;
-    item.error = undefined;
+    item.failureKind = undefined;
+    item.failureDetail = undefined;
     item.attempt = 1;
+    item.maxAttempts = maxAttempts;
     this.emit();
 
-    this.deps
-      .uploadFile(item.file, {
-        checksum: item.checksum,
-        onProgress: (percent) => {
-          item.progress = percent;
-          this.emit();
-        },
-        onRetry: (attempt, maxAttempts) => {
-          // A stall/transient failure scheduled another attempt: surface it
-          // and tell the policy the network is struggling.
-          item.attempt = attempt;
-          item.maxAttempts = maxAttempts;
-          item.progress = 0;
-          this.policy.noteRetryableFailure();
-          this.deps.onRetryScheduled?.(attempt, maxAttempts);
-          this.emit();
-        },
-      })
-      .then((outcome) => {
+    for (;;) {
+      try {
+        const outcome = await this.deps.uploadFile(item.file, {
+          checksum: item.checksum,
+          onProgress: (percent) => {
+            item.progress = percent;
+            this.emit();
+          },
+        });
         this.policy.noteSuccess();
         item.assetId = outcome.id;
         item.progress = 100;
@@ -311,34 +332,40 @@ export class UploadQueue {
         // via the checksum header, or after a retry whose first attempt
         // actually landed. Either way: it's in the album, zero further cost.
         item.status = outcome.status === 'duplicate' ? 'duplicate' : 'done';
-      })
-      .catch((error) => {
+        break;
+      } catch (error) {
         if (this.deps.isOnline && !this.deps.isOnline()) {
           // Offline is not a verdict on the file. Park it; the online
           // handler resumes the queue and it gets a fresh set of attempts.
-          item.status = 'queued';
+          this.park(item);
+          break;
+        }
+        const retryable = this.deps.isRetryable(error);
+        if (retryable) {
+          // Stall or transient failure: the network is struggling — the
+          // policy's single notification point.
+          this.policy.noteRetryableFailure();
+        }
+        if (retryable && item.attempt! < maxAttempts) {
+          item.attempt! += 1;
           item.progress = 0;
-          item.attempt = undefined;
-          item.maxAttempts = undefined;
-          return;
+          this.deps.onRetryScheduled?.(item.attempt!, maxAttempts);
+          this.emit();
+          await new Promise((resolve) => setTimeout(resolve, delays[item.attempt! - 2]));
+          if (this.disposed) return;
+          continue;
         }
-        item.error = error instanceof Error ? error.message : String(error);
-        if (this.deps.isTooLarge(error)) {
-          item.status = 'too-large';
-        } else {
-          item.status = 'failed';
-          if (this.deps.isRetryable(error)) {
-            // Retries exhausted on a transient class: one more struggling
-            // signal for the policy.
-            this.policy.noteRetryableFailure();
-          }
-        }
-      })
-      .finally(() => {
-        this.emit();
-        this.pump();
-        this.maybeSettle();
-      });
+        const failure = this.deps.classifyFailure(error);
+        item.status = 'failed';
+        item.failureKind = failure.kind;
+        item.failureDetail = failure.detail;
+        break;
+      }
+    }
+
+    this.emit();
+    this.pump();
+    this.maybeSettle();
   }
 
   private maybeSettle(): void {

@@ -24,10 +24,10 @@ interface Harness {
     checksum?: string;
     resolve: (outcome?: { id: string; status?: string }) => void;
     reject: (error: unknown) => void;
-    onRetry: (attempt: number, maxAttempts: number) => void;
     onProgress: (percent: number) => void;
   }>;
   settled: Array<{ done: number; duplicates: number; failed: number }>;
+  retries: Array<[attempt: number, maxAttempts: number]>;
   deps: UploadQueueDeps;
 }
 
@@ -35,6 +35,7 @@ function makeHarness(overrides: Partial<UploadQueueDeps> = {}): Harness {
   let snapshot: UploadQueueItem[] = [];
   const uploads: Harness['uploads'] = [];
   const settledSummaries: Harness['settled'] = [];
+  const retries: Harness['retries'] = [];
 
   const deps: UploadQueueDeps = {
     hashFile: vi.fn(async (file: File) => `sha1-of-${file.name}`),
@@ -47,12 +48,14 @@ function makeHarness(overrides: Partial<UploadQueueDeps> = {}): Harness {
             checksum: opts.checksum,
             resolve: (outcome) => resolve(outcome ?? { id: `asset-${file.name}` }),
             reject,
-            onRetry: opts.onRetry,
             onProgress: opts.onProgress,
           });
         })
     ),
-    isTooLarge: (error) => error instanceof Error && error.message.includes('413'),
+    classifyFailure: (error) =>
+      error instanceof Error && error.message.includes('413')
+        ? { kind: 'too-large' }
+        : { kind: 'error' },
     isRetryable: (error) => error instanceof Error && error.message.includes('stalled'),
     isOnline: () => true,
     onChange: (items) => {
@@ -60,6 +63,9 @@ function makeHarness(overrides: Partial<UploadQueueDeps> = {}): Harness {
     },
     onSettled: (summary) => {
       settledSummaries.push(summary);
+    },
+    onRetryScheduled: (attempt, maxAttempts) => {
+      retries.push([attempt, maxAttempts]);
     },
     ...overrides,
   };
@@ -69,6 +75,7 @@ function makeHarness(overrides: Partial<UploadQueueDeps> = {}): Harness {
     items: () => snapshot,
     uploads,
     settled: settledSummaries,
+    retries,
     deps,
   };
 }
@@ -195,23 +202,86 @@ describe('UploadQueue', () => {
 
   it('drops concurrency after consecutive stall retries', async () => {
     const policy = new AdaptiveConcurrencyPolicy({ dropAfterConsecutiveFailures: 2 });
-    const h = makeHarness({ policy });
+    const h = makeHarness({ policy, retryDelaysMs: () => [0, 0] });
     h.queue.addFiles(['a', 'b', 'c', 'd', 'e'].map((n) => makeFile(`${n}.jpg`)));
     await settle();
     expect(h.uploads).toHaveLength(3);
 
-    // Two stall-retries in a row: policy drops 3 → 2.
-    h.uploads[0].onRetry(2, 3);
-    h.uploads[1].onRetry(2, 3);
+    // Two stalls in a row: each schedules a retry (attempt 2 of 3, surfaced
+    // on the item and via onRetryScheduled) and the policy drops 3 → 2.
+    h.uploads[0].reject(new Error('Upload stalled: no progress'));
+    h.uploads[1].reject(new Error('Upload stalled: no progress'));
+    await settle();
     expect(policy.concurrency).toBe(2);
+    expect(h.retries).toEqual([
+      [2, 3],
+      [2, 3],
+    ]);
     expect(byName(h.items(), 'a.jpg').attempt).toBe(2);
     expect(byName(h.items(), 'a.jpg').maxAttempts).toBe(3);
+    // The retry attempts re-invoked uploadFile (same slots, no new starts).
+    expect(h.uploads).toHaveLength(5);
 
     // A finishing upload does not refill beyond the reduced limit
     // (3 in flight - 1 done = 2 = limit).
-    h.uploads[0].resolve();
+    h.uploads[2].resolve();
     await settle();
+    expect(h.uploads).toHaveLength(5);
+  });
+
+  it('retries a retryable failure and succeeds on the next attempt', async () => {
+    const h = makeHarness({ retryDelaysMs: () => [0] });
+    h.queue.addFiles([makeFile('a.jpg')]);
+    await settle();
+
+    h.uploads[0].reject(new Error('Upload stalled: no progress'));
+    await settle();
+
+    expect(h.retries).toEqual([[2, 2]]);
+    expect(h.uploads).toHaveLength(2);
+    // Retries keep the checksum so a first attempt that actually landed
+    // server-side dedupes instantly.
+    expect(h.uploads[1].checksum).toBe('sha1-of-a.jpg');
+
+    h.uploads[1].resolve();
+    await settle();
+    expect(byName(h.items(), 'a.jpg').status).toBe('done');
+    expect(h.settled).toEqual([{ done: 1, duplicates: 0, failed: 0 }]);
+  });
+
+  it('gives up after exhausting attempts and reports a generic failure', async () => {
+    const h = makeHarness({ retryDelaysMs: () => [0, 0] });
+    h.queue.addFiles([makeFile('a.jpg')]);
+    await settle();
+
+    for (const attempt of [0, 1, 2]) {
+      h.uploads[attempt].reject(new Error('Upload stalled: no progress'));
+      await settle();
+    }
+
     expect(h.uploads).toHaveLength(3);
+    expect(h.retries).toEqual([
+      [2, 3],
+      [3, 3],
+    ]);
+    const item = byName(h.items(), 'a.jpg');
+    expect(item.status).toBe('failed');
+    expect(item.failureKind).toBe('error');
+    expect(h.settled).toEqual([{ done: 0, duplicates: 0, failed: 1 }]);
+  });
+
+  it('does not retry permanent failures even when retries are configured', async () => {
+    const h = makeHarness({ retryDelaysMs: () => [0, 0] });
+    h.queue.addFiles([makeFile('a.jpg')]);
+    await settle();
+
+    h.uploads[0].reject(new Error('API Error 413: File too large'));
+    await settle();
+
+    expect(h.uploads).toHaveLength(1);
+    expect(h.retries).toEqual([]);
+    expect(byName(h.items(), 'a.jpg').status).toBe('failed');
+    expect(byName(h.items(), 'a.jpg').failureKind).toBe('too-large');
   });
 
   it('continues past a permanent failure and reports it in the summary', async () => {
@@ -224,12 +294,12 @@ describe('UploadQueue', () => {
     await settle();
 
     expect(byName(h.items(), 'bad.jpg').status).toBe('failed');
-    expect(byName(h.items(), 'bad.jpg').error).toContain('boom');
+    expect(byName(h.items(), 'bad.jpg').failureKind).toBe('error');
     expect(byName(h.items(), 'good.jpg').status).toBe('done');
     expect(h.settled).toEqual([{ done: 1, duplicates: 0, failed: 1 }]);
   });
 
-  it('classifies 413 failures as too-large', async () => {
+  it('classifies 413 failures as failed with the too-large kind', async () => {
     const h = makeHarness();
     h.queue.addFiles([makeFile('huge.jpg')]);
     await settle();
@@ -237,7 +307,9 @@ describe('UploadQueue', () => {
     h.uploads[0].reject(new Error('API Error 413: File too large'));
     await settle();
 
-    expect(byName(h.items(), 'huge.jpg').status).toBe('too-large');
+    const item = byName(h.items(), 'huge.jpg');
+    expect(item.status).toBe('failed');
+    expect(item.failureKind).toBe('too-large');
   });
 
   it('does not start new uploads while paused, and resumes where it left off', async () => {
@@ -269,7 +341,7 @@ describe('UploadQueue', () => {
 
     const item = byName(h.items(), 'a.jpg');
     expect(item.status).toBe('queued'); // parked, NOT failed
-    expect(item.error).toBeUndefined();
+    expect(item.failureKind).toBeUndefined();
 
     // Back online: resume picks it up with a fresh set of attempts.
     online = true;

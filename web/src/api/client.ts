@@ -36,7 +36,10 @@ function uploadTimeoutMs(): number {
   return tunableMs('ipp:upload-timeout-ms', DEFAULT_UPLOAD_TIMEOUT_MS);
 }
 
-function uploadRetryDelaysMs(): number[] {
+// Backoff schedule for the upload queue's retry loop (attempts = length + 1).
+// Exported so the modal can compose it into the queue; reads the e2e
+// localStorage hook on every call so fault-injection specs stay cheap.
+export function uploadRetryDelaysMs(): number[] {
   try {
     const raw = globalThis.localStorage?.getItem('ipp:upload-retry-delays-ms');
     if (raw) {
@@ -52,25 +55,11 @@ function uploadRetryDelaysMs(): number[] {
   return DEFAULT_UPLOAD_RETRY_DELAYS_MS;
 }
 
-export interface UploadRetryHooks {
-  onProgress?: (progress: number) => void;
-  /** Called when a retryable failure schedules another attempt (1-based). */
-  onRetry?: (attempt: number, maxAttempts: number) => void;
-  /**
-   * Client-computed SHA-1 (hex) sent as x-immich-checksum. Immich's upload
-   * interceptor answers 200 {status:"duplicate"} before consuming the body
-   * when the checksum already exists — so retries after ambiguous failures
-   * (connection lost mid-response) dedupe instantly instead of re-sending.
-   */
-  checksum?: string;
-}
-
 // What POST /assets actually returns. status is "created" (201) or
 // "duplicate"/"replaced" (200) on current Immich servers.
 export interface UploadResult {
   id: string;
   status?: string;
-  duplicate?: boolean;
 }
 
 export interface UploadCheckEntry {
@@ -264,8 +253,9 @@ class ApiClient {
     return response.results ?? [];
   }
 
-  // Single upload attempt with stall detection. Prefer uploadAssetWithRetry;
-  // this stays public so tests can exercise one attempt in isolation.
+  // Single upload attempt with stall detection. Retries are the upload
+  // queue's job (web/src/upload/queue.ts) — it owns attempt state and
+  // backoff; this client only guards one attempt with the watchdog.
   async uploadAsset(
     file: File,
     onProgress?: (progress: number) => void,
@@ -315,21 +305,27 @@ class ApiClient {
           onProgress((e.loaded / e.total) * 100);
         }
       });
-      xhr.upload.addEventListener('error', () => {
-        settle(() => reject(new ApiError(0, 'Network error')));
-      });
-      xhr.upload.addEventListener('timeout', () => {
-        settle(() => reject(new UploadStalledError(`upload timed out after ${timeoutMs}ms`)));
-      });
-      xhr.upload.addEventListener('abort', () => {
-        settle(() =>
-          reject(
-            stalled
-              ? new UploadStalledError(`no upload progress for ${stallMs}ms`)
-              : new ApiError(0, 'Upload aborted')
-          )
-        );
-      });
+
+      // error/timeout/abort can fire on the request, the upload stream, or
+      // both; the settle guard makes double delivery harmless, so register
+      // the same handlers on both targets.
+      for (const target of [xhr, xhr.upload]) {
+        target.addEventListener('error', () => {
+          settle(() => reject(new ApiError(0, 'Network error')));
+        });
+        target.addEventListener('timeout', () => {
+          settle(() => reject(new UploadStalledError(`upload timed out after ${timeoutMs}ms`)));
+        });
+        target.addEventListener('abort', () => {
+          settle(() =>
+            reject(
+              stalled
+                ? new UploadStalledError(`no upload progress for ${stallMs}ms`)
+                : new ApiError(0, 'Upload aborted')
+            )
+          );
+        });
+      }
 
       xhr.addEventListener('load', () => {
         settle(() => {
@@ -343,24 +339,6 @@ class ApiClient {
             reject(new ApiError(xhr.status, xhr.responseText));
           }
         });
-      });
-
-      xhr.addEventListener('error', () => {
-        settle(() => reject(new ApiError(0, 'Network error')));
-      });
-
-      xhr.addEventListener('timeout', () => {
-        settle(() => reject(new UploadStalledError(`upload timed out after ${timeoutMs}ms`)));
-      });
-
-      xhr.addEventListener('abort', () => {
-        settle(() =>
-          reject(
-            stalled
-              ? new UploadStalledError(`no upload progress for ${stallMs}ms`)
-              : new ApiError(0, 'Upload aborted')
-          )
-        );
       });
 
       xhr.open('POST', `${this.baseUrl}/assets`);
@@ -378,28 +356,6 @@ class ApiClient {
       armWatchdog();
       xhr.send(formData);
     });
-  }
-
-  // Upload with automatic retry on transient failures (network error, stall,
-  // 5xx, 429). Permanent failures (413, 415, other 4xx) throw immediately so
-  // the queue moves on. Safe because Immich dedupes by checksum: re-sending
-  // a file whose first attempt actually landed just returns the existing
-  // asset.
-  async uploadAssetWithRetry(file: File, hooks: UploadRetryHooks = {}): Promise<UploadResult> {
-    const delays = uploadRetryDelaysMs();
-    const maxAttempts = delays.length + 1;
-
-    for (let attempt = 1; ; attempt++) {
-      try {
-        return await this.uploadAsset(file, hooks.onProgress, hooks.checksum);
-      } catch (error) {
-        if (attempt >= maxAttempts || !isRetryableUploadError(error)) {
-          throw error;
-        }
-        hooks.onRetry?.(attempt + 1, maxAttempts);
-        await new Promise((resolve) => setTimeout(resolve, delays[attempt - 1]));
-      }
-    }
   }
 }
 
