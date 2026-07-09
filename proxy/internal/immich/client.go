@@ -343,15 +343,22 @@ func (c *Client) GetVideoWithKeyType(assetID string, key string, password string
 }
 
 // UploadAsset uploads an asset via a shared link (uses key by default)
-func (c *Client) UploadAsset(key string, password string, contentType string, body io.Reader) (*http.Response, error) {
-	return c.UploadAssetWithKeyType(key, password, contentType, body, KeyTypeKey)
+func (c *Client) UploadAsset(key string, password string, contentType string, checksum string, body io.Reader) (*http.Response, error) {
+	return c.UploadAssetWithKeyType(key, password, contentType, checksum, body, KeyTypeKey)
 }
 
-// UploadAssetWithKeyType uploads an asset via a shared link with explicit key type
-func (c *Client) UploadAssetWithKeyType(key string, password string, contentType string, body io.Reader, keyType KeyType) (*http.Response, error) {
+// UploadAssetWithKeyType uploads an asset via a shared link with explicit key
+// type. checksum, when non-empty, is the client-computed SHA-1 of the file
+// forwarded as x-immich-checksum: Immich's upload interceptor uses it to
+// answer 200 {status:"duplicate"} before consuming the body when the asset
+// already exists in the link owner's library.
+func (c *Client) UploadAssetWithKeyType(key string, password string, contentType string, checksum string, body io.Reader, keyType KeyType) (*http.Response, error) {
 	path := "/api/assets"
 	headers := http.Header{}
 	headers.Set("Content-Type", contentType)
+	if checksum != "" {
+		headers.Set("x-immich-checksum", checksum)
+	}
 
 	return c.proxyShareRequest("POST", path, key, password, keyType, nil, headers, body)
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -25,6 +26,11 @@ type uploadMockImmich struct {
 	loginStatus    int
 	albumAddStatus int
 	albumAddCalls  atomic.Int32
+
+	// Records the x-immich-checksum header seen on the upload POST (the
+	// proxy must forward it verbatim so Immich's dedupe interceptor works).
+	uploadChecksumMu sync.Mutex
+	uploadChecksum   string
 }
 
 func (m *uploadMockImmich) server(t *testing.T) *httptest.Server {
@@ -54,6 +60,9 @@ func (m *uploadMockImmich) server(t *testing.T) *httptest.Server {
 			json.NewEncoder(w).Encode(link)
 
 		case r.URL.Path == "/api/assets" && r.Method == http.MethodPost:
+			m.uploadChecksumMu.Lock()
+			m.uploadChecksum = r.Header.Get("x-immich-checksum")
+			m.uploadChecksumMu.Unlock()
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(immich.UploadResponse{ID: testAssetID1})
@@ -98,6 +107,53 @@ func postUpload(t *testing.T, router *chi.Mux) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+func TestUploadForwardsChecksumHeader(t *testing.T) {
+	// The client hashes files locally and sends x-immich-checksum; the proxy
+	// must forward it verbatim so Immich can short-circuit duplicates before
+	// the body is consumed.
+	mock := &uploadMockImmich{loginStatus: http.StatusUnauthorized}
+	server := mock.server(t)
+	defer server.Close()
+
+	router, _ := setupUploadTestHandler(t, server)
+
+	const checksum = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	req := httptest.NewRequest(http.MethodPost, "/api/share/valid-key/assets", strings.NewReader("fake-image-bytes"))
+	req.Header.Set("Content-Type", "image/jpeg")
+	req.Header.Set("x-immich-checksum", checksum)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	mock.uploadChecksumMu.Lock()
+	forwarded := mock.uploadChecksum
+	mock.uploadChecksumMu.Unlock()
+	if forwarded != checksum {
+		t.Fatalf("expected checksum %q forwarded to Immich, got %q", checksum, forwarded)
+	}
+}
+
+func TestUploadWithoutChecksumSendsNoHeader(t *testing.T) {
+	mock := &uploadMockImmich{loginStatus: http.StatusUnauthorized}
+	server := mock.server(t)
+	defer server.Close()
+
+	router, _ := setupUploadTestHandler(t, server)
+	rec := postUpload(t, router)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	mock.uploadChecksumMu.Lock()
+	forwarded := mock.uploadChecksum
+	mock.uploadChecksumMu.Unlock()
+	if forwarded != "" {
+		t.Fatalf("expected no checksum header, got %q", forwarded)
+	}
 }
 
 func TestUploadAlbumAddSkippedOnImmichV3(t *testing.T) {

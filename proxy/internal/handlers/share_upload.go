@@ -82,8 +82,12 @@ func (h *ShareHandler) UploadAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Forward the client-computed SHA-1 (if any) so Immich's upload
+	// interceptor can short-circuit duplicates before the body is consumed.
+	checksum := r.Header.Get("x-immich-checksum")
+
 	// Upload the asset
-	uploadResp, err := h.client.UploadAssetWithKeyType(creds.key, creds.password, contentType, r.Body, creds.keyType)
+	uploadResp, err := h.client.UploadAssetWithKeyType(creds.key, creds.password, contentType, checksum, r.Body, creds.keyType)
 	if err != nil {
 		// Check if it's a size limit error
 		if err.Error() == "http: request body too large" {
