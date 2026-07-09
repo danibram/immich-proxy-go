@@ -154,6 +154,16 @@ Upload a new asset to the shared album. Requires `allowUpload: true` on the shar
 **Headers:**
 - `Content-Type`: `multipart/form-data`
 - `x-immich-share-key`: Share key
+- `x-immich-checksum` (optional): SHA-1 of the file (hex or base64). When
+  present, Immich's `AssetUploadInterceptor` looks the checksum up **before
+  consuming the body**; if the asset already exists in the link owner's
+  library it answers `200 {"status": "duplicate", "id": ...}` immediately.
+  The proxy forwards this header from the client verbatim, and its
+  `/upload-check` endpoint exploits the same interceptor with an
+  intentionally-invalid multipart (`probe.xyz`, rejected with 400 by the
+  file filter when the checksum is unknown) to test existence without
+  transferring or creating anything (verified against Immich source at
+  2db1e02cdf; pinned by an e2e test).
 
 **Form Fields:**
 - `assetData`: File binary
@@ -162,13 +172,8 @@ Upload a new asset to the shared album. Requires `allowUpload: true` on the shar
 - `fileCreatedAt`: ISO timestamp
 - `fileModifiedAt`: ISO timestamp
 
-**Response:**
-```json
-{
-  "id": "new-asset-uuid",
-  "duplicate": false
-}
-```
+**Response:** `201` with `{"id": ..., "status": "created"}`, or `200` with
+`{"id": ..., "status": "duplicate"}` when the checksum already exists.
 
 ---
 
