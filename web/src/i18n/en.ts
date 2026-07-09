@@ -72,6 +72,8 @@ export const en = {
     browse: 'Browse files',
     remove: 'Remove',
     failed: 'Upload failed',
+    retrying: (attempt: number, total: number) => `Retrying (${attempt}/${total})…`,
+    retryFailed: (n: number) => `Retry failed (${n})`,
     clearCompleted: (n: number) => `Clear completed (${n})`,
   },
   downloadProgress: {

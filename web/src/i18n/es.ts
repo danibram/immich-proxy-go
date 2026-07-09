@@ -69,6 +69,8 @@ export const es: Messages = {
     browse: 'Explorar archivos',
     remove: 'Quitar',
     failed: 'Error al subir',
+    retrying: (attempt: number, total: number) => `Reintentando (${attempt}/${total})…`,
+    retryFailed: (n: number) => `Reintentar fallidos (${n})`,
     clearCompleted: (n: number) => `Limpiar completados (${n})`,
   },
   downloadProgress: {
