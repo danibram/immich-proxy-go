@@ -5,6 +5,151 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-07-09
+
+### Bug Fixes
+
+- 🐛 Add upload stall watchdog, retry with backoff, and retry-failed UI
+
+A stalled TCP connection never fires load/error on its own, so one bad
+upload froze the whole sequential queue forever (prod incident: family on
+hotel wifi). The XHR now aborts after 30s without an upload.progress event
+(plus a generous 10min absolute timeout as backstop) and transient failures
+— network error, stall, 5xx, 429 — retry automatically with 1s/4s backoff.
+Permanent 4xx (413/415) fail immediately; Immich's checksum dedupe makes
+re-sends after ambiguous failures safe (verified in prod: 25 re-uploads
+deduped at 0.24s each).
+
+The modal shows retries honestly ("Retrying (2/3)…", i18n en+es), resets
+the bar per attempt, keeps draining past permanently-failed files, and
+offers a "Retry failed (n)" button for files that exhausted their retries.
+
+
+### Documentation
+
+- 📝 Document x-immich-checksum dedupe contract in the API spec
+
+
+### Features
+
+- ✨ Forward x-immich-checksum and add checksum-probe /upload-check endpoint
+
+POST {share}/api/upload-check accepts {files:[{name,checksum}]} and answers
+per-file {exists, assetId} without moving any file bytes: each checksum is
+probed via a tiny POST /api/assets carrying x-immich-checksum and an
+intentionally-invalid multipart (probe.xyz). Immich's AssetUploadInterceptor
+short-circuits to 200 {status:duplicate} before consuming the body when the
+checksum exists; otherwise the file filter rejects the probe with 400 before
+creating anything (verified against Immich source at 2db1e02cdf; pinned by
+e2e). Probes fan out with bounded concurrency (8), lists cap at 500, probe
+failures fail open. Uploads now forward the client's x-immich-checksum so
+Immich dedupes even mid-upload retries.
+
+- ✨ Add hash-then-upload core: SHA-1 worker, adaptive pool, upload queue
+
+- sha1.ts + hash.worker.ts: incremental SHA-1 over 5 MiB slices with
+  @noble/hashes (same approach and library as Immich's own web client;
+  crypto.subtle can't stream and is missing on plain-HTTP LAN installs).
+- hasher.ts: lazy worker lifecycle with inline fallback and crash handling.
+- pool.ts: adaptive concurrency policy — 3 parallel uploads, drops toward 1
+  on consecutive stalls/retryable failures, recovers on successes; only one
+  >50MB file in flight at a time.
+- throughput.ts: EMA (α=0.1) throughput estimator + coarse ETA buckets.
+- queue.ts: framework-agnostic state machine (pending → hashing → checking →
+  queued → uploading → done|duplicate|failed|too-large) with pause/resume,
+  offline-failure re-queueing, retry-failed, and batch dedupe-check wiring.
+- client.ts: x-immich-checksum on uploads (every attempt), duplicate 200
+  passthrough, POST /upload-check API.
+- 60 unit tests across the new modules.
+
+
+### Other
+
+- 💄 Rewrite UploadModal as an optimistic tile-grid pipeline
+
+Every selected file appears instantly as a preview tile (object URL,
+revoked on removal/close — no leaks on 200-photo batches; HEIC that the
+browser can't decode falls back to a placeholder via per-file feature
+detection, not UA sniffing). Tiles advance pending → hashing → checking →
+uploading (per-tile bar + retrying badge) → done | already-in-album |
+failed | too-large, driven by the UploadQueue with the adaptive 3-wide
+pool. Aggregate byte-weighted bar with 'N of M' and EMA-coarse ETA;
+completion summary distinguishes uploaded / already in album / failed.
+offline pauses the queue (in-flight rides, failures park instead of
+failing), online resumes; beforeunload guards a non-empty queue. i18n
+en+es for all new strings.
+
+- Merge pull request #33 from danibram/codex/buttery-uploads
+
+✨ Buttery uploads: optimistic tiles, hash-then-upload dedupe, adaptive pool
+
+
+### Performance
+
+- ⚡️ Skip redundant album-add on Immich v3 and log client aborts as info
+
+Immich v3 auto-associates shared-link uploads with the album, so the
+proxy's explicit album-add was one wasted round-trip plus a scary
+'failed to add asset to album ... 403' warn per photo (the assets appeared
+in the album seconds later). Detection reuses the shared-link login
+machinery: /api/shared-links/login exists on v3+ only; the probe result is
+cached server-wide. v2 keeps the explicit add. If the add is still
+attempted and answers 403, that is the v3 auto-add — logged at debug, not
+warn; genuine failures keep their warn.
+
+Uploads whose client went away mid-stream (stall-watchdog abort, closed
+tab, dropped wifi) now log 'upload aborted by client' at info instead of a
+misleading upstream error, so the next incident is diagnosable from logs.
+
+
+### Testing
+
+- ✅ Add upload fault-injection e2e specs; fix corrupt PNG fixture and v3 drift
+
+New share-upload-resilience.spec.ts drives the incident scenarios end to
+end: a stalled first upload POST (route never fulfilled) must be aborted by
+the watchdog, retried, completed, and the queue must proceed; a permanent
+413 must fail after exactly one POST, not block the next file, and the
+retry-failed button must re-attempt to completion. Watchdog/backoff shrink
+via localStorage test hooks so a stall costs ~1.5s instead of 30s.
+
+Two pre-existing suite breakages surfaced by immich-server:release drifting
+to v3.0.1 (reproduced on main):
+- assert-proxy.sh uploaded a 1x1 PNG with a corrupt IDAT (bad CRC);
+  current Immich accepts the upload but AssetGenerateThumbnails fails with
+  'vipspng: libpng read error', so the newest album asset never got a
+  preview and the security matrix's public-thumbnail check 404'd forever.
+  Replaced with a valid PNG (verified against Immich's own sharp/vips) and
+  made the thumbnail assertion poll — preview generation is async.
+- The stale-cookie-on-public-share thumbnail check pinned v2 behavior
+  (upstream rejects a wrong password even on public shares). v3 ignores
+  passwords on public shares entirely and 200s (verified directly against
+  v3.0.1 with and without the password). The assertion now accepts both
+  upstream generations and still forbids server errors; the follow-up
+  assertion keeps pinning the cookie-cleanup path.
+
+- ✅ Add upload-pipeline e2e specs: optimistic grid, zero-byte dedupe, offline, probe pin
+
+- multi-file happy path asserts the optimistic tile grid before completion
+- duplicate flow re-selects uploaded files and asserts 0 upload POSTs and
+  0 bytes on the wire (network-event counting), tiles duplicate in seconds
+- offline → pause (no failures marked) → online → auto-resume
+- mixed PNG/JPEG/HEIC batch; HEIC placeholder via per-file feature detection
+- upload-check probe contract pinned against the running Immich: unknown
+  checksum creates nothing, known checksum returns the asset id, input caps
+- wire the new spec into e2e/run.sh
+
+- ✅ Measure dedupe savings via request.sizes(): Chromium hides multipart XHR bodies from postDataBuffer
+
+- ✅ Measure upload bytes via the sent Content-Length header
+
+Chromium exposes neither postDataBuffer nor sizes().requestBodySize for
+multipart XHR bodies (verified with a standalone probe: both empty while
+the wire carried 70,183 bytes); allHeaders()['content-length'] reports the
+exact payload+framing size.
+
+- ✅ Print dedupe-savings measurement to stdout for run evidence
+
 ## [1.9.0] - 2026-07-08
 
 ### Features
