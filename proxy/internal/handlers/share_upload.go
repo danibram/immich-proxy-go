@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -88,6 +90,13 @@ func (h *ShareHandler) UploadAsset(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("File too large. Maximum size is %d MB", h.config.Security.MaxUploadSize), http.StatusRequestEntityTooLarge)
 			return
 		}
+		// The uploader went away mid-stream (stall-watchdog abort, closed
+		// tab, dropped wifi). Routine on bad networks — log as info so real
+		// upstream failures stay visible in the error stream.
+		if r.Context().Err() != nil || errors.Is(err, context.Canceled) {
+			h.logger.Info("upload aborted by client", zap.Error(err))
+			return
+		}
 		h.logger.Error("failed to upload asset", zap.Error(err))
 		http.Error(w, "Failed to upload asset", http.StatusInternalServerError)
 		return
@@ -102,14 +111,30 @@ func (h *ShareHandler) UploadAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If upload was successful and we have an album ID, add the asset to the album
+	// If upload was successful and we have an album ID, make sure the asset
+	// lands in the album. Immich v3+ auto-associates shared-link uploads
+	// with the album, so the explicit add is only needed on v2 — on v3 it
+	// just burns a round-trip and answers 403 for every photo.
 	if uploadResp.StatusCode == http.StatusCreated && albumID != "" {
 		var uploadResult immich.UploadResponse
 		if err := json.Unmarshal(uploadBody, &uploadResult); err == nil && uploadResult.ID != "" {
-			// Add asset to album
-			if err := h.client.AddAssetToAlbumWithKeyType(albumID, uploadResult.ID, creds.key, creds.password, creds.keyType); err != nil {
-				h.logger.Warn("failed to add asset to album", zap.Error(err), zap.String("assetId", uploadResult.ID))
-				// Continue anyway - the upload was successful
+			if h.client.SupportsSharedLinkLogin(creds.key, creds.keyType) {
+				// v3 marker (shared-links/login route) present: skip the add.
+				h.logger.Debug("skipping album add: Immich v3+ auto-associates shared-link uploads",
+					zap.String("assetId", uploadResult.ID), zap.String("albumId", albumID))
+			} else if err := h.client.AddAssetToAlbumWithKeyType(albumID, uploadResult.ID, creds.key, creds.password, creds.keyType); err != nil {
+				var addErr *immich.AlbumAddError
+				if errors.As(err, &addErr) && addErr.StatusCode == http.StatusForbidden {
+					// Safety net when version detection was unavailable: a 403
+					// here means Immich v3 already auto-added the upload to the
+					// album (verified in prod — the asset appears seconds
+					// later). Not a failure, so don't warn.
+					h.logger.Debug("album add returned 403; Immich v3 auto-associates shared-link uploads",
+						zap.String("assetId", uploadResult.ID), zap.String("albumId", albumID))
+				} else {
+					h.logger.Warn("failed to add asset to album", zap.Error(err), zap.String("assetId", uploadResult.ID))
+					// Continue anyway - the upload was successful
+				}
 			}
 		}
 	}
