@@ -5,6 +5,47 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-07-09
+
+### Features
+
+- ✨ Use Immich's native bulk-upload-check when the server allows shared-link auth
+
+/upload-check now runs a capability ladder instead of always probing:
+
+1. Native: one POST /api/assets/bulk-upload-check answers the whole list.
+   Current Immich (verified v3.0.1 + main) gates the route with
+   @Authenticated({permission: AssetUpload}) WITHOUT sharedLink: true, so
+   shared-link auth gets 401/403 today — an upstream Immich PR proposes
+   allowing it, and this proxy is ready the moment a server ships it.
+2. Fallback: the existing per-checksum probe technique (x-immich-checksum
+   + intentionally-invalid multipart, bounded fan-out 8) — unchanged.
+
+Capability is detected on first use with a ONE-item bulk request and cached
+server-wide following the SupportsSharedLinkLogin pattern: supported ~1h,
+unsupported 10min (fast pickup of upstream upgrades), transport errors and
+ambiguous statuses (400/5xx) never cached. On a supported server the first
+request costs detection + remainder (2 calls) and every later request exactly
+one call for up to 500 items — Immich's AssetBulkUploadCheckDto declares no
+array length limit (plain z.array on v3.0.1 and main), so no chunking is
+needed.
+
+Response semantics are identical on both paths (reject+duplicate ⇒
+exists:true with assetId; anything else fails open as exists:false), so the
+frontend contract is untouched — web/src has zero changes.
+
+The e2e tester now hits /upload-check twice and run.sh asserts the proxy
+logged the detection-and-fallback decision exactly once against the running
+Immich (which rejects shared-link bulk checks), pinning the DETECTION +
+FALLBACK + CACHE behavior end-to-end.
+
+
+### Other
+
+- Merge pull request #34 from danibram/codex/native-bulk-check
+
+✨ Use Immich's native bulk-upload-check when the server allows shared-link auth
+
 ## [1.10.0] - 2026-07-09
 
 ### Bug Fixes
