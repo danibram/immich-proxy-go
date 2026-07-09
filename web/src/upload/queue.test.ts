@@ -40,8 +40,8 @@ function makeHarness(overrides: Partial<UploadQueueDeps> = {}): Harness {
     hashFile: vi.fn(async (file: File) => `sha1-of-${file.name}`),
     checkExisting: vi.fn(async () => new Map()),
     uploadFile: vi.fn(
-      (file, opts) =>
-        new Promise((resolve, reject) => {
+      (file: File, opts: Parameters<UploadQueueDeps['uploadFile']>[1]) =>
+        new Promise<{ id: string; status?: string }>((resolve, reject) => {
           uploads.push({
             file,
             checksum: opts.checksum,

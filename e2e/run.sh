@@ -152,6 +152,7 @@ run_scenario() {
           e2e/share-gallery.spec.ts
           e2e/share-proxy-options.spec.ts
           e2e/share-upload.spec.ts
+          e2e/share-upload-pipeline.spec.ts
           e2e/share-upload-resilience.spec.ts
           e2e/share-download.spec.ts
           e2e/share-asset-info.spec.ts

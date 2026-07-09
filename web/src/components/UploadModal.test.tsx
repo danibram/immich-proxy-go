@@ -118,7 +118,7 @@ describe('UploadModal Component', () => {
       allowUpload: true,
       showMetadata: true,
       assets: [],
-    });
+    } as never);
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -222,7 +222,7 @@ describe('UploadModal Component', () => {
       allowUpload: true,
       showMetadata: true,
       assets: [],
-    });
+    } as never);
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -271,7 +271,7 @@ describe('UploadModal Component', () => {
       allowUpload: true,
       showMetadata: true,
       assets: [],
-    });
+    } as never);
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -310,7 +310,7 @@ describe('UploadModal Component', () => {
       allowUpload: true,
       showMetadata: true,
       assets: [],
-    });
+    } as never);
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -350,7 +350,7 @@ describe('UploadModal Component', () => {
       allowUpload: true,
       showMetadata: true,
       assets: [],
-    });
+    } as never);
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -424,7 +424,7 @@ describe('UploadModal Component', () => {
       allowUpload: true,
       showMetadata: true,
       assets: [],
-    });
+    } as never);
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
