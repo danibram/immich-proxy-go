@@ -1,5 +1,74 @@
 import type { Album, Asset, SharedLink } from './types';
 
+// Upload robustness tuning. A stalled TCP connection (bad hotel wifi) never
+// fires load/error on its own, so the client needs two guards:
+//   - Stall watchdog: abort when no upload.progress event arrives for this
+//     long. This is the real protection — a healthy upload emits progress
+//     continuously, however slowly.
+//   - Absolute timeout: a generous cap so even a pathological connection
+//     that dribbles one byte per watchdog window eventually gives up. Big
+//     videos on slow links are legitimate, hence 10 minutes.
+// Retries use a short backoff; Immich dedupes uploads by checksum server-side,
+// so re-sending after an ambiguous failure is safe.
+const DEFAULT_UPLOAD_STALL_MS = 30_000;
+const DEFAULT_UPLOAD_TIMEOUT_MS = 600_000;
+const DEFAULT_UPLOAD_RETRY_DELAYS_MS = [1_000, 4_000];
+
+// Test hooks: e2e fault-injection specs shrink these via localStorage so a
+// stalled-upload scenario doesn't cost 30s+ of wall clock per retry. Real
+// users never set these keys.
+function tunableMs(key: string, fallback: number): number {
+  try {
+    const raw = globalThis.localStorage?.getItem(key);
+    if (raw === null || raw === undefined) return fallback;
+    const value = Number(raw);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function uploadStallMs(): number {
+  return tunableMs('ipp:upload-stall-ms', DEFAULT_UPLOAD_STALL_MS);
+}
+
+function uploadTimeoutMs(): number {
+  return tunableMs('ipp:upload-timeout-ms', DEFAULT_UPLOAD_TIMEOUT_MS);
+}
+
+function uploadRetryDelaysMs(): number[] {
+  try {
+    const raw = globalThis.localStorage?.getItem('ipp:upload-retry-delays-ms');
+    if (raw) {
+      const delays = raw
+        .split(',')
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n >= 0);
+      if (delays.length > 0) return delays;
+    }
+  } catch {
+    // fall through to defaults
+  }
+  return DEFAULT_UPLOAD_RETRY_DELAYS_MS;
+}
+
+export interface UploadRetryHooks {
+  onProgress?: (progress: number) => void;
+  /** Called when a retryable failure schedules another attempt (1-based). */
+  onRetry?: (attempt: number, maxAttempts: number) => void;
+}
+
+// Failures worth retrying: the request never reached a verdict (network
+// error, stall, timeout) or the server said "try again" (5xx, 429). 4xx like
+// 413/415 are permanent — retrying can only waste the user's bandwidth.
+export function isRetryableUploadError(error: unknown): boolean {
+  if (error instanceof UploadStalledError) return true;
+  if (error instanceof ApiError) {
+    return error.status === 0 || error.status === 429 || error.status >= 500;
+  }
+  return false;
+}
+
 export interface DownloadJobStatus {
   id: string;
   status: 'processing' | 'ready' | 'failed';
@@ -161,6 +230,8 @@ class ApiClient {
     }
   }
 
+  // Single upload attempt with stall detection. Prefer uploadAssetWithRetry;
+  // this stays public so tests can exercise one attempt in isolation.
   async uploadAsset(file: File, onProgress?: (progress: number) => void): Promise<Asset> {
     const formData = new FormData();
 
@@ -170,31 +241,119 @@ class ApiClient {
     formData.append('fileCreatedAt', new Date(file.lastModified).toISOString());
     formData.append('fileModifiedAt', new Date(file.lastModified).toISOString());
 
+    const stallMs = uploadStallMs();
+    const timeoutMs = uploadTimeoutMs();
+
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
+      let stallTimer: ReturnType<typeof setTimeout> | undefined;
+      let stalled = false;
+      let settled = false;
+
+      // Every terminal path funnels through here so the watchdog timer can
+      // never leak and double events (abort fires after error, etc.) can
+      // never double-settle the promise.
+      const settle = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        if (stallTimer !== undefined) clearTimeout(stallTimer);
+        fn();
+      };
+
+      // Watchdog: rearm on every progress event; if the connection stalls
+      // (no progress for stallMs) abort the XHR so the queue can retry
+      // instead of waiting forever.
+      const armWatchdog = () => {
+        if (stallTimer !== undefined) clearTimeout(stallTimer);
+        stallTimer = setTimeout(() => {
+          stalled = true;
+          xhr.abort();
+        }, stallMs);
+      };
 
       xhr.upload.addEventListener('progress', (e) => {
+        armWatchdog();
         if (e.lengthComputable && onProgress) {
           onProgress((e.loaded / e.total) * 100);
         }
       });
+      xhr.upload.addEventListener('error', () => {
+        settle(() => reject(new ApiError(0, 'Network error')));
+      });
+      xhr.upload.addEventListener('timeout', () => {
+        settle(() => reject(new UploadStalledError(`upload timed out after ${timeoutMs}ms`)));
+      });
+      xhr.upload.addEventListener('abort', () => {
+        settle(() =>
+          reject(
+            stalled
+              ? new UploadStalledError(`no upload progress for ${stallMs}ms`)
+              : new ApiError(0, 'Upload aborted')
+          )
+        );
+      });
 
       xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(JSON.parse(xhr.responseText));
-        } else {
-          reject(new ApiError(xhr.status, xhr.responseText));
-        }
+        settle(() => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText) as Asset);
+            } catch {
+              reject(new ApiError(xhr.status, xhr.responseText));
+            }
+          } else {
+            reject(new ApiError(xhr.status, xhr.responseText));
+          }
+        });
       });
 
       xhr.addEventListener('error', () => {
-        reject(new ApiError(0, 'Network error'));
+        settle(() => reject(new ApiError(0, 'Network error')));
+      });
+
+      xhr.addEventListener('timeout', () => {
+        settle(() => reject(new UploadStalledError(`upload timed out after ${timeoutMs}ms`)));
+      });
+
+      xhr.addEventListener('abort', () => {
+        settle(() =>
+          reject(
+            stalled
+              ? new UploadStalledError(`no upload progress for ${stallMs}ms`)
+              : new ApiError(0, 'Upload aborted')
+          )
+        );
       });
 
       xhr.open('POST', `${this.baseUrl}/assets`);
       xhr.withCredentials = true;
+      // Generous absolute cap — the watchdog above is the real guard.
+      xhr.timeout = timeoutMs;
+      armWatchdog();
       xhr.send(formData);
     });
+  }
+
+  // Upload with automatic retry on transient failures (network error, stall,
+  // 5xx, 429). Permanent failures (413, 415, other 4xx) throw immediately so
+  // the queue moves on. Safe because Immich dedupes by checksum: re-sending
+  // a file whose first attempt actually landed just returns the existing
+  // asset.
+  async uploadAssetWithRetry(file: File, hooks: UploadRetryHooks = {}): Promise<Asset> {
+    const delays = uploadRetryDelaysMs();
+    const maxAttempts = delays.length + 1;
+
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await this.uploadAsset(file, hooks.onProgress);
+      } catch (error) {
+        if (attempt >= maxAttempts || !isRetryableUploadError(error)) {
+          throw error;
+        }
+        hooks.onRetry?.(attempt + 1, maxAttempts);
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt - 1]));
+      }
+    }
   }
 }
 
@@ -221,6 +380,16 @@ export class ApiError extends Error {
   ) {
     super(`API Error ${status}: ${body}`);
     this.name = 'ApiError';
+  }
+}
+
+// The connection stopped making progress (watchdog) or exceeded the absolute
+// timeout. Always retryable: the server may never have seen the request, and
+// if it did, Immich's checksum dedupe makes the re-send idempotent.
+export class UploadStalledError extends Error {
+  constructor(detail: string) {
+    super(`Upload stalled: ${detail}`);
+    this.name = 'UploadStalledError';
   }
 }
 

@@ -9,6 +9,7 @@ import UploadModal from './UploadModal';
 vi.mock('~/api/client', () => ({
   api: {
     uploadAsset: vi.fn(),
+    uploadAssetWithRetry: vi.fn(),
     getSharedLink: vi.fn(),
     getAlbum: vi.fn(),
   },
@@ -94,7 +95,7 @@ describe('UploadModal Component', () => {
   });
 
   it('handles file selection', async () => {
-    const mockUpload = vi.mocked(api.uploadAsset);
+    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
     const mockGetLink = vi.mocked(api.getSharedLink);
 
     mockUpload.mockResolvedValue({ id: 'asset-1', duplicate: false });
@@ -157,12 +158,12 @@ describe('UploadModal Component', () => {
   });
 
   it('shows upload progress', async () => {
-    const mockUpload = vi.mocked(api.uploadAsset);
+    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
 
     // Create a promise that we can control
     let progressCallback: ((progress: number) => void) | undefined;
-    mockUpload.mockImplementation((file, onProgress) => {
-      progressCallback = onProgress;
+    mockUpload.mockImplementation((file, hooks) => {
+      progressCallback = hooks?.onProgress;
       return new Promise(() => { }); // Never resolves during test
     });
 
@@ -192,7 +193,7 @@ describe('UploadModal Component', () => {
   });
 
   it('continues draining files added while an upload is already running', async () => {
-    const mockUpload = vi.mocked(api.uploadAsset);
+    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
     const mockGetLink = vi.mocked(api.getSharedLink);
     const uploads: Array<() => void> = [];
 
@@ -236,6 +237,124 @@ describe('UploadModal Component', () => {
       await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(2));
       uploads[1]();
       await waitFor(() => expect(mockGetLink).toHaveBeenCalled());
+
+      dispose();
+    });
+  });
+
+  it('continues the queue past a permanently failed file', async () => {
+    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+    const mockGetLink = vi.mocked(api.getSharedLink);
+
+    mockUpload.mockImplementation((file) =>
+      file.name === 'bad.jpg'
+        ? Promise.reject(new Error('API Error 413: File too large'))
+        : Promise.resolve({ id: 'asset-ok' } as never)
+    );
+    mockGetLink.mockResolvedValue({
+      id: 'link-1',
+      key: 'test',
+      type: 'INDIVIDUAL',
+      allowDownload: true,
+      allowUpload: true,
+      showMetadata: true,
+      assets: [],
+    });
+
+    await createRoot(async (dispose) => {
+      const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+      Object.defineProperty(fileInput, 'files', {
+        value: [
+          new File(['bad'], 'bad.jpg', { type: 'image/jpeg' }),
+          new File(['good'], 'good.jpg', { type: 'image/jpeg' }),
+        ],
+        configurable: true,
+      });
+      fireEvent.change(fileInput);
+
+      // Both files must have been attempted: the failure of the first one
+      // must not freeze the queue.
+      await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(2));
+      await waitFor(() => {
+        expect(screen.getByText(/API Error 413/)).toBeInTheDocument();
+        expect(screen.getByText('Clear completed (1)')).toBeInTheDocument();
+      });
+      // The completed upload still refreshes the shared link.
+      expect(mockGetLink).toHaveBeenCalled();
+
+      dispose();
+    });
+  });
+
+  it('shows the retrying state when a transient failure schedules a retry', async () => {
+    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+
+    let retryCallback: ((attempt: number, maxAttempts: number) => void) | undefined;
+    mockUpload.mockImplementation((file, hooks) => {
+      retryCallback = hooks?.onRetry;
+      return new Promise(() => { }); // stays in-flight during the test
+    });
+
+    await createRoot(async (dispose) => {
+      const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+      Object.defineProperty(fileInput, 'files', {
+        value: [new File(['x'], 'photo.jpg', { type: 'image/jpeg' })],
+        configurable: true,
+      });
+      fireEvent.change(fileInput);
+
+      await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
+
+      retryCallback?.(2, 3);
+      await waitFor(() => {
+        expect(screen.getByTestId('upload-retrying')).toHaveTextContent('Retrying (2/3)…');
+      });
+
+      dispose();
+    });
+  });
+
+  it('re-queues failed files when the retry button is clicked', async () => {
+    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+    const mockGetLink = vi.mocked(api.getSharedLink);
+
+    mockUpload
+      .mockRejectedValueOnce(new Error('Upload stalled: no upload progress for 30000ms'))
+      .mockResolvedValueOnce({ id: 'asset-1' } as never);
+    mockGetLink.mockResolvedValue({
+      id: 'link-1',
+      key: 'test',
+      type: 'INDIVIDUAL',
+      allowDownload: true,
+      allowUpload: true,
+      showMetadata: true,
+      assets: [],
+    });
+
+    await createRoot(async (dispose) => {
+      const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+      Object.defineProperty(fileInput, 'files', {
+        value: [new File(['x'], 'photo.jpg', { type: 'image/jpeg' })],
+        configurable: true,
+      });
+      fireEvent.change(fileInput);
+
+      const retryButton = await screen.findByTestId('upload-retry-failed');
+      expect(retryButton).toHaveTextContent('Retry failed (1)');
+
+      fireEvent.click(retryButton);
+
+      await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(2));
+      await waitFor(() => {
+        expect(screen.queryByTestId('upload-retry-failed')).not.toBeInTheDocument();
+        expect(screen.getByText('Clear completed (1)')).toBeInTheDocument();
+      });
 
       dispose();
     });

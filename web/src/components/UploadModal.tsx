@@ -1,4 +1,4 @@
-import { AlertCircle, Check, FileImage, Upload, X } from 'lucide-solid';
+import { AlertCircle, Check, FileImage, RotateCw, Upload, X } from 'lucide-solid';
 import { createSignal, For, Show } from 'solid-js';
 import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
@@ -11,6 +11,10 @@ interface UploadFile {
   progress: number;
   status: 'pending' | 'uploading' | 'complete' | 'error';
   error?: string;
+  // Current attempt (1-based) and total attempts; attempt > 1 means the
+  // previous try stalled or failed transiently and we are retrying.
+  attempt?: number;
+  maxAttempts?: number;
 }
 
 interface Props {
@@ -91,16 +95,26 @@ export default function UploadModal(props: Props) {
         if (!uploadFile) break;
 
         captureEvent('upload_started', { file_count: 1 });
-        updateFile(uploadFile.id, { status: 'uploading' });
+        updateFile(uploadFile.id, { status: 'uploading', progress: 0, error: undefined, attempt: 1 });
 
         try {
-          await api.uploadAsset(uploadFile.file, (progress) => {
-            updateFile(uploadFile.id, { progress });
+          await api.uploadAssetWithRetry(uploadFile.file, {
+            onProgress: (progress) => {
+              updateFile(uploadFile.id, { progress });
+            },
+            // A transient failure (stall, network drop, 5xx, 429) scheduled
+            // another attempt: reset the bar and surface "Retrying (n/m)".
+            onRetry: (attempt, maxAttempts) => {
+              captureEvent('upload_retry', { attempt, max_attempts: maxAttempts });
+              updateFile(uploadFile.id, { progress: 0, attempt, maxAttempts });
+            },
           });
 
           updateFile(uploadFile.id, { status: 'complete', progress: 100 });
           completed += 1;
         } catch (error) {
+          // Permanent failure (or retries exhausted): mark it and keep
+          // draining — one bad file must never freeze the whole queue.
           failed += 1;
           updateFile(uploadFile.id, {
             status: 'error',
@@ -130,6 +144,19 @@ export default function UploadModal(props: Props) {
     setFiles((prev) => prev.filter((f) => f.status !== 'complete'));
   }
 
+  // Re-queue every file that exhausted its retries (or failed permanently
+  // and the user wants another go anyway).
+  function retryFailed() {
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.status === 'error'
+          ? { ...f, status: 'pending' as const, progress: 0, error: undefined, attempt: undefined, maxAttempts: undefined }
+          : f
+      )
+    );
+    void drainUploadQueue();
+  }
+
   function handleClose() {
     if (!isUploading()) {
       setFiles([]);
@@ -150,6 +177,7 @@ export default function UploadModal(props: Props) {
 
   const completedCount = () => files().filter(f => f.status === 'complete').length;
   const pendingCount = () => files().filter(f => f.status === 'pending' || f.status === 'uploading').length;
+  const failedCount = () => files().filter(f => f.status === 'error').length;
 
   return (
     <Show when={props.isOpen}>
@@ -229,6 +257,14 @@ export default function UploadModal(props: Props) {
                         <Show when={file.error}>
                           <span style={{ color: '#c0392b', 'margin-left': '6px' }}>{file.error}</span>
                         </Show>
+                        <Show when={file.status === 'uploading' && (file.attempt ?? 1) > 1}>
+                          <span
+                            data-testid="upload-retrying"
+                            style={{ color: '#b9770e', 'margin-left': '6px' }}
+                          >
+                            {t().upload.retrying(file.attempt ?? 1, file.maxAttempts ?? file.attempt ?? 1)}
+                          </span>
+                        </Show>
                       </div>
                       <Show when={file.status === 'uploading'}>
                         <div class="up-bar">
@@ -249,6 +285,18 @@ export default function UploadModal(props: Props) {
                   </div>
                 )}
               </For>
+              <Show when={failedCount() > 0 && !isUploading()}>
+                <button
+                  type="button"
+                  class="dz-browse"
+                  style={{ width: '100%' }}
+                  data-testid="upload-retry-failed"
+                  onClick={retryFailed}
+                >
+                  <RotateCw size={14} style={{ 'vertical-align': '-2px', 'margin-right': '6px' }} />
+                  {t().upload.retryFailed(failedCount())}
+                </button>
+              </Show>
               <Show when={completedCount() > 0}>
                 <button
                   type="button"
