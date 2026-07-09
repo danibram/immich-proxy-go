@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Request } from '@playwright/test';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   fetchSharedAlbumAssetCount,
@@ -90,22 +90,33 @@ test.describe('Upload pipeline', () => {
     const files = [1, 2, 3].map((i) => uniquePngFile(`dup-${i}.png`, 64 * 1024));
     const totalBytes = files.reduce((sum, f) => sum + f.buffer.byteLength, 0);
 
-    // Count every browser-origin upload POST and the bytes it carries.
-    let uploadPosts = 0;
-    let uploadedBytes = 0;
+    // Collect every browser-origin upload POST; body sizes come from
+    // request.sizes() (Chromium doesn't expose multipart XHR bodies through
+    // postDataBuffer, but the CDP-reported requestBodySize is accurate).
+    const uploadRequests: Request[] = [];
     page.on('request', (request) => {
       if (request.method() === 'POST' && /\/api\/assets$/.test(request.url())) {
-        uploadPosts += 1;
-        uploadedBytes += request.postDataBuffer()?.byteLength ?? 0;
+        uploadRequests.push(request);
       }
     });
+    const uploadedBytes = async () => {
+      let total = 0;
+      for (const request of uploadRequests) {
+        try {
+          total += (await request.sizes()).requestBodySize;
+        } catch {
+          total += request.postDataBuffer()?.byteLength ?? 0;
+        }
+      }
+      return total;
+    };
 
     // Round 1: fresh files upload normally.
     await openUploadModal(page, shareKey);
     await page.locator('input[type="file"]').setInputFiles(files);
     await expect(page.getByText('Clear completed (3)')).toBeVisible({ timeout: 60_000 });
-    expect(uploadPosts).toBe(3);
-    const firstRoundBytes = uploadedBytes;
+    expect(uploadRequests.length).toBe(3);
+    const firstRoundBytes = await uploadedBytes();
     expect(firstRoundBytes).toBeGreaterThan(totalBytes); // payload + multipart framing
 
     // Round 2: the same files again. The hash → upload-check path must mark
@@ -116,12 +127,12 @@ test.describe('Upload pipeline', () => {
     await expect(tilesWithStatus(page, 'duplicate')).toHaveCount(3, { timeout: 10_000 });
     await expect(page.getByText('Already in album').first()).toBeVisible();
     await expect(page.getByTestId('upload-summary')).toHaveText('3 already in album');
-    expect(uploadPosts).toBe(3); // unchanged: zero POSTs in round 2
-    expect(uploadedBytes).toBe(firstRoundBytes); // zero bytes in round 2
+    expect(uploadRequests.length).toBe(3); // unchanged: zero POSTs in round 2
+    expect(await uploadedBytes()).toBe(firstRoundBytes); // zero bytes in round 2
 
     test.info().annotations.push({
       type: 'dedupe-savings',
-      description: `re-selecting 3 files (${totalBytes} payload bytes) caused 0 upload POSTs and 0 bytes on the wire (round 1: ${uploadPosts} POSTs, ${firstRoundBytes} bytes)`,
+      description: `re-selecting 3 files (${totalBytes} payload bytes) caused 0 upload POSTs and 0 bytes on the wire (round 1: 3 POSTs, ${firstRoundBytes} bytes)`,
     });
   });
 
