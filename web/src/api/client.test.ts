@@ -28,6 +28,38 @@ describe('ApiClient', () => {
     });
   });
 
+  describe('checkUploads', () => {
+    it('posts checksums to /upload-check and returns the results', async () => {
+      const results = [
+        { name: 'a.jpg', checksum: 'a'.repeat(40), exists: true, assetId: 'asset-1' },
+        { name: 'b.jpg', checksum: 'b'.repeat(40), exists: false },
+      ];
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results }),
+      });
+
+      const files = [
+        { name: 'a.jpg', checksum: 'a'.repeat(40) },
+        { name: 'b.jpg', checksum: 'b'.repeat(40) },
+      ];
+      await expect(api.checkUploads(files)).resolves.toEqual(results);
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/share/test-key/api/upload-check',
+        expect.objectContaining({
+          method: 'POST',
+          credentials: 'include',
+          body: JSON.stringify({ files }),
+        })
+      );
+    });
+
+    it('returns an empty list when the server omits results', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      await expect(api.checkUploads([])).resolves.toEqual([]);
+    });
+  });
+
   describe('getSharedLink', () => {
     it('should fetch shared link successfully', async () => {
       const mockLink = {
@@ -183,10 +215,15 @@ class MockXHR extends MockXHREmitter {
   url = '';
   sent = false;
   abortCalls = 0;
+  requestHeaders: Record<string, string> = {};
 
   constructor() {
     super();
     MockXHR.instances.push(this);
+  }
+
+  setRequestHeader(name: string, value: string) {
+    this.requestHeaders[name.toLowerCase()] = value;
   }
 
   open(method: string, url: string) {
@@ -270,6 +307,33 @@ describe('uploadAsset (single attempt)', () => {
     MockXHR.instances[0].respond(413, 'File too large');
 
     await expect(promise).rejects.toMatchObject({ name: 'ApiError', status: 413 });
+  });
+
+  it('sends x-immich-checksum when a checksum is provided', async () => {
+    const promise = api.uploadAsset(makeFile(), undefined, 'a'.repeat(40));
+    const xhr = MockXHR.instances[0];
+
+    expect(xhr.requestHeaders['x-immich-checksum']).toBe('a'.repeat(40));
+    xhr.respond(201, JSON.stringify({ id: 'asset-1', status: 'created' }));
+    await expect(promise).resolves.toEqual({ id: 'asset-1', status: 'created' });
+  });
+
+  it('sends no checksum header when none is provided', async () => {
+    const promise = api.uploadAsset(makeFile());
+    const xhr = MockXHR.instances[0];
+
+    expect(xhr.requestHeaders['x-immich-checksum']).toBeUndefined();
+    xhr.respond(201, JSON.stringify({ id: 'asset-1' }));
+    await promise;
+  });
+
+  it('passes the duplicate short-circuit response through as a success', async () => {
+    // Immich answers 200 {status:"duplicate"} from the checksum header
+    // before consuming the body — a success, not an error.
+    const promise = api.uploadAsset(makeFile(), undefined, 'b'.repeat(40));
+    MockXHR.instances[0].respond(200, JSON.stringify({ id: 'asset-dup', status: 'duplicate' }));
+
+    await expect(promise).resolves.toEqual({ id: 'asset-dup', status: 'duplicate' });
   });
 
   it('aborts via the watchdog when no progress arrives for 30s', async () => {
@@ -392,6 +456,20 @@ describe('uploadAssetWithRetry', () => {
     MockXHR.instances[1].respond(201, JSON.stringify({ id: 'asset-2' }));
 
     await expect(promise).resolves.toEqual({ id: 'asset-2' });
+  });
+
+  it('sends the checksum header on every attempt', async () => {
+    const promise = api.uploadAssetWithRetry(makeFile(), { checksum: 'c'.repeat(40) });
+
+    expect(MockXHR.instances[0].requestHeaders['x-immich-checksum']).toBe('c'.repeat(40));
+    MockXHR.instances[0].respond(502, 'Bad gateway');
+    await vi.advanceTimersByTimeAsync(1_000);
+    // The retry attempt also carries the checksum, so a first attempt that
+    // actually landed server-side dedupes instantly here.
+    expect(MockXHR.instances[1].requestHeaders['x-immich-checksum']).toBe('c'.repeat(40));
+    MockXHR.instances[1].respond(200, JSON.stringify({ id: 'asset-2', status: 'duplicate' }));
+
+    await expect(promise).resolves.toEqual({ id: 'asset-2', status: 'duplicate' });
   });
 });
 

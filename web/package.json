@@ -17,6 +17,7 @@
   "dependencies": {
     "@fontsource/bricolage-grotesque": "^5.2.10",
     "@fontsource/geist-sans": "^5.2.5",
+    "@noble/hashes": "^1.8.0",
     "@solidjs/router": "^0.14.0",
     "lucide-solid": "^0.460.0",
     "posthog-js": "^1.376.4",

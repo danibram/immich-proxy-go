@@ -56,6 +56,28 @@ export interface UploadRetryHooks {
   onProgress?: (progress: number) => void;
   /** Called when a retryable failure schedules another attempt (1-based). */
   onRetry?: (attempt: number, maxAttempts: number) => void;
+  /**
+   * Client-computed SHA-1 (hex) sent as x-immich-checksum. Immich's upload
+   * interceptor answers 200 {status:"duplicate"} before consuming the body
+   * when the checksum already exists — so retries after ambiguous failures
+   * (connection lost mid-response) dedupe instantly instead of re-sending.
+   */
+  checksum?: string;
+}
+
+// What POST /assets actually returns. status is "created" (201) or
+// "duplicate"/"replaced" (200) on current Immich servers.
+export interface UploadResult {
+  id: string;
+  status?: string;
+  duplicate?: boolean;
+}
+
+export interface UploadCheckEntry {
+  name: string;
+  checksum: string;
+  exists: boolean;
+  assetId?: string;
 }
 
 // Failures worth retrying: the request never reached a verdict (network
@@ -230,9 +252,25 @@ class ApiClient {
     }
   }
 
+  // Ask the proxy which of these checksums already exist in the album
+  // owner's library — WITHOUT uploading any bytes. The client calls this
+  // once per selection after hashing; files that already exist are marked
+  // "already in album" and never re-uploaded.
+  async checkUploads(files: Array<{ name: string; checksum: string }>): Promise<UploadCheckEntry[]> {
+    const response = await this.request<{ results: UploadCheckEntry[] }>('/upload-check', {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    });
+    return response.results ?? [];
+  }
+
   // Single upload attempt with stall detection. Prefer uploadAssetWithRetry;
   // this stays public so tests can exercise one attempt in isolation.
-  async uploadAsset(file: File, onProgress?: (progress: number) => void): Promise<Asset> {
+  async uploadAsset(
+    file: File,
+    onProgress?: (progress: number) => void,
+    checksum?: string
+  ): Promise<UploadResult> {
     const formData = new FormData();
 
     formData.append('assetData', file);
@@ -297,7 +335,7 @@ class ApiClient {
         settle(() => {
           if (xhr.status >= 200 && xhr.status < 300) {
             try {
-              resolve(JSON.parse(xhr.responseText) as Asset);
+              resolve(JSON.parse(xhr.responseText) as UploadResult);
             } catch {
               reject(new ApiError(xhr.status, xhr.responseText));
             }
@@ -327,6 +365,14 @@ class ApiClient {
 
       xhr.open('POST', `${this.baseUrl}/assets`);
       xhr.withCredentials = true;
+      if (checksum) {
+        // Immich answers 200 {status:"duplicate"} from this header before
+        // consuming the body when the asset already exists. Note: because
+        // the server may close early, the browser can surface that as a
+        // network error instead of a response — harmless, since the retry
+        // dedupes instantly through this same header.
+        xhr.setRequestHeader('x-immich-checksum', checksum);
+      }
       // Generous absolute cap — the watchdog above is the real guard.
       xhr.timeout = timeoutMs;
       armWatchdog();
@@ -339,13 +385,13 @@ class ApiClient {
   // the queue moves on. Safe because Immich dedupes by checksum: re-sending
   // a file whose first attempt actually landed just returns the existing
   // asset.
-  async uploadAssetWithRetry(file: File, hooks: UploadRetryHooks = {}): Promise<Asset> {
+  async uploadAssetWithRetry(file: File, hooks: UploadRetryHooks = {}): Promise<UploadResult> {
     const delays = uploadRetryDelaysMs();
     const maxAttempts = delays.length + 1;
 
     for (let attempt = 1; ; attempt++) {
       try {
-        return await this.uploadAsset(file, hooks.onProgress);
+        return await this.uploadAsset(file, hooks.onProgress, hooks.checksum);
       } catch (error) {
         if (attempt >= maxAttempts || !isRetryableUploadError(error)) {
           throw error;
