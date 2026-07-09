@@ -90,9 +90,11 @@ test.describe('Upload pipeline', () => {
     const files = [1, 2, 3].map((i) => uniquePngFile(`dup-${i}.png`, 64 * 1024));
     const totalBytes = files.reduce((sum, f) => sum + f.buffer.byteLength, 0);
 
-    // Collect every browser-origin upload POST; body sizes come from
-    // request.sizes() (Chromium doesn't expose multipart XHR bodies through
-    // postDataBuffer, but the CDP-reported requestBodySize is accurate).
+    // Collect every browser-origin upload POST. Chromium exposes neither
+    // postDataBuffer nor sizes().requestBodySize for multipart XHR bodies
+    // (both report empty/0 — measured), but the Content-Length header it
+    // actually sent is available via allHeaders() and covers payload +
+    // multipart framing exactly.
     const uploadRequests: Request[] = [];
     page.on('request', (request) => {
       if (request.method() === 'POST' && /\/api\/assets$/.test(request.url())) {
@@ -102,11 +104,8 @@ test.describe('Upload pipeline', () => {
     const uploadedBytes = async () => {
       let total = 0;
       for (const request of uploadRequests) {
-        try {
-          total += (await request.sizes()).requestBodySize;
-        } catch {
-          total += request.postDataBuffer()?.byteLength ?? 0;
-        }
+        const headers = await request.allHeaders();
+        total += Number(headers['content-length'] ?? 0);
       }
       return total;
     };
