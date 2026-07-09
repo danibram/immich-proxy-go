@@ -21,6 +21,11 @@ type Client struct {
 	// shares, keyed by keyType|key|password. See share_token.go.
 	shareTokenMu sync.RWMutex
 	shareTokens  map[string]shareTokenEntry
+
+	// Cached probe of whether the upstream exposes /api/shared-links/login
+	// (an Immich v3 marker). Server-wide, not per-share. See share_token.go.
+	loginEndpointMu sync.Mutex
+	loginEndpoint   *loginEndpointProbe
 }
 
 // NewClient creates a new Immich API client
@@ -385,7 +390,7 @@ func (c *Client) AddAssetToAlbumWithKeyType(albumID string, assetID string, key 
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to add asset to album: status %d, body: %s", resp.StatusCode, string(respBody))
+		return &AlbumAddError{StatusCode: resp.StatusCode, Body: string(respBody)}
 	}
 
 	return nil

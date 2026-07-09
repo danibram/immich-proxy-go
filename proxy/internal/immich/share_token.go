@@ -79,6 +79,65 @@ func (c *Client) shareKnownPublic(key, password string, keyType KeyType) bool {
 	return c.shareTokenState(key, password, keyType).notPasswordProtected
 }
 
+type loginEndpointProbe struct {
+	supported bool
+	fetchedAt time.Time
+	ttl       time.Duration
+}
+
+// SupportsSharedLinkLogin reports whether the upstream Immich exposes the
+// /api/shared-links/login endpoint. The route shipped in Immich v3 alongside
+// the behavior change that shared-link uploads are automatically associated
+// with the shared album — so callers use this as the "v3+" signal to skip
+// the redundant (and 403-answering) explicit album add after an upload.
+//
+// Unknown (transport error) reports false so callers fall back to the
+// explicit add: correct on v2, and on v3 the resulting 403 is harmless.
+// Results are cached server-wide; the probe costs one upstream round-trip
+// per TTL window instead of one wasted album-add per uploaded photo.
+func (c *Client) SupportsSharedLinkLogin(key string, keyType KeyType) bool {
+	c.loginEndpointMu.Lock()
+	cached := c.loginEndpoint
+	c.loginEndpointMu.Unlock()
+	if cached != nil && time.Since(cached.fetchedAt) < cached.ttl {
+		return cached.supported
+	}
+
+	probe := c.probeSharedLinkLoginEndpoint(key, keyType)
+	if probe == nil {
+		return false
+	}
+	c.loginEndpointMu.Lock()
+	c.loginEndpoint = probe
+	c.loginEndpointMu.Unlock()
+	return probe.supported
+}
+
+// probeSharedLinkLoginEndpoint asks the upstream whether the shared-link
+// login route exists. Any concrete status proves route presence or absence;
+// nil means the upstream was unreachable and nothing should be cached.
+func (c *Client) probeSharedLinkLoginEndpoint(key string, keyType KeyType) *loginEndpointProbe {
+	headers := http.Header{}
+	headers.Set("Content-Type", "application/json")
+
+	resp, err := c.proxyShareRequestWithoutToken("POST", "/api/shared-links/login", key, "", keyType, nil, headers, strings.NewReader(`{"password":""}`))
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusNotFound, http.StatusMethodNotAllowed:
+		// Immich v2: the login route does not exist. Re-check sooner in case
+		// the operator upgrades the server underneath a running proxy.
+		return &loginEndpointProbe{supported: false, fetchedAt: time.Now(), ttl: shareTokenNegativeTTL}
+	default:
+		// Any other answer (200/201 token issued, 400 "not password
+		// protected", 401 wrong password) proves the route exists → v3+.
+		return &loginEndpointProbe{supported: true, fetchedAt: time.Now(), ttl: shareTokenTTL}
+	}
+}
+
 // fetchSharedLinkToken performs the login call. Entries with ttl == 0 must
 // not be cached (transport errors or wrong passwords, which the user may
 // correct at any moment).
