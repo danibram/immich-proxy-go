@@ -137,6 +137,9 @@ type Stack struct {
 type UploadResponse struct {
 	ID        string `json:"id"`
 	Duplicate bool   `json:"duplicate"`
+	// Status is "created" (201) or "duplicate"/"replaced" (200) on current
+	// Immich servers; the checksum probe relies on "duplicate".
+	Status string `json:"status"`
 }
 
 // ErrorResponse represents an error from the Immich API

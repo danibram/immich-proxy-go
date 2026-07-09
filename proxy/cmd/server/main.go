@@ -192,6 +192,8 @@ func main() {
 				r.Get("/download/jobs/{jobID}", shareHandler.GetDownloadJobStatus)
 				r.Get("/download/jobs/{jobID}/file", shareHandler.DownloadJobFile)
 				r.Post("/assets", shareHandler.UploadAsset)
+				// Pre-upload dedupe: which checksums already exist upstream
+				r.Post("/upload-check", shareHandler.UploadCheck)
 			})
 
 			// Password validation with strict rate limiting

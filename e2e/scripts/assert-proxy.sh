@@ -65,8 +65,13 @@ assert_non_empty_file() {
 }
 
 create_upload_png() {
+  # Valid 1x1 gray+alpha PNG. The previous fixture had a corrupt IDAT chunk
+  # (bad CRC, truncated zlib stream): Immich accepted the upload, but
+  # AssetGenerateThumbnails failed with "vipspng: libpng read error", so the
+  # newest album asset never got a preview and the security matrix's
+  # public-thumbnail assertions 404'd deterministically.
   cat > /tmp/upload.base64 <<'EOF'
-iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WfD7asAAAAASUVORK5CYII=
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNo+A8AAgIBgG5WixMAAAAASUVORK5CYII=
 EOF
   base64 -d /tmp/upload.base64 > /tmp/upload.png
 }
