@@ -59,17 +59,8 @@ type uploadCheckResponse struct {
 
 // UploadCheck answers which of the submitted {name, checksum} pairs already
 // exist in the share owner's library. Requires an upload-enabled share (same
-// gate as UploadAsset). Two upstream strategies, capability-detected and
-// cached (see immich.BulkCheckAssetsByChecksum):
-//
-//  1. Native: one POST /api/assets/bulk-upload-check answers the whole list —
-//     works once the upstream Immich accepts shared-link auth on that route
-//     (pending upstream PR; current servers reject it with 401/403).
-//  2. Fallback: per-checksum probes via POST /api/assets with the
-//     x-immich-checksum header (bounded fan-out).
-//
-// Failures fail OPEN (exists=false): the client will upload with the
-// checksum header, and Immich dedupes there anyway.
+// gate as UploadAsset). Probe failures fail OPEN (exists=false): the client
+// will upload with the checksum header, and Immich dedupes there anyway.
 func (h *ShareHandler) UploadCheck(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadCheckBody)
 
@@ -103,15 +94,6 @@ func (h *ShareHandler) UploadCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	results := make([]uploadCheckResult, len(req.Files))
-	for i, f := range req.Files {
-		results[i] = uploadCheckResult{Name: f.Name, Checksum: f.Checksum}
-	}
-
-	if len(req.Files) > 0 && h.tryNativeBulkCheck(creds, req.Files, results) {
-		writeUploadCheckResponse(w, h, results)
-		return
-	}
-
 	sem := make(chan struct{}, uploadCheckProbeConcurrency)
 	var wg sync.WaitGroup
 	for i, f := range req.Files {
@@ -137,55 +119,8 @@ func (h *ShareHandler) UploadCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	wg.Wait()
 
-	writeUploadCheckResponse(w, h, results)
-}
-
-func writeUploadCheckResponse(w http.ResponseWriter, h *ShareHandler, results []uploadCheckResult) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(uploadCheckResponse{Results: results}); err != nil {
 		h.logger.Error("failed to encode upload-check response", zap.Error(err))
 	}
-}
-
-// tryNativeBulkCheck answers the whole request through Immich's native
-// POST /api/assets/bulk-upload-check when the upstream accepts shared-link
-// auth on it, filling `results` in place. Returns false when the caller must
-// run the per-checksum probe fallback — because the upstream provably lacks
-// support (decision cached upstream of this call) or because the attempt
-// failed transiently (nothing cached; detection retries next request).
-func (h *ShareHandler) tryNativeBulkCheck(creds shareCredentials, files []uploadCheckFile, results []uploadCheckResult) bool {
-	checksums := make([]string, len(files))
-	for i, f := range files {
-		checksums[i] = f.Checksum
-	}
-
-	outcome, err := h.client.BulkCheckAssetsByChecksum(creds.key, creds.password, creds.keyType, checksums)
-	if err != nil {
-		h.logger.Info("upload-check: native bulk-upload-check attempt failed; falling back to checksum probes (decision not cached)",
-			zap.Error(err))
-		return false
-	}
-	if outcome.Detected {
-		// Once per cache window — the e2e suite asserts this line appears
-		// exactly once while multiple upload-check requests are served.
-		if outcome.Supported {
-			h.logger.Info("upload-check: upstream supports shared-link bulk-upload-check; using native endpoint (decision cached)")
-		} else {
-			h.logger.Info("upload-check: upstream rejected shared-link bulk-upload-check; falling back to checksum probes (decision cached)",
-				zap.Int("status", outcome.StatusCode))
-		}
-	}
-	if !outcome.Supported {
-		h.logger.Debug("upload-check: using checksum-probe fallback (cached decision)", zap.Int("files", len(files)))
-		return false
-	}
-
-	h.logger.Debug("upload-check: answered via native bulk-upload-check", zap.Int("files", len(files)))
-	for i := range results {
-		if outcome.Existence[i].Exists {
-			results[i].Exists = true
-			results[i].AssetID = outcome.Existence[i].AssetID
-		}
-	}
-	return true
 }
