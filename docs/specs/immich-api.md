@@ -177,6 +177,45 @@ Upload a new asset to the shared album. Requires `allowUpload: true` on the shar
 
 ---
 
+### Bulk Upload Check (capability-detected)
+
+```
+POST /api/assets/bulk-upload-check?key={key}
+POST /api/assets/bulk-upload-check?slug={slug}
+```
+
+Immich's native endpoint for answering many checksums in one round-trip:
+
+```json
+{"assets": [{"id": "0", "checksum": "<sha1 hex or base64>"}]}
+```
+
+responds `200 {"results": [{"id", "action": "accept"|"reject",
+"reason?": "duplicate", "assetId?", "isTrashed?"}]}`. The request DTO
+(`AssetBulkUploadCheckDto`, `server/src/dtos/asset-media.dto.ts`) declares
+**no array length limit** (verified on v3.0.1 and main), so the proxy's full
+500-item `/upload-check` batch fits in a single call.
+
+**Caveat:** current Immich servers gate the route with
+`@Authenticated({permission: AssetUpload})` **without** `sharedLink: true`, so
+shared-link auth is rejected (401/403). An upstream PR proposes allowing it.
+The proxy therefore runs a capability ladder for `/upload-check`:
+
+1. On first use it sends a ONE-item bulk-upload-check under shared-link auth.
+   `200` → native support, cached ~1 h; `401/403/404/405` → unsupported,
+   cached 10 min (so an upstream upgrade is picked up quickly).
+2. Unsupported/undetermined → falls back to the checksum-probe technique
+   above (per-checksum `POST /api/assets`, bounded fan-out).
+3. Transport errors and ambiguous statuses (400/5xx) are never cached:
+   the request falls back, detection retries next time.
+
+Both paths produce identical `/upload-check` semantics
+(`reject`+`duplicate` ⇔ probe's `200 {"status": "duplicate"}` ⇒
+`exists: true`); the e2e suite asserts the detection-and-fallback decision
+is taken exactly once per proxy lifetime against the running Immich.
+
+---
+
 ### Add Asset to Album
 
 ```

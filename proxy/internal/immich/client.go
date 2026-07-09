@@ -26,6 +26,12 @@ type Client struct {
 	// (an Immich v3 marker). Server-wide, not per-share. See share_token.go.
 	loginEndpointMu sync.Mutex
 	loginEndpoint   *loginEndpointProbe
+
+	// Cached probe of whether the upstream accepts shared-link auth on
+	// POST /api/assets/bulk-upload-check. Server-wide, not per-share.
+	// See bulk_upload_check.go.
+	bulkCheckMu sync.Mutex
+	bulkCheck   *bulkCheckProbe
 }
 
 // NewClient creates a new Immich API client
