@@ -129,10 +129,9 @@ test.describe('Upload pipeline', () => {
     expect(uploadRequests.length).toBe(3); // unchanged: zero POSTs in round 2
     expect(await uploadedBytes()).toBe(firstRoundBytes); // zero bytes in round 2
 
-    test.info().annotations.push({
-      type: 'dedupe-savings',
-      description: `re-selecting 3 files (${totalBytes} payload bytes) caused 0 upload POSTs and 0 bytes on the wire (round 1: 3 POSTs, ${firstRoundBytes} bytes)`,
-    });
+    const savings = `re-selecting 3 files (${totalBytes} payload bytes) caused 0 upload POSTs and 0 bytes on the wire (round 1: 3 POSTs, ${firstRoundBytes} bytes incl. multipart framing)`;
+    test.info().annotations.push({ type: 'dedupe-savings', description: savings });
+    console.log(`[dedupe-savings] ${savings}`);
   });
 
   test('offline pauses the queue without failures; online resumes it', async ({
