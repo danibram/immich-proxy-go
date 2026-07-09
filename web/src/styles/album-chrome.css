@@ -457,3 +457,202 @@
   transition: width 0.2s ease;
 }
 
+/* --- upload pipeline: offline banner, aggregate bar, tile grid --- */
+
+.app-share .up-offline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(185, 119, 14, 0.12);
+  color: #b9770e;
+  font-size: 13px;
+}
+
+.app-share .up-aggregate {
+  margin-top: 16px;
+}
+
+.app-share .up-agg-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--chip-bg);
+  overflow: hidden;
+}
+
+.app-share .up-agg-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.app-share .up-agg-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--fg-3);
+}
+
+.app-share .up-batch-summary {
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.app-share .up-grid {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.app-share .up-tile {
+  min-width: 0;
+}
+
+.app-share .up-tile-media {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-share .up-tile.is-duplicate .up-tile-media,
+.app-share .up-tile.is-done .up-tile-media {
+  opacity: 0.92;
+}
+
+.app-share .up-tile.is-failed .up-tile-media,
+.app-share .up-tile.is-too-large .up-tile-media {
+  outline: 2px solid rgba(192, 57, 43, 0.55);
+  outline-offset: -2px;
+}
+
+.app-share .up-tile-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.app-share .up-tile-fallback {
+  color: var(--fg-3);
+  display: inline-flex;
+}
+
+.app-share .up-tile-bar {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.app-share .up-tile-fill {
+  height: 100%;
+  background: #fff;
+  border-radius: 999px;
+  transition: width 0.15s ease;
+}
+
+.app-share .up-tile-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sheet);
+  color: var(--fg-2);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+}
+
+.app-share .up-tile-badge.is-done {
+  background: var(--accent);
+  color: #fff;
+}
+
+.app-share .up-tile-badge.is-dup {
+  background: #7d8a97;
+  color: #fff;
+}
+
+.app-share .up-tile-badge.is-fail {
+  background: #c0392b;
+  color: #fff;
+}
+
+.app-share .up-tile-x {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-share .up-tile-caption {
+  margin-top: 5px;
+  min-width: 0;
+}
+
+.app-share .up-status {
+  margin-left: 6px;
+}
+
+.app-share .up-status.is-retry {
+  color: #b9770e;
+}
+
+.app-share .up-status.is-dup {
+  color: var(--fg-2);
+}
+
+.app-share .up-status.is-fail {
+  color: #c0392b;
+}
+
+.app-share .up-actions {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-share .up-spin {
+  animation: up-spin 0.9s linear infinite;
+}
+
+@keyframes up-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+

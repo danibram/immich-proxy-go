@@ -5,19 +5,30 @@ import { api } from '~/api/client';
 import { setIsUploading } from '~/store/share';
 import UploadModal from './UploadModal';
 
-// Mock the API
-vi.mock('~/api/client', () => ({
-  api: {
-    uploadAsset: vi.fn(),
-    uploadAssetWithRetry: vi.fn(),
-    getSharedLink: vi.fn(),
-    getAlbum: vi.fn(),
-  },
-}));
+// Mock the API surface but keep the real error classes: the modal classifies
+// failures with `instanceof ApiError` and isRetryableUploadError.
+vi.mock('~/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('~/api/client')>();
+  return {
+    ...actual,
+    api: {
+      uploadAsset: vi.fn(),
+      uploadAssetWithRetry: vi.fn(),
+      // Default: nothing exists upstream — files proceed to upload.
+      checkUploads: vi.fn(async () => []),
+      getSharedLink: vi.fn(),
+      getAlbum: vi.fn(),
+    },
+  };
+});
 
 describe('UploadModal Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // clearAllMocks keeps implementations; restore the default "nothing
+    // exists upstream" so a test that stubbed duplicates can't leak into the
+    // next one.
+    vi.mocked(api.checkUploads).mockImplementation(async () => []);
     setIsUploading(false);
   });
 
@@ -200,7 +211,7 @@ describe('UploadModal Component', () => {
     mockUpload.mockImplementation(
       () =>
         new Promise((resolve) => {
-          uploads.push(() => resolve({ id: `asset-${uploads.length}`, type: 'IMAGE' } as never));
+          uploads.push(() => resolve({ id: `asset-${uploads.length}` } as never));
         })
     );
     mockGetLink.mockResolvedValue({
@@ -225,18 +236,98 @@ describe('UploadModal Component', () => {
 
       await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
 
+      // Files added mid-flight join the pool (which runs uploads in
+      // parallel) without waiting for the first file to finish.
       Object.defineProperty(fileInput, 'files', {
         value: [new File(['second'], 'second.jpg', { type: 'image/jpeg' })],
         configurable: true,
       });
       fireEvent.change(fileInput);
 
-      expect(mockUpload).toHaveBeenCalledTimes(1);
-      uploads[0]();
-
       await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(2));
+      uploads[0]();
       uploads[1]();
       await waitFor(() => expect(mockGetLink).toHaveBeenCalled());
+
+      dispose();
+    });
+  });
+
+  it('marks files the server already has as duplicates without uploading them', async () => {
+    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+    const mockCheck = vi.mocked(api.checkUploads);
+    const mockGetLink = vi.mocked(api.getSharedLink);
+
+    // Answer the dedupe check with "exists" for whatever checksum the modal
+    // computed — the modal must then upload zero bytes for that file.
+    mockCheck.mockImplementation(async (files) =>
+      files.map((f) => ({ ...f, exists: true, assetId: 'asset-existing' }))
+    );
+    mockGetLink.mockResolvedValue({
+      id: 'link-1',
+      key: 'test',
+      type: 'INDIVIDUAL',
+      allowDownload: true,
+      allowUpload: true,
+      showMetadata: true,
+      assets: [],
+    });
+
+    await createRoot(async (dispose) => {
+      const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+      Object.defineProperty(fileInput, 'files', {
+        value: [new File(['dup'], 'dup.jpg', { type: 'image/jpeg' })],
+        configurable: true,
+      });
+      fireEvent.change(fileInput);
+
+      await waitFor(() => {
+        expect(screen.getByText('Already in album')).toBeInTheDocument();
+        expect(screen.getByText('Clear completed (1)')).toBeInTheDocument();
+      });
+      expect(mockCheck).toHaveBeenCalledTimes(1);
+      expect(mockUpload).not.toHaveBeenCalled();
+      const tile = container.querySelector('[data-testid="upload-tile"]');
+      expect(tile?.getAttribute('data-status')).toBe('duplicate');
+
+      dispose();
+    });
+  });
+
+  it('sends the computed checksum with the upload', async () => {
+    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+    const mockCheck = vi.mocked(api.checkUploads);
+    const mockGetLink = vi.mocked(api.getSharedLink);
+
+    mockUpload.mockResolvedValue({ id: 'asset-1' } as never);
+    mockGetLink.mockResolvedValue({
+      id: 'link-1',
+      key: 'test',
+      type: 'INDIVIDUAL',
+      allowDownload: true,
+      allowUpload: true,
+      showMetadata: true,
+      assets: [],
+    });
+
+    await createRoot(async (dispose) => {
+      const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+
+      Object.defineProperty(fileInput, 'files', {
+        value: [new File(['abc'], 'photo.jpg', { type: 'image/jpeg' })],
+        configurable: true,
+      });
+      fireEvent.change(fileInput);
+
+      await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
+      // SHA-1("abc") — the modal hashed the file and passed the checksum to
+      // both the dedupe check and the upload.
+      const expected = 'a9993e364706816aba3e25717850c26c9cd0d89d';
+      expect(mockCheck).toHaveBeenCalledWith([{ name: 'photo.jpg', checksum: expected }]);
+      expect(mockUpload.mock.calls[0][1]).toMatchObject({ checksum: expected });
 
       dispose();
     });
