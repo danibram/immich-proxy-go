@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@solidjs/testing-library';
 import { createRoot } from 'solid-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from '~/api/client';
+import { api, ApiError } from '~/api/client';
 import { setIsUploading } from '~/store/share';
 import UploadModal from './UploadModal';
 
@@ -13,7 +13,6 @@ vi.mock('~/api/client', async (importOriginal) => {
     ...actual,
     api: {
       uploadAsset: vi.fn(),
-      uploadAssetWithRetry: vi.fn(),
       // Default: nothing exists upstream — files proceed to upload.
       checkUploads: vi.fn(async () => []),
       getSharedLink: vi.fn(),
@@ -21,6 +20,20 @@ vi.mock('~/api/client', async (importOriginal) => {
     },
   };
 });
+
+// Shared-link stub for tests that let an upload finish (the modal refreshes
+// the link on settle).
+function mockLink() {
+  vi.mocked(api.getSharedLink).mockResolvedValue({
+    id: 'link-1',
+    key: 'test',
+    type: 'INDIVIDUAL',
+    allowDownload: true,
+    allowUpload: true,
+    showMetadata: true,
+    assets: [],
+  } as never);
+}
 
 describe('UploadModal Component', () => {
   beforeEach(() => {
@@ -30,6 +43,9 @@ describe('UploadModal Component', () => {
     // next one.
     vi.mocked(api.checkUploads).mockImplementation(async () => []);
     setIsUploading(false);
+    // The queue reads its retry schedule through the localStorage test hook;
+    // tests that shrink it must not leak into the next one.
+    localStorage.removeItem('ipp:upload-retry-delays-ms');
   });
 
   it('is hidden when isOpen is false', () => {
@@ -65,30 +81,13 @@ describe('UploadModal Component', () => {
     });
   });
 
-  it('has close button', () => {
-    createRoot((dispose) => {
-      render(() => <UploadModal isOpen={true} onClose={() => { }} />);
-      // Find the close button (X icon in header)
-      const buttons = screen.getAllByRole('button');
-      expect(buttons.length).toBeGreaterThan(0);
-      dispose();
-    });
-  });
-
-  it('calls onClose when close button clicked', () => {
+  it('calls onClose when the close button is clicked', () => {
     createRoot((dispose) => {
       const onClose = vi.fn();
       render(() => <UploadModal isOpen={true} onClose={onClose} />);
 
-      // The close button is the one with X icon (not Browse Files)
-      const closeButton = screen.getAllByRole('button').find(
-        btn => !btn.textContent?.includes('Browse')
-      );
-
-      if (closeButton) {
-        fireEvent.click(closeButton);
-        expect(onClose).toHaveBeenCalled();
-      }
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
       dispose();
     });
   });
@@ -106,19 +105,9 @@ describe('UploadModal Component', () => {
   });
 
   it('handles file selection', async () => {
-    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
-    const mockGetLink = vi.mocked(api.getSharedLink);
-
-    mockUpload.mockResolvedValue({ id: 'asset-1', duplicate: false });
-    mockGetLink.mockResolvedValue({
-      id: 'link-1',
-      key: 'test',
-      type: 'INDIVIDUAL',
-      allowDownload: true,
-      allowUpload: true,
-      showMetadata: true,
-      assets: [],
-    } as never);
+    const mockUpload = vi.mocked(api.uploadAsset);
+    mockUpload.mockResolvedValue({ id: 'asset-1' });
+    mockLink();
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -169,12 +158,12 @@ describe('UploadModal Component', () => {
   });
 
   it('shows upload progress', async () => {
-    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+    const mockUpload = vi.mocked(api.uploadAsset);
 
-    // Create a promise that we can control
+    // Capture the progress callback so the test can drive it.
     let progressCallback: ((progress: number) => void) | undefined;
-    mockUpload.mockImplementation((file, hooks) => {
-      progressCallback = hooks?.onProgress;
+    mockUpload.mockImplementation((file, onProgress) => {
+      progressCallback = onProgress;
       return new Promise(() => { }); // Never resolves during test
     });
 
@@ -194,35 +183,27 @@ describe('UploadModal Component', () => {
         expect(mockUpload).toHaveBeenCalled();
       });
 
-      // Simulate progress
-      if (progressCallback) {
-        progressCallback(50);
-      }
+      // Simulate progress and verify the tile renders it.
+      progressCallback!(50);
+      await waitFor(() => {
+        expect(screen.getByText('50%')).toBeInTheDocument();
+      });
 
       dispose();
     });
   });
 
   it('continues draining files added while an upload is already running', async () => {
-    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
-    const mockGetLink = vi.mocked(api.getSharedLink);
+    const mockUpload = vi.mocked(api.uploadAsset);
     const uploads: Array<() => void> = [];
 
     mockUpload.mockImplementation(
       () =>
         new Promise((resolve) => {
-          uploads.push(() => resolve({ id: `asset-${uploads.length}` } as never));
+          uploads.push(() => resolve({ id: `asset-${uploads.length}` }));
         })
     );
-    mockGetLink.mockResolvedValue({
-      id: 'link-1',
-      key: 'test',
-      type: 'INDIVIDUAL',
-      allowDownload: true,
-      allowUpload: true,
-      showMetadata: true,
-      assets: [],
-    } as never);
+    mockLink();
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -247,31 +228,22 @@ describe('UploadModal Component', () => {
       await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(2));
       uploads[0]();
       uploads[1]();
-      await waitFor(() => expect(mockGetLink).toHaveBeenCalled());
+      await waitFor(() => expect(api.getSharedLink).toHaveBeenCalled());
 
       dispose();
     });
   });
 
   it('marks files the server already has as duplicates without uploading them', async () => {
-    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+    const mockUpload = vi.mocked(api.uploadAsset);
     const mockCheck = vi.mocked(api.checkUploads);
-    const mockGetLink = vi.mocked(api.getSharedLink);
 
     // Answer the dedupe check with "exists" for whatever checksum the modal
     // computed — the modal must then upload zero bytes for that file.
     mockCheck.mockImplementation(async (files) =>
       files.map((f) => ({ ...f, exists: true, assetId: 'asset-existing' }))
     );
-    mockGetLink.mockResolvedValue({
-      id: 'link-1',
-      key: 'test',
-      type: 'INDIVIDUAL',
-      allowDownload: true,
-      allowUpload: true,
-      showMetadata: true,
-      assets: [],
-    } as never);
+    mockLink();
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -297,20 +269,11 @@ describe('UploadModal Component', () => {
   });
 
   it('sends the computed checksum with the upload', async () => {
-    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+    const mockUpload = vi.mocked(api.uploadAsset);
     const mockCheck = vi.mocked(api.checkUploads);
-    const mockGetLink = vi.mocked(api.getSharedLink);
 
-    mockUpload.mockResolvedValue({ id: 'asset-1' } as never);
-    mockGetLink.mockResolvedValue({
-      id: 'link-1',
-      key: 'test',
-      type: 'INDIVIDUAL',
-      allowDownload: true,
-      allowUpload: true,
-      showMetadata: true,
-      assets: [],
-    } as never);
+    mockUpload.mockResolvedValue({ id: 'asset-1' });
+    mockLink();
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -327,30 +290,21 @@ describe('UploadModal Component', () => {
       // both the dedupe check and the upload.
       const expected = 'a9993e364706816aba3e25717850c26c9cd0d89d';
       expect(mockCheck).toHaveBeenCalledWith([{ name: 'photo.jpg', checksum: expected }]);
-      expect(mockUpload.mock.calls[0][1]).toMatchObject({ checksum: expected });
+      expect(mockUpload.mock.calls[0][2]).toBe(expected);
 
       dispose();
     });
   });
 
-  it('continues the queue past a permanently failed file', async () => {
-    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
-    const mockGetLink = vi.mocked(api.getSharedLink);
+  it('continues the queue past a permanently failed file and renders the i18n caption', async () => {
+    const mockUpload = vi.mocked(api.uploadAsset);
 
     mockUpload.mockImplementation((file) =>
       file.name === 'bad.jpg'
-        ? Promise.reject(new Error('API Error 413: File too large'))
-        : Promise.resolve({ id: 'asset-ok' } as never)
+        ? Promise.reject(new ApiError(413, '<html>File too large</html>'))
+        : Promise.resolve({ id: 'asset-ok' })
     );
-    mockGetLink.mockResolvedValue({
-      id: 'link-1',
-      key: 'test',
-      type: 'INDIVIDUAL',
-      allowDownload: true,
-      allowUpload: true,
-      showMetadata: true,
-      assets: [],
-    } as never);
+    mockLink();
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -369,24 +323,28 @@ describe('UploadModal Component', () => {
       // must not freeze the queue.
       await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(2));
       await waitFor(() => {
-        expect(screen.getByText(/API Error 413/)).toBeInTheDocument();
+        expect(screen.getByText('Too large')).toBeInTheDocument();
         expect(screen.getByText('Clear completed (1)')).toBeInTheDocument();
       });
+      // The raw response body never reaches the UI.
+      expect(screen.queryByText(/File too large/)).not.toBeInTheDocument();
       // The completed upload still refreshes the shared link.
-      expect(mockGetLink).toHaveBeenCalled();
+      expect(api.getSharedLink).toHaveBeenCalled();
 
       dispose();
     });
   });
 
-  it('shows the retrying state when a transient failure schedules a retry', async () => {
-    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
+  it('shows the retrying state while the queue waits out a transient failure', async () => {
+    const mockUpload = vi.mocked(api.uploadAsset);
+    // Two retries via the localStorage tunable the queue composes with.
+    localStorage.setItem('ipp:upload-retry-delays-ms', '10,10');
 
-    let retryCallback: ((attempt: number, maxAttempts: number) => void) | undefined;
-    mockUpload.mockImplementation((file, hooks) => {
-      retryCallback = hooks?.onRetry;
-      return new Promise(() => { }); // stays in-flight during the test
-    });
+    // Attempt 1 fails transiently; attempt 2 stays in flight so the
+    // "Retrying (2/3)…" label is stable to assert.
+    mockUpload
+      .mockRejectedValueOnce(new ApiError(503, 'Unavailable'))
+      .mockImplementation(() => new Promise(() => { }));
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -399,8 +357,6 @@ describe('UploadModal Component', () => {
       fireEvent.change(fileInput);
 
       await waitFor(() => expect(mockUpload).toHaveBeenCalledTimes(1));
-
-      retryCallback?.(2, 3);
       await waitFor(() => {
         expect(screen.getByTestId('upload-retrying')).toHaveTextContent('Retrying (2/3)…');
       });
@@ -410,21 +366,12 @@ describe('UploadModal Component', () => {
   });
 
   it('re-queues failed files when the retry button is clicked', async () => {
-    const mockUpload = vi.mocked(api.uploadAssetWithRetry);
-    const mockGetLink = vi.mocked(api.getSharedLink);
+    const mockUpload = vi.mocked(api.uploadAsset);
 
     mockUpload
-      .mockRejectedValueOnce(new Error('Upload stalled: no upload progress for 30000ms'))
-      .mockResolvedValueOnce({ id: 'asset-1' } as never);
-    mockGetLink.mockResolvedValue({
-      id: 'link-1',
-      key: 'test',
-      type: 'INDIVIDUAL',
-      allowDownload: true,
-      allowUpload: true,
-      showMetadata: true,
-      assets: [],
-    } as never);
+      .mockRejectedValueOnce(new ApiError(400, 'Bad request')) // permanent: no auto-retry
+      .mockResolvedValueOnce({ id: 'asset-1' });
+    mockLink();
 
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
@@ -451,18 +398,17 @@ describe('UploadModal Component', () => {
     });
   });
 
-  it('disables close button during upload', async () => {
+  it('disables the close button during upload and ignores clicks on it', async () => {
     setIsUploading(true);
 
     createRoot((dispose) => {
-      render(() => <UploadModal isOpen={true} onClose={() => { }} />);
+      const onClose = vi.fn();
+      render(() => <UploadModal isOpen={true} onClose={onClose} />);
 
-      // The close button should be disabled
-      const closeButton = screen.getAllByRole('button').find(
-        btn => !btn.textContent?.includes('Browse')
-      ) as HTMLButtonElement;
-
-      expect(closeButton?.disabled).toBe(true);
+      const closeButton = screen.getByRole('button', { name: 'Close' }) as HTMLButtonElement;
+      expect(closeButton.disabled).toBe(true);
+      fireEvent.click(closeButton);
+      expect(onClose).not.toHaveBeenCalled();
       dispose();
     });
   });
@@ -471,17 +417,14 @@ describe('UploadModal Component', () => {
     await createRoot(async (dispose) => {
       const { container } = render(() => <UploadModal isOpen={true} onClose={() => { }} />);
 
-      // Find the drop zone
-      const dropZone = container.querySelector('.border-dashed');
+      const dropZone = container.querySelector('.dropzone');
+      expect(dropZone).not.toBeNull();
 
-      if (dropZone) {
-        // Simulate drag enter
-        fireEvent.dragEnter(dropZone);
-
-        await waitFor(() => {
-          expect(screen.getByText('Drop files here')).toBeInTheDocument();
-        });
-      }
+      fireEvent.dragEnter(dropZone!);
+      await waitFor(() => {
+        expect(screen.getByText('Drop files here')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('Drag and drop')).not.toBeInTheDocument();
 
       dispose();
     });

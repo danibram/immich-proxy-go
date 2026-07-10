@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,6 +64,9 @@ func (m *uploadMockImmich) server(t *testing.T) *httptest.Server {
 			m.uploadChecksumMu.Lock()
 			m.uploadChecksum = r.Header.Get("x-immich-checksum")
 			m.uploadChecksumMu.Unlock()
+			// Consume the body like real Immich does — required for the
+			// proxy-side MaxBytesReader to actually trip on oversized uploads.
+			io.Copy(io.Discard, r.Body) //nolint:errcheck
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			json.NewEncoder(w).Encode(immich.UploadResponse{ID: testAssetID1})
@@ -80,11 +84,16 @@ func (m *uploadMockImmich) server(t *testing.T) *httptest.Server {
 
 func setupUploadTestHandler(t *testing.T, mockServer *httptest.Server) (*chi.Mux, *observer.ObservedLogs) {
 	t.Helper()
+	return setupUploadTestHandlerWithLimit(t, mockServer, 100)
+}
+
+func setupUploadTestHandlerWithLimit(t *testing.T, mockServer *httptest.Server, maxUploadSizeMB int64) (*chi.Mux, *observer.ObservedLogs) {
+	t.Helper()
 	testSecret := "test-secret-key-12345"
 
 	client := immich.NewClient(mockServer.URL)
 	cfg := &config.Config{
-		Security: config.SecurityConfig{MaxUploadSize: 100},
+		Security: config.SecurityConfig{MaxUploadSize: maxUploadSizeMB},
 	}
 	core, logs := observer.New(zap.DebugLevel)
 	logger := zap.New(core)
@@ -153,6 +162,30 @@ func TestUploadWithoutChecksumSendsNoHeader(t *testing.T) {
 	mock.uploadChecksumMu.Unlock()
 	if forwarded != "" {
 		t.Fatalf("expected no checksum header, got %q", forwarded)
+	}
+}
+
+func TestUploadOversizedBodyReturns413(t *testing.T) {
+	// The MaxBytesReader limit must surface as a 413 with the size message,
+	// not a generic 500. The error arrives wrapped in *url.Error, so this
+	// exercises the errors.As unwrap end-to-end through a real http.Client.
+	mock := &uploadMockImmich{loginStatus: http.StatusUnauthorized}
+	server := mock.server(t)
+	defer server.Close()
+
+	router, _ := setupUploadTestHandlerWithLimit(t, server, 1) // 1 MB limit
+
+	body := strings.NewReader(strings.Repeat("x", 2<<20)) // 2 MB payload
+	req := httptest.NewRequest(http.MethodPost, "/api/share/valid-key/assets", body)
+	req.Header.Set("Content-Type", "image/jpeg")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413 for oversized upload, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Maximum size is 1 MB") {
+		t.Fatalf("expected size message in 413 body, got %q", rec.Body.String())
 	}
 }
 

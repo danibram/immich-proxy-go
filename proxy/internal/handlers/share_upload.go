@@ -89,8 +89,11 @@ func (h *ShareHandler) UploadAsset(w http.ResponseWriter, r *http.Request) {
 	// Upload the asset
 	uploadResp, err := h.client.UploadAssetWithKeyType(creds.key, creds.password, contentType, checksum, r.Body, creds.keyType)
 	if err != nil {
-		// Check if it's a size limit error
-		if err.Error() == "http: request body too large" {
+		// MaxBytesReader tripped. The error reaches us wrapped
+		// (wrapTransportError → *url.Error → *http.MaxBytesError), so unwrap
+		// with errors.As — a string compare on err.Error() never matches.
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
 			http.Error(w, fmt.Sprintf("File too large. Maximum size is %d MB", h.config.Security.MaxUploadSize), http.StatusRequestEntityTooLarge)
 			return
 		}

@@ -114,8 +114,10 @@ test.describe('Upload resilience', () => {
       .locator('input[type="file"]')
       .setInputFiles([uniquePngFile('too-big.png'), uniquePngFile('fine.png')]);
 
-    // First file fails permanently, second file completes regardless.
-    await expect(page.getByText(/API Error 413/)).toBeVisible({ timeout: 20_000 });
+    // First file fails permanently — surfaced as the localized too-large
+    // caption, never the raw response body.
+    await expect(page.getByText('Too large', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/File too large\. Maximum size/)).toHaveCount(0);
     await expect(page.getByText('Clear completed (1)')).toBeVisible({ timeout: 30_000 });
     // Exactly one POST per file: no automatic retry of the 413.
     expect(uploadPosts).toBe(2);

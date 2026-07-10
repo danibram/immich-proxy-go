@@ -175,7 +175,6 @@ test.describe('Upload pipeline', () => {
     for (const release of held) release();
     await page.waitForTimeout(1_500); // let the aborts and (offline) retries settle
     await expect(tilesWithStatus(page, 'failed')).toHaveCount(0);
-    await expect(tilesWithStatus(page, 'too-large')).toHaveCount(0);
     await expect(page.getByTestId('upload-retry-failed')).toHaveCount(0);
 
     // Wifi returns: the queue resumes on its own and finishes the batch.

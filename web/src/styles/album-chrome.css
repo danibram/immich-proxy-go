@@ -533,8 +533,7 @@
   opacity: 0.92;
 }
 
-.app-share .up-tile.is-failed .up-tile-media,
-.app-share .up-tile.is-too-large .up-tile-media {
+.app-share .up-tile.is-failed .up-tile-media {
   outline: 2px solid rgba(192, 57, 43, 0.55);
   outline-offset: -2px;
 }
