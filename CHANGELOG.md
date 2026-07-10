@@ -5,6 +5,92 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.2] - 2026-07-10
+
+### Bug Fixes
+
+- 🐛 Return 413 for oversized uploads via errors.As on MaxBytesError
+
+The handler compared err.Error() == "http: request body too large", but
+the error arrives wrapped (wrapTransportError → *url.Error →
+*http.MaxBytesError), so the branch never fired and oversized uploads
+answered 500. Unwrap with errors.As instead, and add the missing
+regression test (2 MB body against a 1 MB limit → 413 with the size
+message). The upload mock now consumes the request body like real Immich
+does, which is what lets MaxBytesReader trip in-test. (F1)
+
+
+### Other
+
+- Merge pull request #36 from danibram/codex/upload-review-fixes
+
+Upload subsystem: apply code-quality review findings F1-F8
+
+
+### Refactor
+
+- ♻️ Move upload retries into the queue; collapse too-large; tile-local previews
+
+Restructures the upload subsystem around single ownership (F2-F4, F7, F8):
+
+- F4: the retry loop moves from client.uploadAssetWithRetry into
+  UploadQueue.runUpload. The client keeps single-attempt uploadAsset
+  (with the stall watchdog); the queue owns attempt/maxAttempts as item
+  state, notifies the adaptive policy from ONE site, and fires
+  onRetryScheduled itself (analytics). uploadAssetWithRetry,
+  UploadRetryHooks and the onRetry relay are deleted (-16 lines in
+  client.ts, plus the 92-line uploadAssetWithRetry test block, replaced
+  by 4 queue-level retry tests). Retry tunables compose in the modal via
+  the exported uploadRetryDelaysMs(), so the e2e localStorage hooks keep
+  working unchanged.
+
+- F3+F7: 'too-large' folds into 'failed' with a classified
+  failureKind ('too-large' | 'error') + optional short failureDetail
+  (e.g. "HTTP 500") set by the modal's classifyFailure at the edge.
+  The raw ApiError.message (potentially a full HTML body) no longer
+  reaches the item or the UI; captions are i18n (upload.tooLarge /
+  upload.failed — the latter was a dead key, now used). The private
+  TERMINAL set and all five 'failed' || 'too-large' pair-checks are
+  gone; queue.ts exports isTerminal/isFailed as the single owner. The
+  double caption bug (too-large rendering both the localized caption
+  AND the raw string) is fixed. e2e specs updated deliberately:
+  resilience now pins the 'Too large' caption (and asserts the raw body
+  is absent); pipeline drops the impossible too-large tile check.
+
+- F2: object-URL preview ownership moves into the tile: created on tile
+  mount, revoked + broken-flag in tile-local onCleanup/signal. The
+  previews Map, broken Set, releasePreviews/markBroken helpers and their
+  four call-site threads are deleted (~45 lines); reconcile-by-id keeps
+  tile identity stable so lifetimes are exactly right.
+
+- F8: XHR error/timeout/abort registration folded into one loop over
+  [xhr, xhr.upload] (settle guard already order-safe); pump() hoists the
+  running set out of the loop; the two status==='uploading' Shows merge.
+
+
+### Testing
+
+- ✅ Fix vacuous modal tests, delete vestiges, extract mockLink helper
+
+- F6: the drag test queried .border-dashed (a class that no longer
+  exists) inside an if — it asserted nothing. It now requires .dropzone
+  to exist and asserts the drag text change. The progress test asserts
+  the rendered 50% after progressCallback(50). The two close-button
+  tests are replaced by real assertions: clicking calls onClose exactly
+  once, and while uploading the button is disabled and clicks are
+  ignored. The 7x-repeated getSharedLink stub collapses into mockLink().
+
+- F5: the unused UploadResult.duplicate stub and the api.uploadAsset
+  mock notes: duplicate?: boolean is deleted from client.ts (previous
+  commit) and its stub here; uploadAsset flipped from never-used to the
+  only upload mock, since the modal now calls the single-attempt API
+  (uploadAssetWithRetry mock deleted).
+
+- Adapts to the new shapes: retrying is driven through the queue's
+  retry loop via the ipp:upload-retry-delays-ms localStorage tunable
+  (cleaned in beforeEach); permanent failures assert the localized
+  captions ('Too large') and that raw response bodies never render.
+
 ## [1.11.1] - 2026-07-09
 
 ### Other
