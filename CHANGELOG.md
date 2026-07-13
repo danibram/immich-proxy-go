@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.1] - 2026-07-13
+
+### Bug Fixes
+
+- 🐛 Fast swipes no longer swallow steps; history pushes debounced
+
+Two mechanisms made rapid swiping feel stuck:
+- A step requested mid-animation overwrote the pending one and killed its
+  fallback timer, so N fast swipes advanced one image. The carousel now
+  commits the in-flight step when a new gesture or step begins.
+- One pushState per image navigation runs into browser rate limits under
+  sustained fast swiping (Safari throws past ~100/30s). Pushes are now
+  debounced 400ms — only the image the user settles on mints a history
+  entry — wrapped in try/catch, and the stale suppress-flag bug (a popstate
+  left it armed, eating the next legit navigation's entry) is gone:
+  lastHistoryId alone dedupes popstate-driven changes.
+
+Playwright's webServer now builds before serving and never reuses a
+stale preview: specs were silently running against an old dist/.
+
 ## [1.13.0] - 2026-07-13
 
 ### Bug Fixes
