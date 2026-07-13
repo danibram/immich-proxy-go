@@ -5,6 +5,54 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-07-13
+
+### Bug Fixes
+
+- 🐛 Browser Back steps through viewed images before closing the viewer
+
+Navigation replaced the hash in place and any popstate closed the viewer,
+so Back always dumped the user to the gallery and then out of the share.
+Google-Photos model instead: every viewed image pushes its own history
+entry; popstate with an asset hash navigates the carousel there (resyncing
+depth from the entry state, without re-pushing); explicit close unwinds
+all our entries with a single history.go(-depth) so no hash residue is
+left behind. E2e covers Back/Forward stepping and the unwind-on-close.
+
+
+### Other
+
+- 🛠️ Media reliability: no cached transient authz errors, tile/slide retries, thumbhash placeholders, streaming-safe media transport
+
+Five-item image-loading reliability package:
+
+1. shareAuthzCache no longer caches transient errors (upstream blip no
+   longer kills every media request for a share for 60s after recovery).
+2. Grid tiles and viewer slides retry a failed image once (marked
+   &retry=1 so clean URLs stay CDN-cacheable), then downgrade size, then
+   settle on a persistent placeholder instead of rendering nothing.
+3. Grid loads the small webp `thumbnail` size; the viewer keeps loading
+   `preview` but shows the browser-cached grid thumbnail as an instant
+   poster underneath until the preview arrives (no blank slides).
+4. The thumbhash already shipped by the timeline API is decoded (via the
+   tiny `thumbhash` package, memoized) and painted behind tiles and
+   slides while they load and in failure placeholders.
+5. Media transport split: JSON/API keeps the 30s total-deadline client;
+   media streaming uses a client with no total timeout (dial 10s,
+   TLS 10s, response-header 30s, MaxIdleConnsPerHost 16) so long videos
+   are not killed mid-body, the streaming copy aborts only after 60s
+   without progress, and the video route forwards Range and passes
+   206/Content-Range/Accept-Ranges through for seeking.
+
+- Merge pull request #37 from danibram/codex/media-reliability
+
+Media reliability: transient-error caching, tile/slide retries, thumbhash placeholders, streaming-safe transport
+
+
+### Testing
+
+- 🧪 Make retry e2e robust to initial-layout tile remounts
+
 ## [1.12.0] - 2026-07-13
 
 ### Features
