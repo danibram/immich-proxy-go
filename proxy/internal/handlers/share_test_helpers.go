@@ -37,12 +37,13 @@ func setupTestHandlerWithOptions(t *testing.T, mockServer *httptest.Server, opti
 	r.Route("/api/share/{key}", func(r chi.Router) {
 		r.Use(middleware.ExtractShareKey)
 		r.Get("/link", handler.GetSharedLink)
-		r.Get("/album/{albumID}", handler.GetAlbum)
 		r.Get("/asset/{assetID}", handler.GetAssetInfo)
+		// Direct GetThumbnail seam for handler tests. The production router
+		// only exposes the extensioned form (thumbnail.{ext}); the
+		// extensionless route was removed.
 		r.Get("/asset/{assetID}/thumbnail", handler.GetThumbnail)
 		r.Get("/asset/{assetID}/thumbnail.{ext}", handler.GetThumbnailExt)
 		r.Get("/asset/{assetID}/original", handler.GetOriginal)
-		r.Get("/og-cover", handler.ServeOGImage)
 		r.Get("/raw", handler.ServeSingleImage)
 		r.Get("/og-head", func(w http.ResponseWriter, req *http.Request) {
 			_, _ = w.Write([]byte(handler.ShareIndexHead(req)))

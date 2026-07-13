@@ -35,14 +35,12 @@ test.describe('Shared asset info', () => {
     test.skip(!key, 'METADATA_OFF_SHARE_KEY required');
     const route: ShareRoute = { prefix: 'share', identifier: key };
 
-    // Discover an asset that belongs to this share.
+    // Discover an asset that belongs to this share. Album details (including
+    // assets) are embedded in shared-links/me.
     const link = await request.get(shareApiPath(route, '/shared-links/me'));
     expect(link.status()).toBe(200);
     const linkBody = await link.json();
-    const albumId = linkBody.album?.id as string;
-    const album = await request.get(shareApiPath(route, `/albums/${albumId}`));
-    expect(album.status()).toBe(200);
-    const assetId = (await album.json()).assets?.[0]?.id as string;
+    const assetId = linkBody.album?.assets?.[0]?.id as string;
     expect(assetId, 'metadata-off album should list assets').toBeTruthy();
 
     const response = await request.get(shareApiPath(route, `/assets/${assetId}`));

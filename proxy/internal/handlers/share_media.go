@@ -102,10 +102,20 @@ func (h *ShareHandler) GetThumbnailExt(w http.ResponseWriter, r *http.Request) {
 	h.GetThumbnail(w, r)
 }
 
-// ServeSingleImage exposes the sole image in an INDIVIDUAL share as raw image
+// ServeSingleImage exposes one permission-aware image for the share as raw
 // bytes at /share/{key}/raw (and /s/{slug}/raw). It is intentionally outside
-// the SPA/API hotlink guard so the URL can be used in an <img>, while still
-// enforcing the share password, expiry, membership, and Immich permissions.
+// the SPA/API hotlink guard so the URL can be used in an <img> and by unfurl
+// bots (which send no Sec-Fetch headers), while still enforcing the share
+// password, expiry, membership, and Immich permissions.
+//
+// Resolution:
+//   - INDIVIDUAL share with a single IMAGE asset: that image, at preview
+//     quality (fullsize when the share allows downloads and the operator
+//     enabled fullsize zoom).
+//   - Anything else: the share's cover thumbnail — the album's thumbnail
+//     asset, falling back to the album's (then the link's) first asset. This
+//     is the resolution formerly served by the /og-cover endpoint, which was
+//     merged into this route; ShareIndexHead points og:image here.
 func (h *ShareHandler) ServeSingleImage(w http.ResponseWriter, r *http.Request) {
 	link, creds, droppedStalePassword, err := h.loadShareLinkFromRequest(r)
 	if err != nil {
@@ -118,21 +128,34 @@ func (h *ShareHandler) ServeSingleImage(w http.ResponseWriter, r *http.Request) 
 	if droppedStalePassword {
 		clearSharePasswordCookie(w, r)
 	}
-	if link.Type != "INDIVIDUAL" || len(link.Assets) != 1 || link.Assets[0].Type != "IMAGE" {
-		http.NotFound(w, r)
-		return
-	}
 
-	assetID := link.Assets[0].ID
+	size := "thumbnail" // cover resolution default
+	assetID := ""
+	isCover := true
+	if link.Type == "INDIVIDUAL" && len(link.Assets) == 1 && link.Assets[0].Type == "IMAGE" {
+		assetID = link.Assets[0].ID
+		isCover = false
+		size = string(config.QualityPreview)
+		if link.AllowDownload && h.config.Options.ZoomQuality() == config.QualityFullsize {
+			size = string(config.QualityFullsize)
+		}
+	} else {
+		if link.Album != nil {
+			assetID = link.Album.AlbumThumbnailAssetID
+			if assetID == "" && len(link.Album.Assets) > 0 {
+				assetID = link.Album.Assets[0].ID
+			}
+		}
+		if assetID == "" && len(link.Assets) > 0 {
+			assetID = link.Assets[0].ID
+		}
+	}
 	if !middleware.IsValidUUID(assetID) {
 		http.NotFound(w, r)
 		return
 	}
-	quality := config.QualityPreview
-	if link.AllowDownload && h.config.Options.ZoomQuality() == config.QualityFullsize {
-		quality = config.QualityFullsize
-	}
-	resp, err := h.client.GetThumbnailWithKeyType(assetID, creds.key, creds.password, string(quality), creds.keyType)
+
+	resp, err := h.client.GetThumbnailWithKeyType(assetID, creds.key, creds.password, size, creds.keyType)
 	if err != nil {
 		h.logger.Error("failed to get single-share image", zap.Error(err))
 		http.Error(w, "Failed to get image", http.StatusInternalServerError)
@@ -144,10 +167,30 @@ func (h *ShareHandler) ServeSingleImage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	cacheControl := ""
-	if quality != config.QualityFullsize {
+	switch {
+	case isCover:
+		cacheControl = coverCacheControl(r, resp.StatusCode, h.config.Options)
+	case size != string(config.QualityFullsize):
 		cacheControl = thumbnailCacheControl(r, resp.StatusCode, h.config.Options)
 	}
 	h.proxyResponseWithCache(w, resp, cacheControl)
+}
+
+// coverCacheControl decides caching for /raw. It follows the thumbnail
+// policy (operator-configured public/private TTLs), but keeps the historical
+// /og-cover default for PASSWORD-LESS shares when no TTL is configured:
+// "public, max-age=3600", so unfurl services and CDNs may cache the cover.
+// Password-protected shares NEVER get that fallback — they stay on the
+// stricter thumbnail policy (private when ProtectedMediaCacheTTL is set,
+// otherwise the no-store default).
+func coverCacheControl(r *http.Request, statusCode int, opts config.OptionsConfig) string {
+	if cc := thumbnailCacheControl(r, statusCode, opts); cc != "" {
+		return cc
+	}
+	if statusCode == http.StatusOK && middleware.GetPassword(r.Context()) == "" {
+		return "public, max-age=3600"
+	}
+	return ""
 }
 
 // isAllowedThumbnailExt allows only the extensions Immich actually produces

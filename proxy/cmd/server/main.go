@@ -154,7 +154,6 @@ func main() {
 
 	// Health check
 	r.Get("/healthcheck", handlers.HealthCheck())
-	r.Get("/health", handlers.HealthCheck())
 
 	// Share routes - both /share/{key} and /s/{key} (slug) formats
 	shareRoutes := func(r chi.Router) {
@@ -175,11 +174,8 @@ func main() {
 			r.Group(func(r chi.Router) {
 				r.Use(generalLimiter.Limit)
 
-				// Shared link info
+				// Shared link info (includes full album details for ALBUM shares)
 				r.Get("/shared-links/me", shareHandler.GetSharedLink)
-
-				// Albums
-				r.Get("/albums/{albumID}", shareHandler.GetAlbum)
 
 				// Asset details (EXIF/filename) — fetched lazily by the viewer
 				// because Immich v3 album listings no longer include them
@@ -200,22 +196,20 @@ func main() {
 			r.With(passwordLimiter.Limit).Post("/shared-links/me/password", shareHandler.ValidatePassword)
 
 			// Thumbnails - NO rate limiting (needed for smooth scrolling)
-			r.Get("/assets/{assetID}/thumbnail", shareHandler.GetThumbnail)
-			// Extensioned variant (thumbnail.webp / thumbnail.jpg) so CDNs with
+			// Extensioned only (thumbnail.webp / thumbnail.jpg) so CDNs with
 			// extension-based cache eligibility (Cloudflare default) edge-cache
-			// thumbnails without a custom Cache Rule. Same handler behavior;
-			// the legacy extensionless route stays for old clients.
+			// thumbnails without a custom Cache Rule. The legacy extensionless
+			// form was removed: the pre-1.7 HTML that emitted it was served
+			// no-store, so no client can still hold those URLs.
 			r.Get("/assets/{assetID}/thumbnail.{ext}", shareHandler.GetThumbnailExt)
 		})
 
-		// OpenGraph cover image for link unfurling. Deliberately OUTSIDE the
-		// hotlink-protected /api group: the callers are unfurl bots (Slack,
-		// WhatsApp, …) that send no Sec-Fetch headers. It 404s for
-		// password-protected / invalid shares, so nothing leaks.
-		r.With(generalLimiter.Limit).Get("/og-cover", shareHandler.ServeOGImage)
-
-		// Raw bytes for an INDIVIDUAL image share. This remains permission-aware
-		// but is embeddable, unlike the API routes guarded by Sec-Fetch headers.
+		// Raw bytes for the share's single image (INDIVIDUAL shares) or its
+		// cover thumbnail (ALBUM shares, used as the OpenGraph unfurl image).
+		// Deliberately OUTSIDE the hotlink-protected /api group: consumers are
+		// <img> embeds and unfurl bots (Slack, WhatsApp, …) that send no
+		// Sec-Fetch headers. It stays permission-aware (password, expiry,
+		// membership), so nothing leaks from a bare URL.
 		r.With(generalLimiter.Limit).Get("/raw", shareHandler.ServeSingleImage)
 
 		// Serve the SPA shell for all other paths under the share. The shell is

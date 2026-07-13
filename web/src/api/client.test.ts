@@ -137,34 +137,6 @@ describe('ApiClient', () => {
     });
   });
 
-  describe('getAlbum', () => {
-    it('should fetch album successfully', async () => {
-      const mockAlbum = {
-        id: 'album-123',
-        albumName: 'Test Album',
-        assets: [
-          { id: 'asset-1', type: 'IMAGE' },
-          { id: 'asset-2', type: 'VIDEO' },
-        ],
-      };
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockAlbum,
-      });
-
-      const result = await api.getAlbum('album-123');
-
-      expect(result).toEqual(mockAlbum);
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/share/test-key/api/albums/album-123',
-        expect.objectContaining({
-          credentials: 'include',
-        })
-      );
-    });
-  });
-
   describe('URL generators', () => {
     beforeEach(() => {
       api.setShareKey('my-share-key');

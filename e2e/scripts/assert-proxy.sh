@@ -265,10 +265,11 @@ main() {
   jq -e '.showMetadata == false' /tmp/shared-link-metadata-off.json >/dev/null || die "metadata-off showMetadata flag mismatch"
   log "shared link defaults + overrides API OK"
 
+  # The /api/albums/{id} endpoint was removed (album data is embedded in
+  # shared-links/me). Pin the sunset: even the share's own album ID must 404.
   status="$(curl -sS -o /tmp/album-default.json -w '%{http_code}' "${BASE_URL}/share/${DEFAULT_SHARE_KEY}/api/albums/${DEFAULT_ALBUM_ID}")"
-  assert_status "200" "${status}" "default album endpoint"
-  jq -e --arg album_id "${DEFAULT_ALBUM_ID}" '.id == $album_id' /tmp/album-default.json >/dev/null || die "default album endpoint mismatch"
-  log "album endpoint OK"
+  assert_status "404" "${status}" "removed album endpoint"
+  log "album endpoint removal OK"
 
   local expected_default_download_status
   expected_default_download_status="$(expected_download_status_for_link "${default_allow_download}")"
@@ -298,7 +299,7 @@ main() {
   fi
 
   status="$(curl -sS -o /tmp/private-album.txt -w '%{http_code}' "${BASE_URL}/share/${DEFAULT_SHARE_KEY}/api/albums/${PRIVATE_ALBUM_ID}")"
-  assert_status "404" "${status}" "private album should not be reachable from public share"
+  assert_status "404" "${status}" "private album should not be reachable from public share (route removed)"
   log "private album isolation OK"
 
   status="$(curl -sS -o /tmp/not-found.txt -w '%{http_code}' "${BASE_URL}/share/invalidsharekey123/api/shared-links/me")"

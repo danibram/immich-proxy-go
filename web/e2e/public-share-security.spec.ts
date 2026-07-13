@@ -18,6 +18,8 @@ test.describe('Public Share Security', () => {
     const publicJson = await publicRes.json();
     expect(publicJson.type).toBe('ALBUM');
 
+    // The /api/albums/{id} endpoint was removed (album data is embedded in
+    // shared-links/me); a private album ID must keep returning 404.
     const privateRes = await page.request.get(`/share/${shareKey()}/api/albums/${privateAlbumId()}`);
     expect(privateRes.status()).toBe(404);
   });
@@ -30,7 +32,6 @@ test.describe('Public Share Security', () => {
     const endpoints = [
       `/api/assets/${foreign}`,
       `/api/assets/${foreign}/original`,
-      `/api/assets/${foreign}/thumbnail?size=thumbnail`,
       `/api/assets/${foreign}/thumbnail.webp?size=thumbnail`,
       `/api/assets/${foreign}/video/playback`,
     ];
@@ -41,5 +42,22 @@ test.describe('Public Share Security', () => {
       const body = await res.text();
       expect(body.toLowerCase(), `${ep} must not leak upstream internals`).not.toContain('asset.');
     }
+  });
+
+  // Sunset pin: the extensionless thumbnail route was removed (the pre-1.7
+  // HTML that emitted it was served no-store, so nothing can still hold those
+  // URLs). Even a REAL in-share asset must 404 on the extensionless form
+  // while the extensioned form keeps working.
+  test('extensionless thumbnail route is gone', async ({ page }) => {
+    const link = await page.request.get(`/share/${shareKey()}/api/shared-links/me`);
+    expect(link.status()).toBe(200);
+    const json = await link.json();
+    const assetId = json.album?.assets?.[0]?.id ?? json.assets?.[0]?.id;
+    expect(assetId, 'seeded share must expose at least one asset').toBeTruthy();
+
+    const legacy = await page.request.get(
+      `/share/${shareKey()}/api/assets/${assetId}/thumbnail?size=thumbnail`
+    );
+    expect(legacy.status()).toBe(404);
   });
 });

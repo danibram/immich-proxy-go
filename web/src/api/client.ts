@@ -1,4 +1,4 @@
-import type { Album, Asset, SharedLink } from './types';
+import type { Asset, SharedLink } from './types';
 
 // Upload robustness tuning. A stalled TCP connection (bad hotel wifi) never
 // fires load/error on its own, so the client needs two guards:
@@ -146,10 +146,6 @@ class ApiClient {
       body: JSON.stringify({ password }),
     });
     return response.valid;
-  }
-
-  async getAlbum(albumId: string): Promise<Album> {
-    return this.request<Album>(`/albums/${albumId}`);
   }
 
   // Full asset details (EXIF, original filename). Immich v3 album listings

@@ -16,7 +16,6 @@ vi.mock('~/api/client', async (importOriginal) => {
       // Default: nothing exists upstream — files proceed to upload.
       checkUploads: vi.fn(async () => []),
       getSharedLink: vi.fn(),
-      getAlbum: vi.fn(),
     },
   };
 });
