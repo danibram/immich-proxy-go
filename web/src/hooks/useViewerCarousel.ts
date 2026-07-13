@@ -49,6 +49,13 @@ export function useViewerCarousel(options: Options) {
   }
 
   function step(dir: -1 | 1, immediate = false) {
+    // A step requested while another is mid-animation must not overwrite the
+    // pending one (fast swipes would coalesce into a single image change and
+    // feel stuck). Commit the in-flight step first so both land.
+    if (pendingStep !== 0) {
+      clearTransitionFallback();
+      commitPendingStep();
+    }
     const w = stageWidth();
     if (dir > 0 && !hasNext()) return;
     if (dir < 0 && !hasPrev()) return;
@@ -113,6 +120,13 @@ export function useViewerCarousel(options: Options) {
     const target = e.target as HTMLElement;
     if (target.closest('button, a, .vid-bar, .vid-dock, [data-no-swipe]')) return;
 
+    // Starting a drag cancels the previous step's CSS transition, so its
+    // transitionend never fires; commit it now or that swipe gets swallowed
+    // (only the 360ms fallback would rescue it, racing this gesture).
+    if (pendingStep !== 0) {
+      clearTransitionFallback();
+      commitPendingStep();
+    }
     dragStartX = e.clientX;
     setAnim(false);
     options.onSwipeStart?.();

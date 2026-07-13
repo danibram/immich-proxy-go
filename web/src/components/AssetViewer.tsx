@@ -136,7 +136,10 @@ export default function AssetViewer() {
   // popstate-driven navigation must not push again, hence the suppress flag.
   let viewerDepth = 0;
   let lastHistoryId: string | null = null;
-  let suppressNextHistoryPush = false;
+  // Pushes are debounced: browsers rate-limit pushState (Safari throws past
+  // ~100 calls/30s) and rapid swipes shouldn't mint an entry per flicked-past
+  // image anyway — only the image the user settles on gets one.
+  let historyPushTimer: number | null = null;
 
   const index = () => selectedAssetIndex();
   const list = () => assets();
@@ -172,6 +175,9 @@ export default function AssetViewer() {
   }
 
   function requestClose() {
+    // A pending debounced push firing after the unwind would resurrect a
+    // hash entry on a closed viewer.
+    cancelPendingHistoryPush();
     if (viewerDepth > 0) {
       // One jump past all our image entries; the resulting popstate lands on
       // the hash-less gallery entry and closes the viewer.
@@ -195,6 +201,7 @@ export default function AssetViewer() {
   }
 
   function handlePointerDown(event: PointerEvent) {
+
     if (zoom.onPointerDown(event)) carousel.cancelGesture();
     else carousel.onPointerDown(event);
   }
@@ -254,18 +261,32 @@ export default function AssetViewer() {
     setShowInfo(false);
   });
 
+  function cancelPendingHistoryPush() {
+    if (historyPushTimer !== null) {
+      window.clearTimeout(historyPushTimer);
+      historyPushTimer = null;
+    }
+  }
+
   createEffect(() => {
     const id = current().id;
+    // popstate navigations pre-set lastHistoryId, so they dedupe here — the
+    // browser already sits on the right entry and pushing would truncate the
+    // forward stack.
     if (!historyReady() || id === lastHistoryId) return;
     lastHistoryId = id;
-    if (suppressNextHistoryPush) {
-      // This navigation came from popstate: the browser already moved to the
-      // right entry, pushing would truncate the forward stack.
-      suppressNextHistoryPush = false;
-      return;
-    }
-    viewerDepth += 1;
-    window.history.pushState({ ippViewer: true, ippDepth: viewerDepth }, '', `#${encodeURIComponent(id)}`);
+    cancelPendingHistoryPush();
+    historyPushTimer = window.setTimeout(() => {
+      historyPushTimer = null;
+      try {
+        viewerDepth += 1;
+        window.history.pushState({ ippViewer: true, ippDepth: viewerDepth }, '', `#${encodeURIComponent(id)}`);
+      } catch {
+        // Rate-limited by the browser: losing one history entry degrades
+        // gracefully (Back skips this image); keep depth consistent.
+        viewerDepth -= 1;
+      }
+    }, 400);
   });
 
   // Immich v3 album listings carry no EXIF or original filename; fetch the
@@ -291,14 +312,16 @@ export default function AssetViewer() {
         const assetIndex = assetList.findIndex((asset) => asset.id === id);
         if (assetIndex >= 0) {
           // Back/Forward landed on another image entry: navigate the viewer
-          // there and resync our depth from the entry's own state.
+          // there and resync our depth from the entry's own state. A pending
+          // debounced push belongs to an image the user flicked past — drop it.
+          cancelPendingHistoryPush();
           viewerDepth = (event.state as { ippDepth?: number } | null)?.ippDepth ?? 1;
-          suppressNextHistoryPush = true;
           lastHistoryId = id;
           selectAsset(assetList[assetIndex], assetIndex);
           return;
         }
       }
+      cancelPendingHistoryPush();
       viewerDepth = 0;
       closeViewer();
     };
@@ -317,6 +340,7 @@ export default function AssetViewer() {
     setHistoryReady(true);
 
     onCleanup(() => {
+      cancelPendingHistoryPush();
       window.removeEventListener('keydown', handleKeydown);
       window.removeEventListener('popstate', onPopState);
       document.removeEventListener('fullscreenchange', onFullscreenChange);

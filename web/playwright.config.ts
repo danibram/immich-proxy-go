@@ -28,9 +28,11 @@ export default defineConfig({
   webServer: externalBaseURL
     ? undefined
     : {
-        command: 'npm run preview -- --port 4173',
+        // Serve a FRESH build: a reused preview of a stale dist/ makes specs
+        // silently test old code (cost us a debugging session).
+        command: 'npm run build && npm run preview -- --port 4173',
         url: 'http://localhost:4173',
-        reuseExistingServer: !process.env.CI,
-        timeout: 30000,
+        reuseExistingServer: false,
+        timeout: 120000,
       },
 });

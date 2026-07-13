@@ -287,3 +287,65 @@ test('a failed tile retries once with a retry marker and then recovers', async (
   expect(thumbAttempts.some((search) => search.includes('retry=1'))).toBe(true);
   await expect(page.getByTestId('gallery-thumb-broken')).toHaveCount(0);
 });
+
+test('fast consecutive swipes each advance one image', async ({ page }) => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const assetThree = '33333333-3333-4333-8333-333333333333';
+
+  await page.route('**/share/demo/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/shared-links/me')) {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'share-id',
+          key: 'demo',
+          type: 'INDIVIDUAL',
+          allowDownload: true,
+          allowUpload: false,
+          showMetadata: false,
+          downloadQuality: 'original',
+          zoomQuality: 'preview',
+          assets: [assetOne, assetTwo, assetThree].map((id, i) => ({
+            id,
+            type: 'IMAGE',
+            originalFileName: `${i}.jpg`,
+            ratio: 1.5,
+            fileCreatedAt: `2026-07-1${3 - i}T10:00:00Z`,
+            localDateTime: `2026-07-1${3 - i}T10:00:00Z`,
+          })),
+        }),
+      });
+      return;
+    }
+    if (url.pathname.includes('/thumbnail.')) {
+      await route.fulfill({ contentType: 'image/png', body: png });
+      return;
+    }
+    await route.fulfill({ status: 404 });
+  });
+
+  await page.goto(`/share/demo#${assetOne}`);
+  await expect(page.getByTestId('asset-viewer')).toBeVisible();
+  await expect(page.getByTestId('viewer-count')).toHaveText('1 / 3');
+
+  // Two rapid drags with no pause for the 350ms slide animation between
+  // them: the second gesture starts while the first step is still animating.
+  const stage = page.locator('.vw-stage');
+  const box = (await stage.boundingBox())!;
+  const cy = box.y + box.height / 2;
+  for (let i = 0; i < 2; i++) {
+    await page.mouse.move(box.x + box.width * 0.6, cy);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.25, cy, { steps: 3 });
+    await page.mouse.up();
+    await page.waitForTimeout(50);
+  }
+
+  // Both swipes must land: previously the second overwrote the first's
+  // pending step and killed its fallback timer, advancing only one image.
+  await expect(page.getByTestId('viewer-count')).toHaveText('3 / 3');
+});
