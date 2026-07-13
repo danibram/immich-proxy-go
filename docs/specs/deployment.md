@@ -17,7 +17,7 @@ services:
     ports:
       - "3000:3000"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/healthcheck"]
       interval: 30s
       timeout: 3s
       retries: 3
@@ -114,7 +114,7 @@ server {
 ### Health Endpoint
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3000/healthcheck
 # {"status":"ok"}
 ```
 

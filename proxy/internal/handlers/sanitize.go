@@ -88,8 +88,3 @@ func sanitizeAsset(asset *immich.Asset, showMetadata bool) {
 		asset.ExifInfo.Longitude = 0
 	}
 }
-
-// sanitizeAlbumResponse is a convenience wrapper for the direct Album endpoint.
-func sanitizeAlbumResponse(album *immich.Album, showMetadata bool) {
-	sanitizeAlbum(album, showMetadata)
-}

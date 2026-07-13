@@ -291,12 +291,13 @@ func TestGetThumbnail_EnforcesPasswordWhenUpstreamDoesNot(t *testing.T) {
 	}
 }
 
-// TestGetThumbnailExt_MatchesLegacy pins the CDN-friendly extensioned route:
-// /thumbnail.webp and /thumbnail.jpg must be byte- and header-identical to the
-// legacy extensionless /thumbnail (the extension only exists so Cloudflare's
-// default extension-based cache list makes the URL edge-cacheable), and the
-// legacy route must keep working for old clients.
-func TestGetThumbnailExt_MatchesLegacy(t *testing.T) {
+// TestGetThumbnailExt_ExtensionIsAdvisory pins the CDN-friendly extensioned
+// route: /thumbnail.webp and /thumbnail.jpg must be byte- and header-identical
+// to the underlying GetThumbnail handler (the extension only exists so
+// Cloudflare's default extension-based cache list makes the URL
+// edge-cacheable). The extensionless ROUTE was removed from the router in
+// this version — the test router keeps a direct handler seam as the baseline.
+func TestGetThumbnailExt_ExtensionIsAdvisory(t *testing.T) {
 	mockServer := MockImmichServer(t)
 	defer mockServer.Close()
 
@@ -314,9 +315,9 @@ func TestGetThumbnailExt_MatchesLegacy(t *testing.T) {
 		return rec
 	}
 
-	legacy := get(t, "/api/share/valid-key/asset/"+testAssetID1+"/thumbnail?size=thumbnail")
-	if legacy.Code != http.StatusOK {
-		t.Fatalf("legacy route: expected 200, got %d", legacy.Code)
+	baseline := get(t, "/api/share/valid-key/asset/"+testAssetID1+"/thumbnail?size=thumbnail")
+	if baseline.Code != http.StatusOK {
+		t.Fatalf("baseline handler: expected 200, got %d", baseline.Code)
 	}
 
 	for _, ext := range []string{"webp", "jpg"} {
@@ -325,16 +326,16 @@ func TestGetThumbnailExt_MatchesLegacy(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Fatalf("expected 200, got %d", rec.Code)
 			}
-			if got, want := rec.Body.String(), legacy.Body.String(); got != want {
-				t.Errorf("body differs from legacy route: got %q, want %q", got, want)
+			if got, want := rec.Body.String(), baseline.Body.String(); got != want {
+				t.Errorf("body differs from baseline handler: got %q, want %q", got, want)
 			}
 			// Content-Type comes from Immich's response, never from the
 			// extension: the extension is advisory for CDNs, the header wins.
-			if got, want := rec.Header().Get("Content-Type"), legacy.Header().Get("Content-Type"); got != want {
-				t.Errorf("Content-Type differs from legacy route: got %q, want %q", got, want)
+			if got, want := rec.Header().Get("Content-Type"), baseline.Header().Get("Content-Type"); got != want {
+				t.Errorf("Content-Type differs from baseline handler: got %q, want %q", got, want)
 			}
-			if got, want := rec.Header().Get("Cache-Control"), legacy.Header().Get("Cache-Control"); got != want {
-				t.Errorf("Cache-Control differs from legacy route: got %q, want %q", got, want)
+			if got, want := rec.Header().Get("Cache-Control"), baseline.Header().Get("Cache-Control"); got != want {
+				t.Errorf("Cache-Control differs from baseline handler: got %q, want %q", got, want)
 			}
 		})
 	}

@@ -25,13 +25,11 @@ Password-protected shares require authentication via:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/shared-links/me` | Get share info and assets |
+| GET | `/healthcheck` | Health check |
+| GET | `/shared-links/me` | Get share info and assets (includes album details) |
 | POST | `/shared-links/me/password` | Validate password |
-| GET | `/albums/{albumId}` | Get album details |
 | GET | `/assets/{assetId}` | Get asset details (EXIF, filename) |
-| GET | `/assets/{assetId}/thumbnail` | Get thumbnail image |
-| GET | `/assets/{assetId}/thumbnail.{ext}` | Thumbnail with extension (CDN-cacheable form) |
+| GET | `/assets/{assetId}/thumbnail.{ext}` | Get thumbnail image (extensioned, CDN-cacheable) |
 | GET | `/assets/{assetId}/original` | Download original file |
 | GET | `/assets/{assetId}/video/playback` | Stream video |
 | POST | `/assets/download` | Start bulk download job |
@@ -39,15 +37,22 @@ Password-protected shares require authentication via:
 | GET | `/download/jobs/{jobId}/file` | Download completed ZIP |
 | POST | `/assets` | Upload file |
 | POST | `/upload-check` | Pre-upload checksum dedupe check |
-| GET | `{share}/raw` | Raw bytes of an INDIVIDUAL image share (embeddable) |
-| GET | `{share}/og-cover` | Album cover for link unfurls (no Sec-Fetch guard) |
+| GET | `{share}/raw` | Single image / album cover as raw bytes (embeddable, used as OG unfurl image) |
+
+Removed in this version:
+
+- `GET /health` — alias of `/healthcheck`; use `/healthcheck`.
+- `GET /albums/{albumId}` — dead endpoint; album details are embedded in
+  `/shared-links/me`.
+- `GET /assets/{assetId}/thumbnail` (extensionless) — sunset; only the
+  extensioned form remains.
+- `GET {share}/og-cover` — merged into `{share}/raw`.
 
 ## Endpoints
 
 ### Health Check
 
 ```
-GET /health
 GET /healthcheck
 ```
 
@@ -115,29 +120,7 @@ Sets `immich-share-password` cookie on success.
 
 ---
 
-### Get Album
-
-```
-GET /share/{key}/api/albums/{albumId}
-```
-
-**Response**: `200 OK`
-```json
-{
-  "id": "uuid",
-  "albumName": "My Album",
-  "assets": [...],
-  "assetCount": 42
-}
-```
-
----
-
 ### Get Thumbnail
-
-```
-GET /share/{key}/api/assets/{assetId}/thumbnail?size=thumbnail|preview|fullsize
-```
 
 ```
 GET /share/{key}/api/assets/{assetId}/thumbnail.webp?size=thumbnail
@@ -146,22 +129,41 @@ GET /share/{key}/api/assets/{assetId}/thumbnail.jpg?size=preview
 
 **Response**: Image binary with appropriate `Content-Type`
 
-The extensioned form is what the web client uses: the extension makes the URL
-eligible for CDN default caching (Cloudflare caches by extension). Only `webp`
-and `jpg` are accepted; the extension is advisory — `Content-Type` wins.
+The extension makes the URL eligible for CDN default caching (Cloudflare
+caches by extension). Only `webp` and `jpg` are accepted; the extension is
+advisory — `Content-Type` wins.
+
+The legacy extensionless form (`/assets/{assetId}/thumbnail`) was removed in
+this version: the pre-1.7 HTML that emitted those URLs was served no-store,
+so no client can still hold them. It now returns `404`.
 
 `fullsize` is available only when `options.max_zoom_quality: fullsize` and the
 Immich shared link allows downloads. It is never publicly cached.
 
-### Raw Individual Image
+### Raw Share Image
 
 ```
 GET /share/{key}/raw
 GET /s/{slug}/raw
 ```
 
-Returns image bytes only for a single-image `INDIVIDUAL` share. Password and
-expiry rules still apply. This URL can be embedded directly in an `<img>`.
+Returns one permission-aware image for the share as raw bytes (embeddable in
+an `<img>`, and usable by unfurl bots — the route has no Sec-Fetch hotlink
+guard). Password and expiry rules still apply.
+
+- **INDIVIDUAL share with a single image**: that image at preview quality
+  (fullsize when downloads are allowed and `options.max_zoom_quality:
+  fullsize`).
+- **Anything else (e.g. ALBUM shares)**: the share's cover thumbnail — the
+  album's thumbnail asset, falling back to the first asset. This absorbed the
+  former `{share}/og-cover` endpoint; the OpenGraph `og:image` meta points
+  here.
+
+**Caching**: follows the thumbnail cache policy (`share_media_cache_ttl` /
+`protected_media_cache_ttl`). For the cover resolution of a PASSWORD-LESS
+share with no TTL configured, the historical og-cover default of
+`public, max-age=3600` applies so unfurl services and CDNs can cache it.
+Password-protected shares are never publicly cacheable.
 
 ---
 

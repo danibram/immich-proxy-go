@@ -59,26 +59,36 @@ export async function fetchSharedAlbumContext(
   request: APIRequestContext,
   route: ShareRoute
 ): Promise<SharedAlbumContext> {
-  const sharedLink = await request.get(shareApiPath(route, '/shared-links/me'));
-  expect(sharedLink.status()).toBe(200);
-  const sharedLinkBody = requireRecord(await sharedLink.json(), 'shared link response');
-  const album = requireRecord(sharedLinkBody.album, 'shared link album');
-  const albumId = requireString(album.id, 'shared link album id');
-
+  const album = await fetchSharedAlbum(request, route);
   return {
-    albumId,
-    assetCount: await fetchSharedAlbumAssetCount(request, route, albumId),
+    albumId: requireString(album.id, 'shared link album id'),
+    assetCount: albumAssetCount(album),
   };
 }
 
+// Album details are embedded in /shared-links/me (the dedicated
+// /albums/{id} endpoint was removed), so asset counts are read from there.
 export async function fetchSharedAlbumAssetCount(
   request: APIRequestContext,
   route: ShareRoute,
   albumId: string
 ): Promise<number> {
-  const response = await request.get(shareApiPath(route, `/albums/${albumId}`));
-  expect(response.status()).toBe(200);
-  const album = requireRecord(await response.json(), 'album response');
+  const album = await fetchSharedAlbum(request, route);
+  expect(album.id, 'shared link album id should be stable').toBe(albumId);
+  return albumAssetCount(album);
+}
+
+async function fetchSharedAlbum(
+  request: APIRequestContext,
+  route: ShareRoute
+): Promise<Record<string, unknown>> {
+  const sharedLink = await request.get(shareApiPath(route, '/shared-links/me'));
+  expect(sharedLink.status()).toBe(200);
+  const sharedLinkBody = requireRecord(await sharedLink.json(), 'shared link response');
+  return requireRecord(sharedLinkBody.album, 'shared link album');
+}
+
+function albumAssetCount(album: Record<string, unknown>): number {
   if (typeof album.assetCount !== 'number') {
     throw new Error('album assetCount must be a number');
   }

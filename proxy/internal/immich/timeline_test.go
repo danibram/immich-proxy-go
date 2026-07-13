@@ -51,9 +51,9 @@ func TestGetAlbum_TimelineFallbackForImmichV3(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	album, err := NewClient(srv.URL).GetAlbum(albumID, "sharekey", "")
+	album, err := NewClient(srv.URL).GetAlbumWithKeyType(albumID, "sharekey", "", KeyTypeKey)
 	if err != nil {
-		t.Fatalf("GetAlbum failed: %v", err)
+		t.Fatalf("GetAlbumWithKeyType failed: %v", err)
 	}
 
 	if len(album.Assets) != 2 {
@@ -98,9 +98,9 @@ func TestGetAlbum_NoTimelineFallbackWhenAssetsInline(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	album, err := NewClient(srv.URL).GetAlbum("album-1", "sharekey", "")
+	album, err := NewClient(srv.URL).GetAlbumWithKeyType("album-1", "sharekey", "", KeyTypeKey)
 	if err != nil {
-		t.Fatalf("GetAlbum failed: %v", err)
+		t.Fatalf("GetAlbumWithKeyType failed: %v", err)
 	}
 	if len(album.Assets) != 1 || album.Assets[0].ID != "a1" {
 		t.Errorf("inline assets should pass through unchanged: %+v", album.Assets)

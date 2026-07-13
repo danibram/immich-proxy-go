@@ -163,11 +163,6 @@ func (c *Client) getSharedLinkWithKeyType(key string, password string, keyType K
 	return &link, nil
 }
 
-// GetAlbum retrieves album information
-func (c *Client) GetAlbum(albumID string, key string, password string) (*Album, error) {
-	return c.GetAlbumWithKeyType(albumID, key, password, KeyTypeKey)
-}
-
 // GetAlbumWithKeyType retrieves album information with specified key type
 func (c *Client) GetAlbumWithKeyType(albumID string, key string, password string, keyType KeyType) (*Album, error) {
 	album, err := c.getAlbumWithKeyType(albumID, key, password, keyType)

@@ -3,11 +3,8 @@ package handlers
 import (
 	"fmt"
 	"html"
-	"io"
 	"net/http"
 	"strings"
-
-	"github.com/danibram/immich-proxy-go/internal/middleware"
 )
 
 // ShareIndexHead builds the per-share <head> content (OpenGraph / Twitter card
@@ -62,7 +59,7 @@ func (h *ShareHandler) ShareIndexHead(r *http.Request) string {
 	named("twitter:description", description)
 
 	if hasCover {
-		coverURL := base + shareBasePath(r) + "/og-cover"
+		coverURL := base + shareBasePath(r) + "/raw"
 		meta("og:image", coverURL)
 		named("twitter:card", "summary_large_image")
 		named("twitter:image", coverURL)
@@ -71,56 +68,6 @@ func (h *ShareHandler) ShareIndexHead(r *http.Request) string {
 	}
 
 	return b.String()
-}
-
-// ServeOGImage streams the album cover thumbnail for a shared link. It lives
-// outside the hotlink-protected /api group because the clients here are unfurl
-// bots (Slack, WhatsApp, …) that send no Sec-Fetch headers. It 404s for
-// password-protected or invalid shares, so nothing leaks from a bare URL.
-func (h *ShareHandler) ServeOGImage(w http.ResponseWriter, r *http.Request) {
-	link, creds, _, err := h.loadShareLinkFromRequest(r)
-	if err != nil || link == nil {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
-	if _, statusCode := h.validateSharedLink(link); statusCode != 0 {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
-
-	assetID := ""
-	if link.Album != nil {
-		assetID = link.Album.AlbumThumbnailAssetID
-		if assetID == "" && len(link.Album.Assets) > 0 {
-			assetID = link.Album.Assets[0].ID
-		}
-	}
-	if assetID == "" && len(link.Assets) > 0 {
-		assetID = link.Assets[0].ID
-	}
-	if !middleware.IsValidUUID(assetID) {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
-
-	resp, err := h.client.GetThumbnailWithKeyType(assetID, creds.key, creds.password, "thumbnail", creds.keyType)
-	if err != nil {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		http.Error(w, "Not found", http.StatusNotFound)
-		return
-	}
-
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
-	// A public share's cover may be cached by unfurl services / CDNs.
-	w.Header().Set("Cache-Control", "public, max-age=3600")
-	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, resp.Body)
 }
 
 // shareBasePath returns the "/share/{key}" or "/s/{key}" prefix of the request

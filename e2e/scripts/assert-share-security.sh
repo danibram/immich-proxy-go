@@ -106,20 +106,20 @@ assert_share_security_matrix() {
   assert_protected_share_blocked "${protected_a_slug}" "protected album A"
   assert_protected_share_blocked "${protected_b_slug}" "protected album B"
 
-  log "security: protected A thumbnail blocked without auth"
+  # The legacy extensionless thumbnail route was removed (sunset): it must
+  # 404 for everyone, authenticated or not.
+  log "security: extensionless thumbnail route is gone (protected A)"
   status="$(curl -sS \
     "${thumb_headers[@]}" \
     -H "Referer: ${BASE_URL}/s/${protected_a_slug}" \
     -o /tmp/sec-protected-a-thumb-unauth.bin \
     -w '%{http_code}' \
     "${BASE_URL}/s/${protected_a_slug}/api/assets/${protected_asset_id}/thumbnail?size=preview")"
-  assert_not_server_error "${status}" "protected A thumbnail without auth"
-  if [[ "${status}" == "200" ]]; then
-    die "protected A thumbnail without auth must not return 200"
-  fi
+  assert_not_server_error "${status}" "extensionless thumbnail (removed route)"
+  assert_status "404" "${status}" "extensionless thumbnail (removed route)"
 
-  # The CDN-friendly extensioned route must enforce the same auth as the
-  # legacy extensionless one (the extension changes cache eligibility only).
+  # The CDN-friendly extensioned route (the only thumbnail route now) must
+  # enforce auth.
   log "security: protected A extensioned thumbnail blocked without auth"
   status="$(curl -sS \
     "${thumb_headers[@]}" \
@@ -220,7 +220,7 @@ assert_share_security_matrix() {
   extract_public_asset_id /tmp/sec-public-asset-source.json
   public_asset_id="${PUBLIC_ASSET_ID}"
 
-  log "security: public extensioned thumbnail serves same bytes as legacy route"
+  log "security: public extensioned thumbnail is served (only thumbnail route)"
   # The newest album asset may have been uploaded seconds ago (by the upload
   # assertions above) and Immich generates previews asynchronously — poll
   # instead of asserting on the first response.
@@ -229,9 +229,9 @@ assert_share_security_matrix() {
     status="$(curl -sS \
       "${thumb_headers[@]}" \
       -H "Referer: ${BASE_URL}/s/${public_slug}" \
-      -o /tmp/sec-public-thumb-legacy.bin \
+      -o /tmp/sec-public-thumb-ext.bin \
       -w '%{http_code}' \
-      "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail?size=preview")"
+      "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail.jpg?size=preview")"
     if [[ "${status}" == "200" ]]; then
       break
     fi
@@ -241,18 +241,32 @@ assert_share_security_matrix() {
     fi
     sleep 2
   done
-  assert_not_server_error "${status}" "public legacy thumbnail"
-  assert_status "200" "${status}" "public legacy thumbnail"
+  assert_not_server_error "${status}" "public extensioned thumbnail"
+  assert_status "200" "${status}" "public extensioned thumbnail"
+
+  # The extension is advisory only — .webp and .jpg with the same query must
+  # serve the same upstream bytes.
+  log "security: thumbnail extension is advisory (.jpg == .webp bytes)"
   status="$(curl -sS \
     "${thumb_headers[@]}" \
     -H "Referer: ${BASE_URL}/s/${public_slug}" \
-    -o /tmp/sec-public-thumb-ext.bin \
+    -o /tmp/sec-public-thumb-ext-webp.bin \
     -w '%{http_code}' \
-    "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail.jpg?size=preview")"
-  assert_not_server_error "${status}" "public extensioned thumbnail"
-  assert_status "200" "${status}" "public extensioned thumbnail"
-  cmp -s /tmp/sec-public-thumb-legacy.bin /tmp/sec-public-thumb-ext.bin \
-    || die "public extensioned thumbnail bytes differ from legacy route"
+    "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail.webp?size=preview")"
+  assert_not_server_error "${status}" "public extensioned thumbnail (.webp form)"
+  assert_status "200" "${status}" "public extensioned thumbnail (.webp form)"
+  cmp -s /tmp/sec-public-thumb-ext.bin /tmp/sec-public-thumb-ext-webp.bin \
+    || die "thumbnail bytes differ between .jpg and .webp forms"
+
+  log "security: extensionless thumbnail route is gone (public share)"
+  status="$(curl -sS \
+    "${thumb_headers[@]}" \
+    -H "Referer: ${BASE_URL}/s/${public_slug}" \
+    -o /tmp/sec-public-thumb-legacy.bin \
+    -w '%{http_code}' \
+    "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail?size=preview")"
+  assert_not_server_error "${status}" "public extensionless thumbnail (removed route)"
+  assert_status "404" "${status}" "public extensionless thumbnail (removed route)"
 
   log "security: stale cookie on public slug thumbnail is handled safely (no server error)"
   status="$(curl -sS \
@@ -261,7 +275,7 @@ assert_share_security_matrix() {
     -b "immich-share-password=${signed_stale}" \
     -o /tmp/sec-public-stale-thumb.bin \
     -w '%{http_code}' \
-    "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail?size=preview")"
+    "${BASE_URL}/s/${public_slug}/api/assets/${public_asset_id}/thumbnail.jpg?size=preview")"
   assert_not_server_error "${status}" "public stale cookie thumbnail direct"
   # The proxy forwards the stale password untouched (it must never retry
   # without it — that was the "media retry" regression). What comes back is
@@ -312,7 +326,7 @@ assert_share_security_matrix() {
       -b /tmp/sec-protected-a.cookies \
       -o /tmp/sec-protected-a-thumb.bin \
       -w '%{http_code}' \
-      "${BASE_URL}/s/${protected_a_slug}/api/assets/${unlocked_asset_id}/thumbnail?size=preview")"
+      "${BASE_URL}/s/${protected_a_slug}/api/assets/${unlocked_asset_id}/thumbnail.jpg?size=preview")"
     assert_not_server_error "${status}" "protected A thumbnail after unlock (attempt ${attempt})"
     if [[ "${status}" == "200" ]]; then
       break
@@ -324,18 +338,16 @@ assert_share_security_matrix() {
     sleep 2
   done
 
-  log "security: protected A extensioned thumbnail after unlock matches legacy"
+  log "security: extensionless thumbnail route stays gone even when unlocked"
   status="$(curl -sS \
     "${thumb_headers[@]}" \
     -H "Referer: ${BASE_URL}/s/${protected_a_slug}" \
     -b /tmp/sec-protected-a.cookies \
     -o /tmp/sec-protected-a-thumb-ext.bin \
     -w '%{http_code}' \
-    "${BASE_URL}/s/${protected_a_slug}/api/assets/${unlocked_asset_id}/thumbnail.jpg?size=preview")"
-  assert_not_server_error "${status}" "protected A extensioned thumbnail after unlock"
-  assert_status "200" "${status}" "protected A extensioned thumbnail after unlock"
-  cmp -s /tmp/sec-protected-a-thumb.bin /tmp/sec-protected-a-thumb-ext.bin \
-    || die "extensioned thumbnail bytes differ from legacy route"
+    "${BASE_URL}/s/${protected_a_slug}/api/assets/${unlocked_asset_id}/thumbnail?size=preview")"
+  assert_not_server_error "${status}" "protected A extensionless thumbnail (removed route)"
+  assert_status "404" "${status}" "protected A extensionless thumbnail (removed route)"
 
   log "security: unsupported thumbnail extension is rejected"
   status="$(curl -sS \
