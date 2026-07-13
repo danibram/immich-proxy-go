@@ -165,8 +165,8 @@ class ApiClient {
   // response Content-Type wins. Never derive it from the asset's original
   // filename: iPhone HEIC originals would yield .heic URLs, which Cloudflare's
   // default cacheable-extension list excludes.
-  getThumbnailUrl(assetId: string, size: 'preview' | 'thumbnail' = 'thumbnail'): string {
-    const ext = size === 'preview' ? 'jpg' : 'webp';
+  getThumbnailUrl(assetId: string, size: 'preview' | 'thumbnail' | 'fullsize' = 'thumbnail'): string {
+    const ext = size === 'thumbnail' ? 'webp' : 'jpg';
     return `${this.baseUrl}/assets/${assetId}/thumbnail.${ext}?size=${size}`;
   }
 

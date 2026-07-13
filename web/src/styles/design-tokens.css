@@ -39,3 +39,26 @@
   --chip-bg: rgba(0, 0, 0, 0.05);
   --overlay-chrome: rgba(20, 18, 17, 0.55);
 }
+
+.album[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: oklch(15% 0.012 145);
+  --bg-2: oklch(18% 0.018 145);
+  --surface: oklch(20% 0.012 145);
+  --surface-2: oklch(23% 0.018 145);
+  --sheet: oklch(19% 0.012 145);
+  --fg-1: oklch(96% 0.006 145);
+  --fg-2: oklch(76% 0.012 145);
+  --fg-3: oklch(62% 0.012 145);
+  --border: oklch(34% 0.012 145);
+  --border-faint: oklch(100% 0 0 / 0.08);
+  --thumb-bg: oklch(24% 0.035 145);
+  --bar-bg: oklch(17% 0.012 145 / 0.86);
+  --bar-border: oklch(100% 0 0 / 0.1);
+  --scrub-track: oklch(100% 0 0 / 0.15);
+  --scrub-thumb: var(--fg-1);
+  --chip-bg: oklch(100% 0 0 / 0.08);
+  --overlay-chrome: oklch(10% 0.008 145 / 0.62);
+  --shadow-md: 0 4px 14px oklch(5% 0.01 145 / 0.28);
+  --shadow-lg: 0 28px 60px -26px oklch(5% 0.01 145 / 0.72);
+}

@@ -60,6 +60,10 @@ export const showMetadata = createMemo(() => {
   return sharedLink()?.showMetadata ?? false;
 });
 
+export const zoomQuality = createMemo<'preview' | 'fullsize'>(() => {
+  return sharedLink()?.zoomQuality === 'fullsize' ? 'fullsize' : 'preview';
+});
+
 export const shareCapabilities = createMemo(() => {
   const count = assets().length;
   return {

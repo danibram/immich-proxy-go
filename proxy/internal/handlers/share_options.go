@@ -11,8 +11,14 @@ func applyEffectiveShareOptions(link *immich.SharedLink, opts config.OptionsConf
 	if link == nil {
 		return false
 	}
+	shareAllowsFullsize := link.AllowDownload
 	effectiveShowMetadata := opts.ShowMetadata && link.ShowMetadata
 	link.AllowDownload = opts.AllowDownload && link.AllowDownload
 	link.ShowMetadata = effectiveShowMetadata
+	link.DownloadQuality = string(opts.DownloadQuality())
+	link.ZoomQuality = string(config.QualityPreview)
+	if shareAllowsFullsize && opts.ZoomQuality() == config.QualityFullsize {
+		link.ZoomQuality = string(config.QualityFullsize)
+	}
 	return effectiveShowMetadata
 }

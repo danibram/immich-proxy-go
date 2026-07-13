@@ -43,6 +43,7 @@ func setupTestHandlerWithOptions(t *testing.T, mockServer *httptest.Server, opti
 		r.Get("/asset/{assetID}/thumbnail.{ext}", handler.GetThumbnailExt)
 		r.Get("/asset/{assetID}/original", handler.GetOriginal)
 		r.Get("/og-cover", handler.ServeOGImage)
+		r.Get("/raw", handler.ServeSingleImage)
 		r.Get("/og-head", func(w http.ResponseWriter, req *http.Request) {
 			_, _ = w.Write([]byte(handler.ShareIndexHead(req)))
 		})

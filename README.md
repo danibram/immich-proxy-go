@@ -41,9 +41,12 @@ Custom slugs are configured in Immich when creating a shared link. They provide 
 
 ### Asset Viewer
 
-- **Full-screen viewer** - View photos and videos in full resolution
+- **Fullscreen viewer** - Native fullscreen mode for photos and videos
+- **Real zoom** - Wheel, double-click, pinch and pan with a configurable quality cap
 - **Swipe navigation** - Navigate between photos on mobile
-- **Keyboard shortcuts** - Arrow keys and Escape on desktop
+- **Deep links & browser Back** - Link directly to a photo and return naturally to the gallery
+- **Keyboard shortcuts** - Arrow keys, zoom, fullscreen and Escape on desktop
+- **Automatic dark mode** - Follows the device color scheme
 - **EXIF metadata** - Camera info, location, and file details
 - **Info panel** - Slide-out panel on desktop, bottom sheet on mobile
 
@@ -108,6 +111,8 @@ proxy:
 
 options:
   allow_download: true
+  max_download_quality: original # preview, fullsize, original
+  max_zoom_quality: preview      # preview, fullsize
   show_metadata: true
 
 security:

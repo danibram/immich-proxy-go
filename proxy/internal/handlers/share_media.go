@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"path/filepath"
+	"strings"
 
 	"github.com/danibram/immich-proxy-go/internal/config"
 	"github.com/danibram/immich-proxy-go/internal/immich"
@@ -35,7 +37,33 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 	// Immich v3 does not enforce shared-link passwords on media endpoints,
 	// so the proxy authorizes here. The verdict is cached per share (see
 	// share_authz_cache.go), keeping scroll performance intact.
-	if err := h.authorizeShareRequest(r); err != nil {
+	if size == string(config.QualityFullsize) {
+		if h.config.Options.ZoomQuality() != config.QualityFullsize {
+			http.Error(w, "Full-size viewing is disabled", http.StatusForbidden)
+			return
+		}
+		link, creds, droppedStalePassword, err := h.loadShareLinkFromRequest(r)
+		if err != nil {
+			h.handleError(w, err)
+			return
+		}
+		if h.rejectIfExpired(w, link) {
+			return
+		}
+		if droppedStalePassword {
+			clearSharePasswordCookie(w, r)
+		}
+		// Immich's allowDownload flag is also its full-resolution disclosure
+		// gate. The proxy's download UI switch is deliberately irrelevant to
+		// zoom: operators may hide downloads while still allowing full-size view.
+		if !link.AllowDownload {
+			http.Error(w, "Full-size viewing is disabled for this share", http.StatusForbidden)
+			return
+		}
+		// A stale password cookie on a now-public share may have been dropped
+		// while loading the link; use the normalized credentials for the image.
+		key, password, keyType = creds.key, creds.password, creds.keyType
+	} else if err := h.authorizeShareRequest(r); err != nil {
 		h.handleError(w, err)
 		return
 	}
@@ -52,7 +80,11 @@ func (h *ShareHandler) GetThumbnail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.proxyResponseWithCache(w, resp, thumbnailCacheControl(r, resp.StatusCode, h.config.Options))
+	cacheControl := ""
+	if size != string(config.QualityFullsize) {
+		cacheControl = thumbnailCacheControl(r, resp.StatusCode, h.config.Options)
+	}
+	h.proxyResponseWithCache(w, resp, cacheControl)
 }
 
 // GetThumbnailExt serves /thumbnail.{ext} — the same passthrough as
@@ -68,6 +100,54 @@ func (h *ShareHandler) GetThumbnailExt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.GetThumbnail(w, r)
+}
+
+// ServeSingleImage exposes the sole image in an INDIVIDUAL share as raw image
+// bytes at /share/{key}/raw (and /s/{slug}/raw). It is intentionally outside
+// the SPA/API hotlink guard so the URL can be used in an <img>, while still
+// enforcing the share password, expiry, membership, and Immich permissions.
+func (h *ShareHandler) ServeSingleImage(w http.ResponseWriter, r *http.Request) {
+	link, creds, droppedStalePassword, err := h.loadShareLinkFromRequest(r)
+	if err != nil {
+		h.handleError(w, err)
+		return
+	}
+	if h.rejectIfExpired(w, link) {
+		return
+	}
+	if droppedStalePassword {
+		clearSharePasswordCookie(w, r)
+	}
+	if link.Type != "INDIVIDUAL" || len(link.Assets) != 1 || link.Assets[0].Type != "IMAGE" {
+		http.NotFound(w, r)
+		return
+	}
+
+	assetID := link.Assets[0].ID
+	if !middleware.IsValidUUID(assetID) {
+		http.NotFound(w, r)
+		return
+	}
+	quality := config.QualityPreview
+	if link.AllowDownload && h.config.Options.ZoomQuality() == config.QualityFullsize {
+		quality = config.QualityFullsize
+	}
+	resp, err := h.client.GetThumbnailWithKeyType(assetID, creds.key, creds.password, string(quality), creds.keyType)
+	if err != nil {
+		h.logger.Error("failed to get single-share image", zap.Error(err))
+		http.Error(w, "Failed to get image", http.StatusInternalServerError)
+		return
+	}
+	defer resp.Body.Close()
+	if h.handledUpstreamMediaError(w, resp) {
+		return
+	}
+
+	cacheControl := ""
+	if quality != config.QualityFullsize {
+		cacheControl = thumbnailCacheControl(r, resp.StatusCode, h.config.Options)
+	}
+	h.proxyResponseWithCache(w, resp, cacheControl)
 }
 
 // isAllowedThumbnailExt allows only the extensions Immich actually produces
@@ -147,7 +227,27 @@ func (h *ShareHandler) GetOriginal(w http.ResponseWriter, r *http.Request) {
 	// Note: We trust Immich to validate that this asset belongs to the shared link
 	// The share key query param ensures Immich only returns assets from the share
 
-	resp, err := h.client.GetOriginalWithKeyType(assetID, creds.key, creds.password, creds.keyType)
+	quality := h.config.Options.DownloadQuality()
+	var resp *http.Response
+	if quality == config.QualityOriginal {
+		resp, err = h.client.GetOriginalWithKeyType(assetID, creds.key, creds.password, creds.keyType)
+	} else {
+		asset, assetErr := h.client.GetAssetWithKeyType(assetID, creds.key, creds.password, creds.keyType)
+		if assetErr != nil {
+			h.handleError(w, assetErr)
+			return
+		}
+		// Video has no meaningful preview/fullsize download tier; preserve the
+		// original playable bytes while image downloads obey the configured cap.
+		if asset.Type == "IMAGE" {
+			resp, err = h.client.GetThumbnailWithKeyType(assetID, creds.key, creds.password, string(quality), creds.keyType)
+			if err == nil {
+				forceQualityAttachmentDisposition(resp, asset.OriginalFileName)
+			}
+		} else {
+			resp, err = h.client.GetOriginalWithKeyType(assetID, creds.key, creds.password, creds.keyType)
+		}
+	}
 	if err != nil {
 		h.logger.Error("failed to get original", zap.Error(err))
 		http.Error(w, "Failed to get original file", http.StatusInternalServerError)
@@ -164,9 +264,32 @@ func (h *ShareHandler) GetOriginal(w http.ResponseWriter, r *http.Request) {
 	// it. Nothing displays /original inline (the viewer uses thumbnails and
 	// video has its own playback route), so force a real download while
 	// preserving the upstream filename.
-	forceAttachmentDisposition(resp)
+	if quality == config.QualityOriginal {
+		forceAttachmentDisposition(resp)
+	}
 
 	h.proxyResponse(w, resp)
+}
+
+// forceQualityAttachmentDisposition gives a converted preview/fullsize image
+// a filename whose extension matches the bytes returned by Immich.
+func forceQualityAttachmentDisposition(resp *http.Response, originalName string) {
+	if resp == nil {
+		return
+	}
+	contentType := strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0])
+	ext := getExtensionForMimeType(contentType)
+	if ext == "" {
+		ext = ".jpg"
+	}
+	base := strings.TrimSuffix(filepath.Base(originalName), filepath.Ext(originalName))
+	base = sanitizeFilename(base)
+	if base == "" {
+		base = "photo"
+	}
+	resp.Header.Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{
+		"filename": base + ext,
+	}))
 }
 
 // forceAttachmentDisposition rewrites an upstream Content-Disposition header

@@ -150,6 +150,7 @@ run_scenario() {
       elif [[ "${run_playwright}" == "true" ]]; then
         playwright_specs=(
           e2e/share-gallery.spec.ts
+          e2e/share-viewer-experience.spec.ts
           e2e/share-proxy-options.spec.ts
           e2e/share-upload.spec.ts
           e2e/share-upload-pipeline.spec.ts

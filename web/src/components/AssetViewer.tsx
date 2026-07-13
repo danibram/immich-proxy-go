@@ -1,10 +1,11 @@
-import { ChevronLeft, ChevronRight, Download, Info, X } from 'lucide-solid';
+import { ChevronLeft, ChevronRight, Download, Info, Maximize2, Minimize2, X, ZoomIn, ZoomOut } from 'lucide-solid';
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
 import type { Asset } from '~/api/types';
 import { t } from '~/i18n';
 import { useViewerCarousel } from '~/hooks/useViewerCarousel';
+import { useViewerZoom } from '~/hooks/useViewerZoom';
 import { saveUrl } from '~/utils/bulkDownload';
 import {
   allowDownload,
@@ -15,6 +16,7 @@ import {
   selectedAsset,
   selectedAssetIndex,
   showMetadata,
+  zoomQuality,
 } from '~/store/share';
 import {
   formatViewerFootDate,
@@ -24,31 +26,49 @@ import ExifSheet from './ExifSheet';
 import ProtectedImage from './ProtectedImage';
 import ViewerVideoLayer from './ViewerVideoLayer';
 
-function ViewerSlide(props: { asset: Asset; width: number; slideKey: string }) {
-  const poster = () => api.getThumbnailUrl(props.asset.id, 'preview');
+function ViewerSlide(props: {
+  asset: Asset;
+  width: number;
+  slideKey: string;
+  current?: boolean;
+  transform?: string;
+  interacting?: boolean;
+  highQuality?: boolean;
+}) {
+  const poster = () =>
+    api.getThumbnailUrl(props.asset.id, props.current && props.highQuality ? 'fullsize' : 'preview');
 
   return (
-    <div class="vw-slide" data-slide={props.slideKey} style={{ width: `${props.width}px` }}>
+    <div
+      class={`vw-slide ${props.current ? 'is-current' : ''}`}
+      data-slide={props.slideKey}
+      style={{ width: `${props.width}px` }}
+    >
       <Show
         when={props.asset.type === 'VIDEO'}
         fallback={
-          <Show
-            when={allowDownload()}
-            fallback={
-              <ProtectedImage
+          <div
+            class={`vw-zoom-layer ${props.interacting ? 'is-interacting' : ''}`}
+            style={{ transform: props.current ? props.transform : undefined }}
+          >
+            <Show
+              when={allowDownload()}
+              fallback={
+                <ProtectedImage
+                  src={poster()}
+                  alt={props.asset.originalFileName}
+                  class="vw-img"
+                />
+              }
+            >
+              <img
+                class="vw-img"
                 src={poster()}
                 alt={props.asset.originalFileName}
-                class="vw-img"
+                draggable={false}
               />
-            }
-          >
-            <img
-              class="vw-img"
-              src={poster()}
-              alt={props.asset.originalFileName}
-              draggable={false}
-            />
-          </Show>
+            </Show>
+          </div>
         }
       >
         <ViewerVideoLayer
@@ -64,6 +84,11 @@ function ViewerSlide(props: { asset: Asset; width: number; slideKey: string }) {
 export default function AssetViewer() {
   const [showInfo, setShowInfo] = createSignal(false);
   const [stageEl, setStageEl] = createSignal<HTMLDivElement>();
+  const [viewerEl, setViewerEl] = createSignal<HTMLDivElement>();
+  const [fullscreenAvailable, setFullscreenAvailable] = createSignal(false);
+  const [fullscreen, setFullscreen] = createSignal(false);
+  const [historyReady, setHistoryReady] = createSignal(false);
+  let pushedViewerEntry = false;
 
   const index = () => selectedAssetIndex();
   const list = () => assets();
@@ -88,24 +113,86 @@ export default function AssetViewer() {
     animated: true,
   });
 
+  const zoom = useViewerZoom({
+    assetId: () => current().id,
+    enabled: () => current().type === 'IMAGE',
+    stageEl,
+  });
+
+  function cleanShareUrl(): string {
+    return window.location.pathname + window.location.search;
+  }
+
+  function requestClose() {
+    if (pushedViewerEntry) {
+      window.history.back();
+      return;
+    }
+    window.history.replaceState(window.history.state, '', cleanShareUrl());
+    closeViewer();
+  }
+
+  async function toggleFullscreen() {
+    const el = viewerEl();
+    if (!el || !fullscreenAvailable()) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await el.requestFullscreen();
+    } catch {
+      // Browser or embedding policy denied fullscreen; the normal viewer
+      // remains fully usable, so no disruptive error surface is needed.
+    }
+  }
+
+  function handlePointerDown(event: PointerEvent) {
+    if (zoom.onPointerDown(event)) carousel.cancelGesture();
+    else carousel.onPointerDown(event);
+  }
+
+  function handlePointerMove(event: PointerEvent) {
+    if (zoom.onPointerMove(event)) carousel.cancelGesture();
+    else carousel.onPointerMove(event);
+  }
+
+  function handlePointerUp(event: PointerEvent) {
+    if (zoom.onPointerUp(event)) carousel.cancelGesture();
+    else carousel.onPointerUp();
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     switch (event.key) {
       case 'Escape':
         if (showInfo()) {
           setShowInfo(false);
+        } else if (zoom.zoomed()) {
+          zoom.reset();
         } else {
-          closeViewer();
+          requestClose();
         }
         break;
       case 'ArrowLeft':
-        carousel.step(-1, true);
+        if (!zoom.zoomed()) carousel.step(-1, true);
         break;
       case 'ArrowRight':
-        carousel.step(1, true);
+        if (!zoom.zoomed()) carousel.step(1, true);
         break;
       case 'i':
       case 'I':
         if (showMetadata()) setShowInfo((v) => !v);
+        break;
+      case '+':
+      case '=':
+        zoom.zoomIn();
+        break;
+      case '-':
+        zoom.zoomOut();
+        break;
+      case '0':
+        zoom.reset();
+        break;
+      case 'f':
+      case 'F':
+        void toggleFullscreen();
         break;
     }
   }
@@ -115,6 +202,12 @@ export default function AssetViewer() {
     if (!asset) return;
     captureEvent('asset_viewed', { asset_type: asset.type });
     setShowInfo(false);
+  });
+
+  createEffect(() => {
+    const id = current().id;
+    if (!historyReady()) return;
+    window.history.replaceState({ ...(window.history.state ?? {}), ippViewer: true }, '', `#${encodeURIComponent(id)}`);
   });
 
   // Immich v3 album listings carry no EXIF or original filename; fetch the
@@ -131,22 +224,58 @@ export default function AssetViewer() {
       .catch(() => undefined);
   });
 
-  onMount(() => window.addEventListener('keydown', handleKeydown));
-  onCleanup(() => window.removeEventListener('keydown', handleKeydown));
+  onMount(() => {
+    window.addEventListener('keydown', handleKeydown);
+    const onPopState = () => {
+      pushedViewerEntry = false;
+      closeViewer();
+    };
+    const onFullscreenChange = () => setFullscreen(document.fullscreenElement === viewerEl());
+    window.addEventListener('popstate', onPopState);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    setFullscreenAvailable(Boolean(document.fullscreenEnabled && viewerEl()?.requestFullscreen));
+
+    window.history.pushState(
+      { ...(window.history.state ?? {}), ippViewer: true },
+      '',
+      `#${encodeURIComponent(current().id)}`
+    );
+    pushedViewerEntry = true;
+    setHistoryReady(true);
+
+    onCleanup(() => {
+      window.removeEventListener('keydown', handleKeydown);
+      window.removeEventListener('popstate', onPopState);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    });
+  });
 
   const w = () => carousel.stageWidth();
   const footSubtitle = () => formatViewerFootSubtitle(current());
 
   return (
-    <div class="viewer" data-testid="asset-viewer" onClick={closeViewer}>
+    <div ref={setViewerEl} class="viewer" data-testid="asset-viewer" onClick={requestClose}>
       <div class="vw-top" onClick={(e) => e.stopPropagation()}>
-        <button type="button" class="vw-btn" aria-label={t().viewer.close} onClick={closeViewer}>
+        <button type="button" class="vw-btn" aria-label={t().viewer.close} onClick={requestClose}>
           <X size={22} />
         </button>
         <div class="vw-count" data-testid="viewer-count">
           {index() + 1} / {list().length}
         </div>
         <div class="vw-top-actions">
+          <Show when={current().type === 'IMAGE'}>
+            <button
+              type="button"
+              class={`vw-btn ${zoom.zoomed() ? 'is-on' : ''}`}
+              aria-label={zoom.zoomed() ? t().viewer.resetZoom : t().viewer.zoomIn}
+              title={zoom.zoomed() ? t().viewer.resetZoom : t().viewer.zoomIn}
+              onClick={() => (zoom.zoomed() ? zoom.reset() : zoom.zoomIn())}
+            >
+              <Show when={zoom.zoomed()} fallback={<ZoomIn size={22} />}>
+                <ZoomOut size={22} />
+              </Show>
+            </button>
+          </Show>
           <Show when={showMetadata()}>
             <button
               type="button"
@@ -177,6 +306,19 @@ export default function AssetViewer() {
               )}
             </Show>
           </Show>
+          <Show when={fullscreenAvailable()}>
+            <button
+              type="button"
+              class="vw-btn"
+              aria-label={fullscreen() ? t().viewer.exitFullscreen : t().viewer.enterFullscreen}
+              title={fullscreen() ? t().viewer.exitFullscreen : t().viewer.enterFullscreen}
+              onClick={() => void toggleFullscreen()}
+            >
+              <Show when={fullscreen()} fallback={<Maximize2 size={22} />}>
+                <Minimize2 size={22} />
+              </Show>
+            </button>
+          </Show>
         </div>
       </div>
 
@@ -184,10 +326,13 @@ export default function AssetViewer() {
         <div
           class="vw-stage"
           ref={setStageEl}
-          onPointerDown={carousel.onPointerDown}
-          onPointerMove={carousel.onPointerMove}
-          onPointerUp={carousel.onPointerUp}
-          onPointerCancel={carousel.onPointerUp}
+          classList={{ 'is-zoomed': zoom.zoomed(), 'is-interacting': zoom.interacting() }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onWheel={zoom.onWheel}
+          onDblClick={zoom.onDoubleClick}
           onClick={(e) => e.stopPropagation()}
         >
           <div
@@ -205,7 +350,15 @@ export default function AssetViewer() {
                 slideKey={list()[index() - 1].id}
               />
             </Show>
-            <ViewerSlide asset={current()} width={w()} slideKey={current().id} />
+            <ViewerSlide
+              asset={current()}
+              width={w()}
+              slideKey={current().id}
+              current
+              transform={zoom.transform()}
+              interacting={zoom.interacting()}
+              highQuality={zoom.zoomed() && zoomQuality() === 'fullsize'}
+            />
             <Show when={carousel.hasNext()} fallback={<div class="vw-slide" style={{ width: `${w()}px` }} />}>
               <ViewerSlide
                 asset={list()[index() + 1]}
@@ -218,22 +371,22 @@ export default function AssetViewer() {
 
         <button
           type="button"
-          class={`vw-nav left ${carousel.hasPrev() ? '' : 'off'}`}
+          class={`vw-nav left ${carousel.hasPrev() && !zoom.zoomed() ? '' : 'off'}`}
           aria-label={t().viewer.previous}
           onClick={(e) => {
             e.stopPropagation();
-            carousel.step(-1, true);
+            if (!zoom.zoomed()) carousel.step(-1, true);
           }}
         >
           <ChevronLeft size={26} />
         </button>
         <button
           type="button"
-          class={`vw-nav right ${carousel.hasNext() ? '' : 'off'}`}
+          class={`vw-nav right ${carousel.hasNext() && !zoom.zoomed() ? '' : 'off'}`}
           aria-label={t().viewer.next}
           onClick={(e) => {
             e.stopPropagation();
-            carousel.step(1, true);
+            if (!zoom.zoomed()) carousel.step(1, true);
           }}
         >
           <ChevronRight size={26} />

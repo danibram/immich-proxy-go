@@ -2,18 +2,38 @@ package handlers
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/danibram/immich-proxy-go/internal/config"
 	"github.com/danibram/immich-proxy-go/internal/immich"
 	"github.com/danibram/immich-proxy-go/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
+
+const downloadWorkerLimit = 4
+
+var downloadRetryDelays = []time.Duration{0, 100 * time.Millisecond, 400 * time.Millisecond}
+
+type downloadTask struct {
+	index   int
+	assetID string
+}
+
+type stagedDownload struct {
+	path     string
+	filename string
+}
 
 // DownloadAssets initiates a ZIP download job and returns job ID for progress tracking
 func (h *ShareHandler) DownloadAssets(w http.ResponseWriter, r *http.Request) {
@@ -90,8 +110,8 @@ func (h *ShareHandler) DownloadAssets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if len(validAssetIDs) == 0 {
-		http.Error(w, "No valid assets to download", http.StatusBadRequest)
+	if len(validAssetIDs) != len(req.AssetIDs) {
+		http.Error(w, "One or more requested assets are unavailable", http.StatusBadRequest)
 		return
 	}
 
@@ -131,79 +151,120 @@ func (h *ShareHandler) DownloadAssets(w http.ResponseWriter, r *http.Request) {
 
 // processDownloadJob generates the ZIP file in the background
 func (h *ShareHandler) processDownloadJob(job *DownloadJob, assetIDs []string, assetMap map[string]*immich.Asset, key, password string, keyType immich.KeyType) {
-	// Create temp file
+	// Stage every upstream asset before creating the ZIP. This makes the job
+	// atomic: a ready job always contains every requested file, never a
+	// plausible-looking archive with silent omissions.
+	stagingDir, err := os.MkdirTemp("", "immich-download-stage-*")
+	if err != nil {
+		h.logger.Error("failed to create download staging directory", zap.Error(err))
+		downloadJobManager.SetFailed(job.ID, "Failed to prepare download")
+		return
+	}
+	defer os.RemoveAll(stagingDir)
+
+	staged := make([]stagedDownload, len(assetIDs))
+	tasks := make(chan downloadTask, len(assetIDs))
+	for i, assetID := range assetIDs {
+		tasks <- downloadTask{index: i, assetID: assetID}
+	}
+	close(tasks)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var completed atomic.Int32
+	var firstFailure error
+	var failureOnce sync.Once
+	workerCount := min(downloadWorkerLimit, len(assetIDs))
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for range workerCount {
+		go func() {
+			defer workers.Done()
+			for task := range tasks {
+				if ctx.Err() != nil {
+					return
+				}
+				asset := assetMap[task.assetID]
+				result, err := h.stageDownloadAsset(ctx, stagingDir, task.index, asset, key, password, keyType)
+				if err != nil {
+					failureOnce.Do(func() {
+						firstFailure = err
+						cancel()
+					})
+					continue
+				}
+				staged[task.index] = result
+				progress := int(completed.Add(1))
+				downloadJobManager.UpdateProgress(job.ID, progress)
+			}
+		}()
+	}
+	workers.Wait()
+
+	if firstFailure != nil {
+		h.logger.Warn("zip job failed while staging assets", zap.String("jobId", job.ID), zap.Error(firstFailure))
+		downloadJobManager.SetFailed(job.ID, "Could not prepare every requested file")
+		return
+	}
+
+	// Only allocate the public job artifact after the complete staged set is
+	// present. ZIP STORE avoids wasting CPU recompressing photos and videos.
 	tmpFile, err := os.CreateTemp("", "immich-download-*.zip")
 	if err != nil {
-		h.logger.Error("failed to create temp file", zap.Error(err))
-		downloadJobManager.SetFailed(job.ID, "Failed to create temporary file")
+		h.logger.Error("failed to create zip file", zap.Error(err))
+		downloadJobManager.SetFailed(job.ID, "Failed to create ZIP")
 		return
 	}
 	tmpPath := tmpFile.Name()
+	keepZIP := false
+	defer func() {
+		_ = tmpFile.Close()
+		if !keepZIP {
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	// Create ZIP writer
 	zipWriter := zip.NewWriter(tmpFile)
 	usedFilenames := make(map[string]int)
-
-	// Download each asset
-	for i, assetID := range assetIDs {
-		asset := assetMap[assetID]
-
-		// Get original file
-		resp, err := h.client.GetOriginalWithKeyType(assetID, key, password, keyType)
+	for _, item := range staged {
+		filename := getUniqueFilename(item.filename, usedFilenames)
+		header := &zip.FileHeader{Name: filename, Method: zip.Store}
+		entry, err := zipWriter.CreateHeader(header)
 		if err != nil {
-			h.logger.Warn("failed to get original", zap.Error(err), zap.String("assetId", assetID))
-			continue
+			_ = zipWriter.Close()
+			h.logger.Error("failed to create zip entry", zap.Error(err), zap.String("filename", filename))
+			downloadJobManager.SetFailed(job.ID, "Failed to finalize ZIP")
+			return
 		}
-
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			continue
-		}
-
-		// Determine filename. Timeline-sourced assets (Immich v3) carry no
-		// originalFileName, so fall back to the upstream response headers.
-		filename := asset.OriginalFileName
-		if filename == "" {
-			filename = filenameFromContentDisposition(resp.Header.Get("Content-Disposition"))
-		}
-		if filename == "" {
-			mimeType := asset.OriginalMimeType
-			if mimeType == "" {
-				mimeType = resp.Header.Get("Content-Type")
-			}
-			filename = assetID + getExtensionForMimeType(mimeType)
-		}
-		filename = getUniqueFilename(filename, usedFilenames)
-
-		// Create ZIP entry
-		zipEntry, err := zipWriter.Create(filename)
+		file, err := os.Open(item.path)
 		if err != nil {
-			resp.Body.Close()
-			h.logger.Error("failed to create zip entry", zap.Error(err))
-			continue
+			_ = zipWriter.Close()
+			h.logger.Error("failed to reopen staged asset", zap.Error(err))
+			downloadJobManager.SetFailed(job.ID, "Failed to finalize ZIP")
+			return
 		}
-
-		// Copy file to ZIP
-		_, err = io.Copy(zipEntry, resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			h.logger.Error("failed to write to zip", zap.Error(err))
-			continue
+		_, copyErr := io.Copy(entry, file)
+		closeErr := file.Close()
+		if copyErr != nil || closeErr != nil {
+			_ = zipWriter.Close()
+			h.logger.Error("failed to write complete zip entry", zap.Error(copyErr), zap.String("filename", filename))
+			downloadJobManager.SetFailed(job.ID, "Failed to finalize ZIP")
+			return
 		}
-
-		// Update progress
-		downloadJobManager.UpdateProgress(job.ID, i+1)
 	}
 
-	// Finalize ZIP
 	if err := zipWriter.Close(); err != nil {
 		h.logger.Error("failed to close zip", zap.Error(err))
-		tmpFile.Close()
-		os.Remove(tmpPath)
 		downloadJobManager.SetFailed(job.ID, "Failed to finalize ZIP")
 		return
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		h.logger.Error("failed to flush zip", zap.Error(err))
+		downloadJobManager.SetFailed(job.ID, "Failed to finalize ZIP")
+		return
+	}
+	keepZIP = true
 
 	// Mark as ready
 	downloadJobManager.SetReady(job.ID, tmpPath)
@@ -214,6 +275,114 @@ func (h *ShareHandler) processDownloadJob(job *DownloadJob, assetIDs []string, a
 		time.Sleep(10 * time.Minute)
 		downloadJobManager.Delete(job.ID)
 	}()
+}
+
+// stageDownloadAsset fetches one original into a private temp file. Transport
+// failures, 408/429, and 5xx responses are retried; permanent 4xx responses
+// fail immediately. A caller never sees this partial file.
+func (h *ShareHandler) stageDownloadAsset(
+	ctx context.Context,
+	stagingDir string,
+	index int,
+	asset *immich.Asset,
+	key, password string,
+	keyType immich.KeyType,
+) (stagedDownload, error) {
+	if asset == nil {
+		return stagedDownload{}, fmt.Errorf("asset %d is missing from the authorized share", index)
+	}
+
+	var lastErr error
+	for attempt, delay := range downloadRetryDelays {
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return stagedDownload{}, ctx.Err()
+			case <-timer.C:
+			}
+		}
+		if ctx.Err() != nil {
+			return stagedDownload{}, ctx.Err()
+		}
+
+		quality := h.config.Options.DownloadQuality()
+		var resp *http.Response
+		var err error
+		if asset.Type == "IMAGE" && quality != config.QualityOriginal {
+			resp, err = h.client.GetThumbnailWithKeyType(asset.ID, key, password, string(quality), keyType)
+		} else {
+			resp, err = h.client.GetOriginalWithKeyType(asset.ID, key, password, keyType)
+		}
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64*1024))
+			_ = resp.Body.Close()
+			lastErr = fmt.Errorf("asset %s returned HTTP %d", asset.ID, resp.StatusCode)
+			if !isRetryableDownloadStatus(resp.StatusCode) {
+				return stagedDownload{}, lastErr
+			}
+			continue
+		}
+
+		path := filepath.Join(stagingDir, fmt.Sprintf("%06d-%s", index, asset.ID))
+		file, createErr := os.Create(path)
+		if createErr != nil {
+			_ = resp.Body.Close()
+			return stagedDownload{}, createErr
+		}
+		_, copyErr := io.Copy(file, resp.Body)
+		bodyCloseErr := resp.Body.Close()
+		fileCloseErr := file.Close()
+		if copyErr != nil || bodyCloseErr != nil || fileCloseErr != nil {
+			_ = os.Remove(path)
+			lastErr = fmt.Errorf("asset %s stream failed on attempt %d", asset.ID, attempt+1)
+			continue
+		}
+
+		filename := asset.OriginalFileName
+		if asset.Type == "IMAGE" && quality != config.QualityOriginal {
+			contentType := resp.Header.Get("Content-Type")
+			ext := getExtensionForMimeType(contentType)
+			if ext == "" {
+				ext = ".jpg"
+			}
+			base := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+			if base == "" {
+				base = asset.ID
+			}
+			filename = base + ext
+		}
+		if filename == "" {
+			filename = filenameFromContentDisposition(resp.Header.Get("Content-Disposition"))
+		}
+		if filename == "" {
+			mimeType := asset.OriginalMimeType
+			if mimeType == "" {
+				mimeType = resp.Header.Get("Content-Type")
+			}
+			filename = asset.ID + getExtensionForMimeType(mimeType)
+		}
+		filename = sanitizeFilename(filename)
+		if filename == "" {
+			filename = asset.ID
+		}
+		return stagedDownload{path: path, filename: filename}, nil
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("asset %s could not be downloaded", asset.ID)
+	}
+	return stagedDownload{}, lastErr
+}
+
+func isRetryableDownloadStatus(status int) bool {
+	return status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500
 }
 
 // GetDownloadJobStatus returns the status of a download job

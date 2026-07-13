@@ -46,6 +46,10 @@ export const es: Messages = {
     download: 'Descargar',
     previous: 'Anterior',
     next: 'Siguiente',
+    zoomIn: 'Ampliar',
+    resetZoom: 'Restablecer zoom',
+    enterFullscreen: 'Ver a pantalla completa',
+    exitFullscreen: 'Salir de pantalla completa',
   },
   exif: {
     camera: 'Cámara',

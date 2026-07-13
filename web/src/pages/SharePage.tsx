@@ -29,6 +29,7 @@ import {
   isSelectionMode,
   passwordRequired,
   selectedAsset,
+  selectAsset,
   setError,
   setIsLoading,
   setLoadedSharedLink,
@@ -43,10 +44,12 @@ import {
   type DownloadSource,
 } from '~/utils/bulkDownload';
 import { formatAlbumDateRange } from '~/utils/dateUtils';
+import { assetIdFromHash } from '~/utils/viewerDeepLink';
 
 export default function SharePage() {
   const params = useParams();
   const wide = useMatchMedia('(min-width: 820px)');
+  const dark = useMatchMedia('(prefers-color-scheme: dark)');
   const [downloadState, setDownloadState] = createSignal(emptyDownloadState());
   const [showUploadModal, setShowUploadModal] = createSignal(false);
   const [collapsed, setCollapsed] = createSignal(false);
@@ -87,6 +90,22 @@ export default function SharePage() {
 
       setLoadedSharedLink(link);
       const count = assets().length;
+
+      // Asset hashes are stable deep links. Remove the incoming hash before
+      // opening so the viewer can add its own history entry and browser Back
+      // returns to this gallery instead of navigating away from the share.
+      const requestedAssetId = assetIdFromHash(window.location.hash);
+      if (requestedAssetId) {
+        const assetIndex = assets().findIndex((asset) => asset.id === requestedAssetId);
+        if (assetIndex >= 0) {
+          window.history.replaceState(
+            window.history.state,
+            '',
+            window.location.pathname + window.location.search
+          );
+          selectAsset(assets()[assetIndex], assetIndex);
+        }
+      }
       const shareRouteType = getShareRouteTypeFromPath(window.location.pathname);
 
       registerShareContext({
@@ -182,7 +201,7 @@ export default function SharePage() {
       </Show>
 
       <Show when={!isLoading() && !passwordRequired() && !error() && sharedLink()}>
-        <div class="album" data-theme="light" data-wide={wide() ? '1' : '0'}>
+        <div class="album" data-theme={dark() ? 'dark' : 'light'} data-wide={wide() ? '1' : '0'}>
           <div class="album-scroll scrollbar-hide" ref={setScrollEl} onScroll={handleScroll}>
             <ShareTopBar
               dateRange={formatAlbumDateRange(assets())}

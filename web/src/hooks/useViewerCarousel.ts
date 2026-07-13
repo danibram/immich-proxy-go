@@ -85,6 +85,11 @@ export function useViewerCarousel(options: Options) {
     setAnim(false);
   }
 
+  function cancelGesture() {
+    dragStartX = null;
+    resetMotion();
+  }
+
   createEffect(() => {
     options.index();
     resetMotion();
@@ -157,6 +162,7 @@ export function useViewerCarousel(options: Options) {
     onPointerDown,
     onPointerMove,
     onPointerUp,
+    cancelGesture,
     trackTransform,
   };
 }

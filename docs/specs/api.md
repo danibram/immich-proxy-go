@@ -131,10 +131,23 @@ GET /share/{key}/api/albums/{albumId}
 ### Get Thumbnail
 
 ```
-GET /share/{key}/api/assets/{assetId}/thumbnail?size=thumbnail|preview
+GET /share/{key}/api/assets/{assetId}/thumbnail?size=thumbnail|preview|fullsize
 ```
 
 **Response**: Image binary with appropriate `Content-Type`
+
+`fullsize` is available only when `options.max_zoom_quality: fullsize` and the
+Immich shared link allows downloads. It is never publicly cached.
+
+### Raw Individual Image
+
+```
+GET /share/{key}/raw
+GET /s/{slug}/raw
+```
+
+Returns image bytes only for a single-image `INDIVIDUAL` share. Password and
+expiry rules still apply. This URL can be embedded directly in an `<img>`.
 
 ---
 
@@ -144,7 +157,8 @@ GET /share/{key}/api/assets/{assetId}/thumbnail?size=thumbnail|preview
 GET /share/{key}/api/assets/{assetId}/original
 ```
 
-**Response**: Original file binary with `Content-Disposition: attachment`
+**Response**: File binary with `Content-Disposition: attachment`. Image quality
+is capped by `options.max_download_quality`; videos remain original.
 
 **Access Control**: Downloads blocked if:
 - Proxy config `options.allow_download: false`

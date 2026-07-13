@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,102 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
+
+func TestGetOriginal_UsesConfiguredPreviewQualityForImages(t *testing.T) {
+	var requestedSize string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/shared-links/me":
+			_ = json.NewEncoder(w).Encode(immich.SharedLink{Type: "INDIVIDUAL", AllowDownload: true})
+		case r.URL.Path == "/api/assets/"+testAssetID1:
+			_ = json.NewEncoder(w).Encode(immich.Asset{ID: testAssetID1, Type: "IMAGE", OriginalFileName: "summer.heic"})
+		case r.URL.Path == "/api/assets/"+testAssetID1+"/thumbnail":
+			requestedSize = r.URL.Query().Get("size")
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write([]byte("preview"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer mockServer.Close()
+
+	_, router := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+		AllowDownload:      true,
+		MaxDownloadQuality: config.QualityPreview,
+	})
+	req := httptest.NewRequest("GET", "/api/share/valid-key/asset/"+testAssetID1+"/original", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || requestedSize != "preview" {
+		t.Fatalf("status=%d requested size=%q", rec.Code, requestedSize)
+	}
+	if got := rec.Header().Get("Content-Disposition"); got != "attachment; filename=summer.jpg" {
+		t.Fatalf("Content-Disposition = %q", got)
+	}
+}
+
+func TestGetThumbnail_FullsizeRequiresConfigAndImmichPermission(t *testing.T) {
+	mockServer := MockImmichServer(t)
+	defer mockServer.Close()
+
+	_, defaultRouter := setupTestHandler(t, mockServer)
+	req := httptest.NewRequest("GET", "/api/share/valid-key/asset/"+testAssetID1+"/thumbnail?size=fullsize", nil)
+	rec := httptest.NewRecorder()
+	defaultRouter.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("default quality status = %d, want 403", rec.Code)
+	}
+
+	_, fullRouter := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+		AllowDownload:  false,
+		MaxZoomQuality: config.QualityFullsize,
+	})
+	req = httptest.NewRequest("GET", "/api/share/valid-key/asset/"+testAssetID1+"/thumbnail?size=fullsize", nil)
+	rec = httptest.NewRecorder()
+	fullRouter.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("permitted fullsize status = %d, want 200", rec.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/api/share/no-download/asset/"+testAssetID1+"/thumbnail?size=fullsize", nil)
+	rec = httptest.NewRecorder()
+	fullRouter.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("Immich-denied fullsize status = %d, want 403", rec.Code)
+	}
+}
+
+func TestServeSingleImage(t *testing.T) {
+	var requestedSize string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/shared-links/me":
+			_ = json.NewEncoder(w).Encode(immich.SharedLink{
+				Type:          "INDIVIDUAL",
+				AllowDownload: true,
+				Assets:        []immich.Asset{{ID: testAssetID1, Type: "IMAGE"}},
+			})
+		case "/api/assets/" + testAssetID1 + "/thumbnail":
+			requestedSize = r.URL.Query().Get("size")
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write([]byte("raw-image"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer mockServer.Close()
+
+	_, router := setupTestHandlerWithOptions(t, mockServer, config.OptionsConfig{
+		MaxZoomQuality: config.QualityFullsize,
+	})
+	req := httptest.NewRequest("GET", "/api/share/individual-key/raw", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != "raw-image" || requestedSize != "fullsize" {
+		t.Fatalf("status=%d body=%q size=%q", rec.Code, rec.Body.String(), requestedSize)
+	}
+}
 
 func TestGetThumbnail_Success(t *testing.T) {
 	mockServer := MockImmichServer(t)

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -24,9 +25,11 @@ type ProxyConfig struct {
 }
 
 type OptionsConfig struct {
-	AllowDownload bool `mapstructure:"allow_download"`
-	ShowMetadata  bool `mapstructure:"show_metadata"`
-	CacheTTL      int  `mapstructure:"cache_ttl"`
+	AllowDownload      bool         `mapstructure:"allow_download"`
+	ShowMetadata       bool         `mapstructure:"show_metadata"`
+	CacheTTL           int          `mapstructure:"cache_ttl"`
+	MaxDownloadQuality MediaQuality `mapstructure:"max_download_quality"`
+	MaxZoomQuality     MediaQuality `mapstructure:"max_zoom_quality"`
 	// ShareMediaCacheTTL is the max-age (seconds) advertised for thumbnails of
 	// PUBLIC shares, so a CDN/browser can cache them and spare Immich the
 	// repeat traffic. 0 disables it (thumbnails stay no-store). Password-
@@ -38,6 +41,34 @@ type OptionsConfig struct {
 	// (CDNs) must not, which prevents serving them without the password. 0
 	// disables it (thumbnails stay no-store).
 	ProtectedMediaCacheTTL int `mapstructure:"protected_media_cache_ttl"`
+}
+
+type MediaQuality string
+
+const (
+	QualityPreview  MediaQuality = "preview"
+	QualityFullsize MediaQuality = "fullsize"
+	QualityOriginal MediaQuality = "original"
+)
+
+// DownloadQuality defaults to original for backward compatibility. Invalid
+// values can only exist in hand-built configs (tests); Load rejects them.
+func (o OptionsConfig) DownloadQuality() MediaQuality {
+	switch o.MaxDownloadQuality {
+	case QualityPreview, QualityFullsize, QualityOriginal:
+		return o.MaxDownloadQuality
+	default:
+		return QualityOriginal
+	}
+}
+
+// ZoomQuality defaults to preview, so enabling the feature never silently
+// increases bandwidth or exposes more pixels on existing installations.
+func (o OptionsConfig) ZoomQuality() MediaQuality {
+	if o.MaxZoomQuality == QualityFullsize {
+		return QualityFullsize
+	}
+	return QualityPreview
 }
 
 type SecurityConfig struct {
@@ -92,19 +123,21 @@ func Load(configPath string) (*Config, error) {
 	v.SetDefault("options.allow_download", true)
 	v.SetDefault("options.show_metadata", true)
 	v.SetDefault("options.cache_ttl", 3600)
+	v.SetDefault("options.max_download_quality", string(QualityOriginal))
+	v.SetDefault("options.max_zoom_quality", string(QualityPreview))
 	v.SetDefault("options.share_media_cache_ttl", 0)     // off: public thumbnails are not CDN-cached unless opted in
 	v.SetDefault("options.protected_media_cache_ttl", 0) // off: protected thumbnails stay no-store unless opted in
 
 	// Security defaults
-	v.SetDefault("security.rate_limit", 1000)          // 1000 requests per minute
-	v.SetDefault("security.password_rate_limit", 5)    // 5 password attempts per minute
-	v.SetDefault("security.max_upload_size", 100)      // 100 MB max upload
+	v.SetDefault("security.rate_limit", 1000)            // 1000 requests per minute
+	v.SetDefault("security.password_rate_limit", 5)      // 5 password attempts per minute
+	v.SetDefault("security.max_upload_size", 100)        // 100 MB max upload
 	v.SetDefault("security.allowed_origins", []string{}) // Empty = same origin only
 	v.SetDefault("security.enable_hsts", false)
 	v.SetDefault("security.cookie_secret", "")
-	v.SetDefault("security.hotlink_protection", false)      // Disable by default for compatibility
-	v.SetDefault("security.trust_proxy_headers", false)     // Safe default: don't trust spoofable headers
-	v.SetDefault("security.force_secure_cookies", false)    // Opt-in for behind-TLS-proxy deployments
+	v.SetDefault("security.hotlink_protection", false)   // Disable by default for compatibility
+	v.SetDefault("security.trust_proxy_headers", false)  // Safe default: don't trust spoofable headers
+	v.SetDefault("security.force_secure_cookies", false) // Opt-in for behind-TLS-proxy deployments
 	v.SetDefault("security.max_concurrent_download_jobs", 5)
 
 	setPostHogViperDefaults(v)
@@ -143,6 +176,9 @@ func Load(configPath string) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
+	if err := validateMediaQualities(cfg.Options); err != nil {
+		return nil, err
+	}
 
 	// PostHog is config-file only (no IPP_ANALYTICS_POSTHOG_* env overrides).
 	if err := applyAnalyticsFromConfigFile(&cfg, v); err != nil {
@@ -150,6 +186,20 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func validateMediaQualities(options OptionsConfig) error {
+	switch options.MaxDownloadQuality {
+	case QualityPreview, QualityFullsize, QualityOriginal:
+	default:
+		return fmt.Errorf("options.max_download_quality must be preview, fullsize, or original")
+	}
+	switch options.MaxZoomQuality {
+	case QualityPreview, QualityFullsize:
+	default:
+		return fmt.Errorf("options.max_zoom_quality must be preview or fullsize")
+	}
+	return nil
 }
 
 func applyAnalyticsFromConfigFile(cfg *Config, v *viper.Viper) error {

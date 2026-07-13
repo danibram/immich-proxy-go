@@ -16,6 +16,7 @@ var ValidThumbnailSizes = map[string]bool{
 	"":          true, // empty is allowed (defaults to thumbnail)
 	"thumbnail": true,
 	"preview":   true,
+	"fullsize":  true,
 }
 
 // IsValidUUID checks if a string is a valid UUID

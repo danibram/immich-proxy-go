@@ -17,6 +17,8 @@ proxy:
 
 options:
   allow_download: true
+  max_download_quality: original
+  max_zoom_quality: preview
   show_metadata: true
   cache_ttl: 3600
 
@@ -48,7 +50,9 @@ security:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `options.allow_download` | bool | `true` | Allow downloading original files (proxy-level) |
+| `options.allow_download` | bool | `true` | Allow download endpoints when the Immich share also permits them |
+| `options.max_download_quality` | string | `original` | Maximum image download quality: `preview`, `fullsize`, or `original`; video downloads remain original |
+| `options.max_zoom_quality` | string | `preview` | Maximum zoom source: `preview` or `fullsize`; fullsize additionally requires `allowDownload` on the Immich share |
 | `options.show_metadata` | bool | `true` | Show EXIF metadata in viewer |
 | `options.cache_ttl` | int | `3600` | Cache TTL in seconds (currently unused) |
 
@@ -97,6 +101,8 @@ export PUBLIC_BASE_URL="https://photos.example.com"
 export IPP_SECURITY_RATE_LIMIT="100"
 export IPP_SECURITY_ALLOWED_ORIGINS="https://example.com,https://www.example.com"
 export IPP_COOKIE_SECRET="your-32-byte-hex-secret"
+export IPP_OPTIONS_MAX_DOWNLOAD_QUALITY="fullsize"
+export IPP_OPTIONS_MAX_ZOOM_QUALITY="fullsize"
 export IPP_SECURITY_TRUST_PROXY_HEADERS="true"
 export IPP_SECURITY_FORCE_SECURE_COOKIES="true"
 ```

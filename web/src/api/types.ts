@@ -8,6 +8,8 @@ export interface SharedLink {
   allowUpload: boolean;
   allowDownload: boolean;
   showMetadata: boolean;
+  downloadQuality?: 'preview' | 'fullsize' | 'original';
+  zoomQuality?: 'preview' | 'fullsize';
   description: string;
   album: Album | null;
   assets: Asset[];

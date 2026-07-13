@@ -100,7 +100,7 @@ GET /api/assets/{assetId}/thumbnail?slug={slug}&size={size}
 ```
 
 **Parameters:**
-- `size`: `preview` (larger) or `thumbnail` (smaller, default)
+- `size`: `thumbnail` (small), `preview` (viewer), or `fullsize` (large)
 
 **Response:** Binary image data (JPEG/WebP)
 

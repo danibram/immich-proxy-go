@@ -90,6 +90,7 @@ func TestIsValidThumbnailSize(t *testing.T) {
 		{"empty (default)", "", true},
 		{"thumbnail", "thumbnail", true},
 		{"preview", "preview", true},
+		{"fullsize", "fullsize", true},
 
 		// Invalid sizes
 		{"original", "original", false},

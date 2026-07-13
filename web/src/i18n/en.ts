@@ -49,6 +49,10 @@ export const en = {
     download: 'Download',
     previous: 'Previous',
     next: 'Next',
+    zoomIn: 'Zoom in',
+    resetZoom: 'Reset zoom',
+    enterFullscreen: 'Enter fullscreen',
+    exitFullscreen: 'Exit fullscreen',
   },
   exif: {
     camera: 'Camera',

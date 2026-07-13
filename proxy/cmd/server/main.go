@@ -214,6 +214,10 @@ func main() {
 		// password-protected / invalid shares, so nothing leaks.
 		r.With(generalLimiter.Limit).Get("/og-cover", shareHandler.ServeOGImage)
 
+		// Raw bytes for an INDIVIDUAL image share. This remains permission-aware
+		// but is embeddable, unlike the API routes guarded by Sec-Fetch headers.
+		r.With(generalLimiter.Limit).Get("/raw", shareHandler.ServeSingleImage)
+
 		// Serve the SPA shell for all other paths under the share. The shell is
 		// enriched with per-share OpenGraph meta for public shares.
 		serveShareIndex := func(w http.ResponseWriter, r *http.Request) {

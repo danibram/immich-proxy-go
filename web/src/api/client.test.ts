@@ -180,6 +180,11 @@ describe('ApiClient', () => {
       expect(url).toBe('/share/my-share-key/api/assets/asset-123/thumbnail.jpg?size=preview');
     });
 
+    it('should generate correct fullsize URL', () => {
+      const url = api.getThumbnailUrl('asset-123', 'fullsize');
+      expect(url).toBe('/share/my-share-key/api/assets/asset-123/thumbnail.jpg?size=fullsize');
+    });
+
     it('should generate correct original URL', () => {
       const url = api.getOriginalUrl('asset-123');
       expect(url).toBe('/share/my-share-key/api/assets/asset-123/original');

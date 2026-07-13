@@ -17,6 +17,7 @@ func TestApplyEffectiveShareOptions(t *testing.T) {
 		wantDownload     bool
 		wantMetadata     bool
 		wantShowMetadata bool
+		wantZoom         string
 	}{
 		{
 			name:             "both enabled",
@@ -25,6 +26,7 @@ func TestApplyEffectiveShareOptions(t *testing.T) {
 			wantDownload:     true,
 			wantMetadata:     true,
 			wantShowMetadata: true,
+			wantZoom:         "preview",
 		},
 		{
 			name:             "global download off",
@@ -33,6 +35,7 @@ func TestApplyEffectiveShareOptions(t *testing.T) {
 			wantDownload:     false,
 			wantMetadata:     true,
 			wantShowMetadata: true,
+			wantZoom:         "preview",
 		},
 		{
 			name:             "global metadata off",
@@ -41,6 +44,7 @@ func TestApplyEffectiveShareOptions(t *testing.T) {
 			wantDownload:     true,
 			wantMetadata:     false,
 			wantShowMetadata: false,
+			wantZoom:         "preview",
 		},
 		{
 			name:             "link metadata off",
@@ -49,6 +53,7 @@ func TestApplyEffectiveShareOptions(t *testing.T) {
 			wantDownload:     true,
 			wantMetadata:     false,
 			wantShowMetadata: false,
+			wantZoom:         "preview",
 		},
 		{
 			name:             "link download off",
@@ -57,6 +62,33 @@ func TestApplyEffectiveShareOptions(t *testing.T) {
 			wantDownload:     false,
 			wantMetadata:     true,
 			wantShowMetadata: true,
+			wantZoom:         "preview",
+		},
+		{
+			name: "fullsize zoom follows raw Immich permission even when download UI is off",
+			opts: config.OptionsConfig{
+				AllowDownload:  false,
+				ShowMetadata:   true,
+				MaxZoomQuality: config.QualityFullsize,
+			},
+			link:             immich.SharedLink{AllowDownload: true, ShowMetadata: true},
+			wantDownload:     false,
+			wantMetadata:     true,
+			wantShowMetadata: true,
+			wantZoom:         "fullsize",
+		},
+		{
+			name: "Immich download permission caps zoom at preview",
+			opts: config.OptionsConfig{
+				AllowDownload:  true,
+				ShowMetadata:   true,
+				MaxZoomQuality: config.QualityFullsize,
+			},
+			link:             immich.SharedLink{AllowDownload: false, ShowMetadata: true},
+			wantDownload:     false,
+			wantMetadata:     true,
+			wantShowMetadata: true,
+			wantZoom:         "preview",
 		},
 	}
 
@@ -73,6 +105,12 @@ func TestApplyEffectiveShareOptions(t *testing.T) {
 			}
 			if gotMeta != tc.wantShowMetadata {
 				t.Fatalf("returned showMetadata: got %v want %v", gotMeta, tc.wantShowMetadata)
+			}
+			if link.ZoomQuality != tc.wantZoom {
+				t.Fatalf("ZoomQuality: got %q want %q", link.ZoomQuality, tc.wantZoom)
+			}
+			if link.DownloadQuality == "" {
+				t.Fatal("DownloadQuality must be exposed to the client")
 			}
 		})
 	}

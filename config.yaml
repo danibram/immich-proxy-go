@@ -12,8 +12,14 @@ proxy:
   public_url: ""
 
 options:
-  # Allow downloading original files
+  # Allow downloads when the Immich shared link also permits them
   allow_download: true
+  # Maximum image quality returned by download endpoints:
+  # preview, fullsize, or original. Videos always keep original quality.
+  max_download_quality: original
+  # Maximum viewer zoom quality: preview or fullsize. Fullsize is only used
+  # when the Immich shared link has allowDownload enabled.
+  max_zoom_quality: preview
   # Show EXIF metadata in the viewer
   show_metadata: true
   # Cache TTL in seconds for static assets

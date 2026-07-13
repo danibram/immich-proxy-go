@@ -3,8 +3,8 @@
   position: absolute;
   inset: 0;
   z-index: 70;
-  background: #000;
-  color: #fff;
+  background: oklch(11% 0.008 145);
+  color: oklch(98% 0.006 145);
   display: flex;
   flex-direction: column;
   animation: vwIn 0.2s ease;
@@ -90,6 +90,15 @@
   touch-action: pan-y;
 }
 
+.app-share .album .vw-stage.is-zoomed {
+  cursor: grab;
+  touch-action: none;
+}
+
+.app-share .album .vw-stage.is-interacting {
+  cursor: grabbing;
+}
+
 .app-share .album .vw-track {
   display: flex;
   height: 100%;
@@ -106,6 +115,21 @@
   height: 100%;
   flex: 0 0 auto;
   position: relative;
+}
+
+.app-share .album .vw-zoom-layer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center;
+  will-change: transform;
+  transition: transform 0.2s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.app-share .album .vw-zoom-layer.is-interacting {
+  transition: none;
 }
 
 .app-share .album .vw-img {
@@ -161,6 +185,17 @@
 @media (hover: none) {
   .app-share .album .vw-nav {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-share .album .viewer {
+    animation: none;
+  }
+
+  .app-share .album .vw-track.anim,
+  .app-share .album .vw-zoom-layer {
+    transition: none;
   }
 }
 

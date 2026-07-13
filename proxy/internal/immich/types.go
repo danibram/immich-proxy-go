@@ -4,20 +4,22 @@ import "time"
 
 // SharedLink represents an Immich shared link
 type SharedLink struct {
-	ID            string     `json:"id"`
-	Key           string     `json:"key"`
-	Type          string     `json:"type"` // ALBUM or INDIVIDUAL
-	UserID        string     `json:"userId"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	ExpiresAt     *time.Time `json:"expiresAt"`
-	AllowUpload   bool       `json:"allowUpload"`
-	AllowDownload bool       `json:"allowDownload"`
-	ShowMetadata  bool       `json:"showMetadata"`
-	Description   string     `json:"description"`
-	Password      string     `json:"password,omitempty"`
-	Token         string     `json:"token,omitempty"`
-	Album         *Album     `json:"album,omitempty"`
-	Assets        []Asset    `json:"assets"`
+	ID              string     `json:"id"`
+	Key             string     `json:"key"`
+	Type            string     `json:"type"` // ALBUM or INDIVIDUAL
+	UserID          string     `json:"userId"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	ExpiresAt       *time.Time `json:"expiresAt"`
+	AllowUpload     bool       `json:"allowUpload"`
+	AllowDownload   bool       `json:"allowDownload"`
+	ShowMetadata    bool       `json:"showMetadata"`
+	DownloadQuality string     `json:"downloadQuality,omitempty"`
+	ZoomQuality     string     `json:"zoomQuality,omitempty"`
+	Description     string     `json:"description"`
+	Password        string     `json:"password,omitempty"`
+	Token           string     `json:"token,omitempty"`
+	Album           *Album     `json:"album,omitempty"`
+	Assets          []Asset    `json:"assets"`
 }
 
 // Album represents an Immich album
@@ -50,34 +52,34 @@ type AlbumUser struct {
 
 // Asset represents an Immich asset (photo/video)
 type Asset struct {
-	ID               string     `json:"id"`
-	DeviceAssetID    string     `json:"deviceAssetId"`
-	DeviceID         string     `json:"deviceId"`
-	OwnerID          string     `json:"ownerId"`
-	Type             string     `json:"type"` // IMAGE, VIDEO, AUDIO, OTHER
-	OriginalPath     string     `json:"originalPath"`
-	OriginalFileName string     `json:"originalFileName"`
-	OriginalMimeType string     `json:"originalMimeType,omitempty"`
-	Thumbhash        string     `json:"thumbhash"`
-	FileCreatedAt    time.Time  `json:"fileCreatedAt"`
-	FileModifiedAt   time.Time  `json:"fileModifiedAt"`
-	LocalDateTime    time.Time  `json:"localDateTime"`
-	UpdatedAt        time.Time  `json:"updatedAt"`
-	IsFavorite       bool       `json:"isFavorite"`
-	IsArchived       bool       `json:"isArchived"`
-	IsTrashed        bool       `json:"isTrashed"`
-	IsOffline        bool       `json:"isOffline"`
-	Duration         Duration   `json:"duration"`
-	ExifInfo         *ExifInfo  `json:"exifInfo,omitempty"`
+	ID               string    `json:"id"`
+	DeviceAssetID    string    `json:"deviceAssetId"`
+	DeviceID         string    `json:"deviceId"`
+	OwnerID          string    `json:"ownerId"`
+	Type             string    `json:"type"` // IMAGE, VIDEO, AUDIO, OTHER
+	OriginalPath     string    `json:"originalPath"`
+	OriginalFileName string    `json:"originalFileName"`
+	OriginalMimeType string    `json:"originalMimeType,omitempty"`
+	Thumbhash        string    `json:"thumbhash"`
+	FileCreatedAt    time.Time `json:"fileCreatedAt"`
+	FileModifiedAt   time.Time `json:"fileModifiedAt"`
+	LocalDateTime    time.Time `json:"localDateTime"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+	IsFavorite       bool      `json:"isFavorite"`
+	IsArchived       bool      `json:"isArchived"`
+	IsTrashed        bool      `json:"isTrashed"`
+	IsOffline        bool      `json:"isOffline"`
+	Duration         Duration  `json:"duration"`
+	ExifInfo         *ExifInfo `json:"exifInfo,omitempty"`
 	// Ratio is the display aspect ratio (width/height) reported by the
 	// Immich v3 timeline API, which no longer exposes EXIF dimensions.
-	Ratio            float64    `json:"ratio,omitempty"`
-	LivePhotoVideoID *string    `json:"livePhotoVideoId,omitempty"`
-	People           []Person   `json:"people,omitempty"`
-	Checksum         string     `json:"checksum"`
-	Stack            *Stack     `json:"stack,omitempty"`
-	DuplicateID      *string    `json:"duplicateId,omitempty"`
-	HasMetadata      bool       `json:"hasMetadata"`
+	Ratio            float64  `json:"ratio,omitempty"`
+	LivePhotoVideoID *string  `json:"livePhotoVideoId,omitempty"`
+	People           []Person `json:"people,omitempty"`
+	Checksum         string   `json:"checksum"`
+	Stack            *Stack   `json:"stack,omitempty"`
+	DuplicateID      *string  `json:"duplicateId,omitempty"`
+	HasMetadata      bool     `json:"hasMetadata"`
 }
 
 // ExifInfo represents EXIF metadata for an asset
