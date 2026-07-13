@@ -151,3 +151,138 @@ test('browser Back steps through viewed images before closing the viewer', async
   await expect(page).toHaveURL(/\/share\/demo$/);
   await expect(page.getByTestId('share-gallery')).toBeVisible();
 });
+
+test('grid loads thumbnails, viewer shows an instant poster then the preview', async ({ page }) => {
+  const requested: Array<{ size: string; retry: boolean }> = [];
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  // Hold preview responses until released so the poster is observable.
+  let releasePreview: () => void = () => {};
+  const previewGate = new Promise<void>((resolve) => (releasePreview = resolve));
+
+  await page.route('**/share/demo/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/shared-links/me')) {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'share-id',
+          key: 'demo',
+          type: 'INDIVIDUAL',
+          allowDownload: true,
+          allowUpload: false,
+          showMetadata: false,
+          downloadQuality: 'original',
+          zoomQuality: 'preview',
+          assets: [
+            {
+              id: assetOne,
+              type: 'IMAGE',
+              originalFileName: 'one.jpg',
+              ratio: 1.5,
+              fileCreatedAt: '2026-07-13T10:00:00Z',
+              localDateTime: '2026-07-13T10:00:00Z',
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    if (url.pathname.includes('/thumbnail.')) {
+      const size = url.searchParams.get('size') ?? '';
+      requested.push({ size, retry: url.searchParams.has('retry') });
+      if (size === 'preview') await previewGate;
+      await route.fulfill({ contentType: 'image/png', body: png });
+      return;
+    }
+    await route.fulfill({ status: 404 });
+  });
+
+  await page.goto('/share/demo');
+  await expect(page.getByTestId('share-gallery')).toBeVisible();
+
+  // Grid tiles request the small webp thumbnail, never preview.
+  await expect.poll(() => requested.length).toBeGreaterThan(0);
+  expect(requested.every((r) => r.size === 'thumbnail')).toBe(true);
+
+  // Opening the viewer shows the poster instantly while preview is in flight.
+  await page.getByTestId('gallery-item').first().click();
+  await expect(page.getByTestId('asset-viewer')).toBeVisible();
+  await expect(page.getByTestId('viewer-poster')).toBeVisible();
+  await expect.poll(() => requested.some((r) => r.size === 'preview')).toBe(true);
+
+  // Once the preview arrives the poster layer is removed.
+  releasePreview();
+  await expect(page.getByTestId('viewer-poster')).toBeHidden();
+  // Clean first-attempt URLs carry no retry marker (CDN cacheability).
+  expect(requested.every((r) => !r.retry)).toBe(true);
+});
+
+test('a failed tile retries once with a retry marker and then recovers', async ({ page }) => {
+  const thumbAttempts: string[] = [];
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+
+  await page.route('**/share/demo/api/**', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/shared-links/me')) {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'share-id',
+          key: 'demo',
+          type: 'INDIVIDUAL',
+          allowDownload: true,
+          allowUpload: false,
+          showMetadata: false,
+          downloadQuality: 'original',
+          zoomQuality: 'preview',
+          assets: [
+            {
+              id: assetOne,
+              type: 'IMAGE',
+              originalFileName: 'one.jpg',
+              ratio: 1.5,
+              fileCreatedAt: '2026-07-13T10:00:00Z',
+              localDateTime: '2026-07-13T10:00:00Z',
+            },
+          ],
+        }),
+      });
+      return;
+    }
+    if (url.pathname.includes('/thumbnail.')) {
+      thumbAttempts.push(url.search);
+      // Transient blip: the first attempt fails, the retry succeeds.
+      if (thumbAttempts.length === 1) {
+        await route.fulfill({ status: 502, body: 'upstream unavailable' });
+      } else {
+        await route.fulfill({ contentType: 'image/png', body: png });
+      }
+      return;
+    }
+    await route.fulfill({ status: 404 });
+  });
+
+  await page.goto('/share/demo');
+  await expect(page.getByTestId('share-gallery')).toBeVisible();
+
+  // The tile ends up loaded despite the failed first attempt...
+  const thumb = page.getByTestId('gallery-thumb');
+  await expect
+    .poll(() => thumb.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), {
+      timeout: 10_000,
+    })
+    .toBe(true);
+
+  // ...via exactly one retry whose URL carries the retry marker (the first,
+  // cacheable URL stays clean).
+  expect(thumbAttempts.length).toBe(2);
+  expect(thumbAttempts[0]).not.toContain('retry=1');
+  expect(thumbAttempts[1]).toContain('retry=1');
+  await expect(page.getByTestId('gallery-thumb-broken')).toHaveCount(0);
+});

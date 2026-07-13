@@ -95,8 +95,27 @@
   height: 100%;
 }
 
+/* Thumbhash placeholder painted by an inline background-image; the loaded
+   <img> covers it completely. */
+.app-share .thumb-img-slot {
+  background-size: cover;
+  background-position: center;
+}
+
 .app-share .gallery-item img {
   object-fit: cover;
+}
+
+/* Persistent placeholder when a tile exhausted its retries: subtle icon over
+   the thumbhash background (which stays on the slot). */
+.app-share .thumb-broken {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.55);
+  background: rgba(0, 0, 0, 0.18);
 }
 
 .app-share .thumb-veil {
