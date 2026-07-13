@@ -22,6 +22,7 @@ import {
   formatViewerFootDate,
   formatViewerFootSubtitle,
 } from '~/utils/viewerFormat';
+import { assetIdFromHash } from '~/utils/viewerDeepLink';
 import ExifSheet from './ExifSheet';
 import ProtectedImage from './ProtectedImage';
 import ViewerVideoLayer from './ViewerVideoLayer';
@@ -88,7 +89,14 @@ export default function AssetViewer() {
   const [fullscreenAvailable, setFullscreenAvailable] = createSignal(false);
   const [fullscreen, setFullscreen] = createSignal(false);
   const [historyReady, setHistoryReady] = createSignal(false);
-  let pushedViewerEntry = false;
+  // Every viewed image is its own history entry (the Google Photos model):
+  // browser Back steps through previously viewed images before closing the
+  // viewer. `viewerDepth` mirrors how deep into our own entries the current
+  // position is, so close() can unwind them all with a single history.go().
+  // popstate-driven navigation must not push again, hence the suppress flag.
+  let viewerDepth = 0;
+  let lastHistoryId: string | null = null;
+  let suppressNextHistoryPush = false;
 
   const index = () => selectedAssetIndex();
   const list = () => assets();
@@ -124,8 +132,10 @@ export default function AssetViewer() {
   }
 
   function requestClose() {
-    if (pushedViewerEntry) {
-      window.history.back();
+    if (viewerDepth > 0) {
+      // One jump past all our image entries; the resulting popstate lands on
+      // the hash-less gallery entry and closes the viewer.
+      window.history.go(-viewerDepth);
       return;
     }
     window.history.replaceState(window.history.state, '', cleanShareUrl());
@@ -206,8 +216,16 @@ export default function AssetViewer() {
 
   createEffect(() => {
     const id = current().id;
-    if (!historyReady()) return;
-    window.history.replaceState({ ...(window.history.state ?? {}), ippViewer: true }, '', `#${encodeURIComponent(id)}`);
+    if (!historyReady() || id === lastHistoryId) return;
+    lastHistoryId = id;
+    if (suppressNextHistoryPush) {
+      // This navigation came from popstate: the browser already moved to the
+      // right entry, pushing would truncate the forward stack.
+      suppressNextHistoryPush = false;
+      return;
+    }
+    viewerDepth += 1;
+    window.history.pushState({ ippViewer: true, ippDepth: viewerDepth }, '', `#${encodeURIComponent(id)}`);
   });
 
   // Immich v3 album listings carry no EXIF or original filename; fetch the
@@ -226,8 +244,22 @@ export default function AssetViewer() {
 
   onMount(() => {
     window.addEventListener('keydown', handleKeydown);
-    const onPopState = () => {
-      pushedViewerEntry = false;
+    const onPopState = (event: PopStateEvent) => {
+      const id = assetIdFromHash(window.location.hash);
+      if (id) {
+        const assetList = list();
+        const assetIndex = assetList.findIndex((asset) => asset.id === id);
+        if (assetIndex >= 0) {
+          // Back/Forward landed on another image entry: navigate the viewer
+          // there and resync our depth from the entry's own state.
+          viewerDepth = (event.state as { ippDepth?: number } | null)?.ippDepth ?? 1;
+          suppressNextHistoryPush = true;
+          lastHistoryId = id;
+          selectAsset(assetList[assetIndex], assetIndex);
+          return;
+        }
+      }
+      viewerDepth = 0;
       closeViewer();
     };
     const onFullscreenChange = () => setFullscreen(document.fullscreenElement === viewerEl());
@@ -235,12 +267,13 @@ export default function AssetViewer() {
     document.addEventListener('fullscreenchange', onFullscreenChange);
     setFullscreenAvailable(Boolean(document.fullscreenEnabled && viewerEl()?.requestFullscreen));
 
+    viewerDepth = 1;
+    lastHistoryId = current().id;
     window.history.pushState(
-      { ...(window.history.state ?? {}), ippViewer: true },
+      { ippViewer: true, ippDepth: viewerDepth },
       '',
       `#${encodeURIComponent(current().id)}`
     );
-    pushedViewerEntry = true;
     setHistoryReady(true);
 
     onCleanup(() => {
