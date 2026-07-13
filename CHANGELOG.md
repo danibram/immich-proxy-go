@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-07-13
+
+### Features
+
+- ✨ Configurable media quality tiers, viewer zoom, deep links, and atomic ZIP jobs
+
+- options.max_download_quality (preview|fullsize|original, default original)
+  caps image download quality; videos always keep original bytes. Converted
+  downloads get a filename extension matching the served Content-Type.
+- options.max_zoom_quality (preview|fullsize, default preview) gates the new
+  viewer zoom. Full-size viewing additionally requires the Immich link's
+  allowDownload — it is Immich's full-resolution disclosure gate; the proxy's
+  download UI switch deliberately does not affect zoom.
+- Viewer: pinch/wheel zoom with a tested useViewerZoom hook, fullscreen,
+  #asset deep links with history handling (Back returns to the gallery),
+  dark mode via prefers-color-scheme.
+- /raw route serves an individual image share embeddable (no Sec-Fetch
+  guard), permission-aware.
+- ZIP download jobs rebuilt: assets stage atomically through a 4-worker
+  pool with retries (408/429/5xx); a ready job always contains every
+  requested file — no more silently incomplete archives. Entries use ZIP
+  STORE (photos/videos don't recompress).
+- Fullsize responses are always no-store; preview/thumbnail caching
+  unchanged.
+- e2e: new share-viewer-experience spec, wired into run.sh.
+
 ## [1.11.2] - 2026-07-10
 
 ### Bug Fixes
