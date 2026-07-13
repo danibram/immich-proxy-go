@@ -49,12 +49,17 @@ Custom slugs are configured in Immich when creating a shared link. They provide 
 - **Automatic dark mode** - Follows the device color scheme
 - **EXIF metadata** - Camera info, location, and file details
 - **Info panel** - Slide-out panel on desktop, bottom sheet on mobile
+- **Thumbhash placeholders & retries** - No blank or permanently broken tiles on flaky networks
+- **Video seeking** - Range/206 streaming passthrough
 
 ### Upload Support
 
 - **Drag & drop** - Upload photos to shared albums
-- **Progress tracking** - Real-time upload progress
-- **Batch upload** - Multiple files at once
+- **Optimistic grid** - Selected files appear instantly with per-tile states
+- **Checksum dedupe** - Already-uploaded files are detected before sending bytes ("already in album")
+- **Resilient on bad networks** - Stall watchdog, automatic retries with backoff, offline pause/resume
+- **Progress tracking** - Byte-weighted aggregate bar with smoothed ETA + per-tile progress
+- **Batch upload** - Multiple files at once; 3 adaptive parallel uploads
 - **Content-type validation** - Only allows images and videos
 
 ### Security
@@ -114,6 +119,8 @@ options:
   max_download_quality: original # preview, fullsize, original
   max_zoom_quality: preview      # preview, fullsize
   show_metadata: true
+  share_media_cache_ttl: 0       # >0: CDN/browser-cache public-share thumbnails (see Edge caching below)
+  protected_media_cache_ttl: 0   # >0: browser-only cache for password-share thumbnails
 
 security:
   rate_limit: 1000             # Requests per minute per IP

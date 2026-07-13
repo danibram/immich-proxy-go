@@ -21,6 +21,8 @@ options:
   max_zoom_quality: preview
   show_metadata: true
   cache_ttl: 3600
+  share_media_cache_ttl: 0       # public-share thumbnails: CDN/browser cacheable when > 0
+  protected_media_cache_ttl: 0   # protected-share thumbnails: browser-only cache when > 0
 
 security:
   rate_limit: 100
@@ -54,7 +56,9 @@ security:
 | `options.max_download_quality` | string | `original` | Maximum image download quality: `preview`, `fullsize`, or `original`; video downloads remain original |
 | `options.max_zoom_quality` | string | `preview` | Maximum zoom source: `preview` or `fullsize`; fullsize additionally requires `allowDownload` on the Immich share |
 | `options.show_metadata` | bool | `true` | Show EXIF metadata in viewer |
-| `options.cache_ttl` | int | `3600` | Cache TTL in seconds (currently unused) |
+| `options.cache_ttl` | int | `3600` | Cache TTL (seconds) for the proxy's static web assets |
+| `options.share_media_cache_ttl` | int | `0` | `Cache-Control: public, max-age=<ttl>` for thumbnails of PUBLIC shares so a CDN/browser can cache them. `0` = no-store. See the Cloudflare section in the README |
+| `options.protected_media_cache_ttl` | int | `0` | `Cache-Control: private, max-age=<ttl>` for thumbnails of password-protected shares — only the authenticated visitor's browser caches them; shared caches never do. `0` = no-store |
 
 **Note**: Downloads are blocked if EITHER:
 - `options.allow_download: false` in proxy config, OR

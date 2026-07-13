@@ -29,13 +29,18 @@ Password-protected shares require authentication via:
 | GET | `/shared-links/me` | Get share info and assets |
 | POST | `/shared-links/me/password` | Validate password |
 | GET | `/albums/{albumId}` | Get album details |
+| GET | `/assets/{assetId}` | Get asset details (EXIF, filename) |
 | GET | `/assets/{assetId}/thumbnail` | Get thumbnail image |
+| GET | `/assets/{assetId}/thumbnail.{ext}` | Thumbnail with extension (CDN-cacheable form) |
 | GET | `/assets/{assetId}/original` | Download original file |
 | GET | `/assets/{assetId}/video/playback` | Stream video |
 | POST | `/assets/download` | Start bulk download job |
 | GET | `/download/jobs/{jobId}` | Get download job status |
 | GET | `/download/jobs/{jobId}/file` | Download completed ZIP |
 | POST | `/assets` | Upload file |
+| POST | `/upload-check` | Pre-upload checksum dedupe check |
+| GET | `{share}/raw` | Raw bytes of an INDIVIDUAL image share (embeddable) |
+| GET | `{share}/og-cover` | Album cover for link unfurls (no Sec-Fetch guard) |
 
 ## Endpoints
 
@@ -134,7 +139,16 @@ GET /share/{key}/api/albums/{albumId}
 GET /share/{key}/api/assets/{assetId}/thumbnail?size=thumbnail|preview|fullsize
 ```
 
+```
+GET /share/{key}/api/assets/{assetId}/thumbnail.webp?size=thumbnail
+GET /share/{key}/api/assets/{assetId}/thumbnail.jpg?size=preview
+```
+
 **Response**: Image binary with appropriate `Content-Type`
+
+The extensioned form is what the web client uses: the extension makes the URL
+eligible for CDN default caching (Cloudflare caches by extension). Only `webp`
+and `jpg` are accepted; the extension is advisory — `Content-Type` wins.
 
 `fullsize` is available only when `options.max_zoom_quality: fullsize` and the
 Immich shared link allows downloads. It is never publicly cached.
@@ -175,7 +189,10 @@ is capped by `options.max_download_quality`; videos remain original.
 GET /share/{key}/api/assets/{assetId}/video/playback
 ```
 
-**Response**: Video stream
+**Response**: Video stream. The incoming `Range` header is forwarded to
+Immich and `206 Partial Content` / `Content-Range` / `Accept-Ranges` pass
+through, so browsers can seek. Streaming has no total deadline (an idle
+watchdog aborts transfers that stop making progress).
 
 ---
 
@@ -259,13 +276,18 @@ GET /share/{key}/api/download/jobs/{jobId}/file
 ```
 POST /share/{key}/api/assets
 Content-Type: multipart/form-data | image/* | video/*
+x-immich-checksum: <sha1 hex|base64>   (optional)
 ```
+
+When `x-immich-checksum` is sent and the asset already exists in the link
+owner's library, Immich short-circuits with `200 {"id": "...", "status":
+"duplicate"}` before the body is consumed.
 
 **Response**: `201 Created`
 ```json
 {
   "id": "uuid",
-  "duplicate": false
+  "status": "created"
 }
 ```
 
@@ -273,6 +295,27 @@ Content-Type: multipart/form-data | image/* | video/*
 - `403 Forbidden`: Upload not allowed for this share
 - `413 Request Entity Too Large`: File too large
 - `415 Unsupported Media Type`: Invalid file type
+
+### Pre-upload Check
+
+```
+POST /share/{key}/api/upload-check
+Content-Type: application/json
+
+{"files": [{"name": "IMG_0001.jpg", "checksum": "<sha1 hex|base64>"}]}
+```
+
+**Response**: `200 OK`
+```json
+{"results": [{"name": "IMG_0001.jpg", "checksum": "...", "exists": true, "assetId": "uuid"}]}
+```
+
+Lets the client skip sending bytes for files already in the album (the web
+client hashes in a Web Worker and calls this once per batch; up to 500 items).
+Fails open: on upstream trouble every file reports `exists: false`.
+Implementation notes: `docs/specs/immich-api.md`.
+
+---
 
 ## Error Responses
 
