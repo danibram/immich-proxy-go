@@ -5,6 +5,45 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-07-13
+
+### Documentation
+
+- 📝 Sync docs with code
+
+- config.md: document share_media_cache_ttl / protected_media_cache_ttl
+  (missing since 1.5/1.6); cache_ttl is the static-asset TTL, not unused.
+- api.md: overview gains asset-details, extensioned thumbnail, upload-check,
+  /raw and /og-cover routes; document the CDN-cacheable thumbnail.{ext} form,
+  video Range/206 seeking, the x-immich-checksum upload header and early
+  200-duplicate response (the response example still showed the deleted
+  'duplicate' field — it is {id, status}); new Pre-upload Check section.
+- README: upload feature list reflects the current pipeline (optimistic grid,
+  checksum dedupe, retries/offline); viewer list gains thumbhash placeholders
+  and video seeking; config example includes the media cache TTLs.
+
+
+### Other
+
+- 🔥 Prune endpoint surface: 4 routes removed or merged
+
+- Remove dead GET /albums/{albumID} (album details are embedded in
+  /shared-links/me; the web client's getAlbum had no call sites)
+- Remove GET /health alias; /healthcheck is the single health endpoint
+- Sunset the legacy extensionless GET /assets/{id}/thumbnail — the
+  pre-1.7 HTML that emitted those URLs was served no-store, so no
+  client can still hold them; only /thumbnail.{ext} remains
+- Merge GET {share}/og-cover into GET {share}/raw: ServeSingleImage now
+  resolves album covers (album thumbnail asset → first asset) and
+  ShareIndexHead points og:image at /raw. Covers of password-less
+  shares keep the public max-age=3600 default (operator TTLs win);
+  password-protected shares stay on the stricter private/no-store
+  thumbnail policy
+
+- Merge pull request #38 from danibram/codex/prune-endpoints
+
+♻️ Prune endpoint surface: drop dead/alias/legacy routes, merge og-cover into raw
+
 ## [1.13.1] - 2026-07-13
 
 ### Bug Fixes
