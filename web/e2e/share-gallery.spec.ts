@@ -148,4 +148,45 @@ test.describe('Share gallery (integration)', () => {
       })
       .toBeGreaterThanOrEqual(1);
   });
+
+  test('video playback honours Range requests with 206 Partial Content', async ({ page }) => {
+    const shareKey = requireEnv('DEFAULT_SHARE_KEY');
+    await openShareByKey(page, shareKey);
+
+    const videoTile = page.locator('[data-testid="gallery-item"][data-asset-type="VIDEO"]').first();
+    await expect(videoTile).toBeVisible();
+    await videoTile.click();
+    const src = await page.getByTestId('viewer-video').getAttribute('src');
+    expect(src).toBeTruthy();
+
+    // Seeking depends on the proxy forwarding Range upstream and passing the
+    // 206 + Content-Range back. page.request shares the browser context's
+    // cookies, and (unlike a document navigation) is not blocked by the
+    // hotlink guard.
+    const videoUrl = new URL(src!, page.url()).toString();
+    const response = await page.request.get(videoUrl, {
+      headers: { Range: 'bytes=0-1023' },
+    });
+    expect(response.status()).toBe(206);
+    expect(response.headers()['content-range']).toMatch(/^bytes 0-1023\//);
+    expect(Buffer.byteLength(await response.body())).toBe(1024);
+  });
+
+  test('grid tiles load the small thumbnail size, not preview', async ({ page }) => {
+    const shareKey = requireEnv('DEFAULT_SHARE_KEY');
+    const thumbs = trackThumbnailRequests(page);
+
+    try {
+      await openShareByKey(page, shareKey);
+      await expect.poll(async () => countLoadedThumbs(page)).toBeGreaterThan(0);
+
+      const gridRequests = thumbs.urls.filter((url) => url.includes('/thumbnail.'));
+      expect(gridRequests.length).toBeGreaterThan(0);
+      for (const url of gridRequests) {
+        expect(new URL(url).searchParams.get('size')).toBe('thumbnail');
+      }
+    } finally {
+      thumbs.stop();
+    }
+  });
 });

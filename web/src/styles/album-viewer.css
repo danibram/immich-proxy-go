@@ -140,6 +140,51 @@
   pointer-events: none;
 }
 
+/* Image slide stack: the main .vw-img stays in normal (flex-centered) flow so
+   zoom keeps measuring the real rendered rect, while the poster layers are
+   absolutely positioned behind it. All layers use the same contain-fit inside
+   the same box, so thumbhash, thumbnail poster and preview line up. */
+.app-share .album .vw-media {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-share .album .vw-poster {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.app-share .album .vw-poster-layer {
+  position: absolute;
+  max-width: 100%;
+  max-height: 100%;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Persistent placeholder when the slide exhausted its retry ladder: subtle
+   icon over the poster/thumbhash layers, which remain visible behind it. */
+.app-share .album .vw-broken {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.35);
+}
+
 .app-share .album .vw-slide .vid-ctl .vw-img {
   pointer-events: auto;
 }

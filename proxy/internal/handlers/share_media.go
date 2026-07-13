@@ -325,7 +325,11 @@ func (h *ShareHandler) GetVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.client.GetVideoWithKeyType(assetID, key, password, keyType)
+	// Forward the browser's Range header so Immich can answer 206 Partial
+	// Content: seeking (and resuming) then transfers only the requested
+	// bytes. proxyResponse passes the 206 status plus Content-Range and
+	// Accept-Ranges back through untouched.
+	resp, err := h.client.GetVideoWithKeyType(assetID, key, password, keyType, r.Header.Get("Range"))
 	if err != nil {
 		h.logger.Error("failed to get video", zap.Error(err))
 		http.Error(w, "Failed to get video", http.StatusInternalServerError)

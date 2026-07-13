@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, Info, Maximize2, Minimize2, X, ZoomIn, ZoomOut } from 'lucide-solid';
+import { ChevronLeft, ChevronRight, Download, ImageOff, Info, Maximize2, Minimize2, X, ZoomIn, ZoomOut } from 'lucide-solid';
 import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { captureEvent } from '~/analytics';
 import { api } from '~/api/client';
@@ -23,6 +23,8 @@ import {
   formatViewerFootSubtitle,
 } from '~/utils/viewerFormat';
 import { assetIdFromHash } from '~/utils/viewerDeepLink';
+import { createRetryingImage } from '~/utils/imageLoader';
+import { thumbhashToDataURL } from '~/utils/thumbhash';
 import ExifSheet from './ExifSheet';
 import ProtectedImage from './ProtectedImage';
 import ViewerVideoLayer from './ViewerVideoLayer';
@@ -36,8 +38,23 @@ function ViewerSlide(props: {
   interacting?: boolean;
   highQuality?: boolean;
 }) {
-  const poster = () =>
-    api.getThumbnailUrl(props.asset.id, props.current && props.highQuality ? 'fullsize' : 'preview');
+  // The slide loads `preview` (and `fullsize` on zoom, as before) with a
+  // retry-once-then-downgrade ladder; while it loads, the small `thumbnail`
+  // the grid already put in the browser cache is shown as an instant poster
+  // over the thumbhash base layer — no blank slides (the PhotoSwipe `msrc`
+  // idea). The ladder resets when the zoom quality toggles.
+  const loader = createRetryingImage({
+    sizes: () =>
+      props.current && props.highQuality
+        ? (['fullsize', 'preview', 'thumbnail'] as const)
+        : (['preview', 'thumbnail'] as const),
+    urlFor: (size, retry) => api.getThumbnailUrl(props.asset.id, size) + (retry ? '&retry=1' : ''),
+    // Carousel slides are reused across navigation (props swap, component
+    // persists), so a failed/loaded state must not leak to the next asset.
+    key: () => props.asset.id,
+  });
+  const posterUrl = () => api.getThumbnailUrl(props.asset.id, 'thumbnail');
+  const hashUrl = () => thumbhashToDataURL(props.asset.thumbhash);
 
   return (
     <div
@@ -52,30 +69,53 @@ function ViewerSlide(props: {
             class={`vw-zoom-layer ${props.interacting ? 'is-interacting' : ''}`}
             style={{ transform: props.current ? props.transform : undefined }}
           >
-            <Show
-              when={allowDownload()}
-              fallback={
-                <ProtectedImage
-                  src={poster()}
-                  alt={props.asset.originalFileName}
-                  class="vw-img"
-                />
-              }
-            >
-              <img
-                class="vw-img"
-                src={poster()}
-                alt={props.asset.originalFileName}
-                draggable={false}
-              />
-            </Show>
+            <div class="vw-media">
+              <Show when={!loader.loaded()}>
+                <div class="vw-poster" aria-hidden="true" data-testid="viewer-poster">
+                  <Show when={hashUrl()}>
+                    <img class="vw-poster-layer" src={hashUrl()} alt="" draggable={false} />
+                  </Show>
+                  <img class="vw-poster-layer" src={posterUrl()} alt="" draggable={false} />
+                </div>
+              </Show>
+              <Show
+                when={!loader.failed()}
+                fallback={
+                  <div class="vw-broken" data-testid="viewer-image-broken">
+                    <ImageOff size={28} />
+                  </div>
+                }
+              >
+                <Show
+                  when={allowDownload()}
+                  fallback={
+                    <ProtectedImage
+                      src={loader.src()!}
+                      alt={props.asset.originalFileName}
+                      class="vw-img"
+                      onLoad={loader.onLoad}
+                      onError={loader.onError}
+                    />
+                  }
+                >
+                  <img
+                    class="vw-img"
+                    src={loader.src()}
+                    alt={props.asset.originalFileName}
+                    draggable={false}
+                    onLoad={loader.onLoad}
+                    onError={loader.onError}
+                  />
+                </Show>
+              </Show>
+            </div>
           </div>
         }
       >
         <ViewerVideoLayer
           assetId={props.asset.id}
           duration={props.asset.duration}
-          posterUrl={poster()}
+          posterUrl={api.getThumbnailUrl(props.asset.id, 'preview')}
         />
       </Show>
     </div>

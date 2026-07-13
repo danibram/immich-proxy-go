@@ -135,7 +135,44 @@ func (h *ShareHandler) proxyResponseWithCache(w http.ResponseWriter, resp *http.
 	}
 
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	// The media client has no total timeout (a long video must be allowed to
+	// stream for minutes), so the copy itself guards against a hung upstream:
+	// if no bytes are delivered for mediaIdleTimeout the stream is aborted.
+	copyWithIdleTimeout(w, resp.Body, mediaIdleTimeout)
+}
+
+// mediaIdleTimeout is how long a media stream may go without delivering a
+// single byte before the proxy gives up on it. Generous on purpose: it only
+// needs to catch genuinely wedged connections, never slow-but-alive ones.
+const mediaIdleTimeout = 60 * time.Second
+
+// copyWithIdleTimeout streams src to dst, aborting when no bytes have been
+// delivered for the given idle duration. Progress — not wall clock — is the
+// health signal, so a multi-minute video download is fine while a wedged
+// upstream (or client) is reclaimed after one idle window. The abort works by
+// closing src, which unblocks the pending Read with an error.
+func copyWithIdleTimeout(dst io.Writer, src io.ReadCloser, idle time.Duration) error {
+	watchdog := time.AfterFunc(idle, func() { src.Close() })
+	defer watchdog.Stop()
+
+	buf := make([]byte, 64*1024)
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			if _, writeErr := dst.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+			// Re-arm only after the bytes reached the client: a stalled
+			// client write counts as lack of progress too.
+			watchdog.Reset(idle)
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return nil
+			}
+			return readErr
+		}
+	}
 }
 
 // handleError handles errors from the Immich client

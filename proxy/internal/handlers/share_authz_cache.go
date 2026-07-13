@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -77,6 +78,22 @@ func (h *ShareHandler) authorizeShareRequest(r *http.Request) error {
 			err = immich.ErrSharedLinkNotFound
 		}
 	}
-	h.authzCache.set(cacheKey, err)
+	// Only definitive verdicts are cached. A transient failure (Immich
+	// momentarily unreachable, a stray 5xx) must fail just this one request;
+	// caching it would keep every media request for the share dead for a full
+	// TTL after the upstream has already recovered.
+	if isDefinitiveAuthzVerdict(err) {
+		h.authzCache.set(cacheKey, err)
+	}
 	return err
+}
+
+// isDefinitiveAuthzVerdict reports whether an authorization outcome is a
+// stable property of the share + credentials (authorized, wrong/missing
+// password, link gone or expired) rather than a transient upstream condition
+// (network error, upstream unavailable, unexpected 5xx).
+func isDefinitiveAuthzVerdict(err error) bool {
+	return err == nil ||
+		errors.Is(err, immich.ErrPasswordRequired) ||
+		errors.Is(err, immich.ErrSharedLinkNotFound)
 }

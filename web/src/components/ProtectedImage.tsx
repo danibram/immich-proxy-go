@@ -5,6 +5,7 @@ interface ProtectedImageProps {
   alt: string;
   class?: string;
   onLoad?: () => void;
+  onError?: () => void;
 }
 
 /**
@@ -43,6 +44,9 @@ const ProtectedImage: Component<ProtectedImageProps> = (props) => {
 
     img.onerror = () => {
       console.error('Failed to load protected image:', props.src);
+      // Surface the failure so the owner can retry/downgrade the URL —
+      // silently staying on an empty canvas is exactly the bug this fixes.
+      props.onError?.();
     };
 
     img.src = props.src;

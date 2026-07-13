@@ -1,4 +1,4 @@
-import { Check, Play } from 'lucide-solid';
+import { Check, ImageOff, Play } from 'lucide-solid';
 import { batch, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, untrack } from 'solid-js';
 import type { Accessor } from 'solid-js';
 import { captureEvent } from '~/analytics';
@@ -6,6 +6,8 @@ import { api } from '~/api/client';
 import type { Asset } from '~/api/types';
 import { t } from '~/i18n';
 import { formatDuration, groupAssetsByDate } from '~/utils/dateUtils';
+import { createRetryingImage } from '~/utils/imageLoader';
+import { thumbhashBackground } from '~/utils/thumbhash';
 import {
   assets,
   isAssetSelected,
@@ -69,22 +71,37 @@ function readMetrics(el: HTMLElement): LayoutMetrics {
 
 /**
  * Mount = load: the <img> gets its src the moment it enters the load
- * window, and unmounting removes the element. There is no queued/loading/
- * loaded state to keep in sync — a failed preview falls back to the
- * thumbnail size once, and a remount resets everything.
+ * window, and unmounting removes the element. Grid tiles request the small
+ * webp `thumbnail` size (the tile is at most a few hundred px — the old
+ * `preview` fetched ~1440px images per tile); the viewer is what loads
+ * `preview`. On error the tile retries the same URL once after a short
+ * backoff (with a `&retry=1` marker so normal URLs stay CDN-cacheable),
+ * then settles on a persistent placeholder over the thumbhash background.
+ * A remount (scroll away and back) resets everything, as before.
  */
 function Thumb(props: { assetId: string }) {
-  const [size, setSize] = createSignal<'preview' | 'thumbnail'>('preview');
-  const [failed, setFailed] = createSignal(false);
+  const loader = createRetryingImage({
+    sizes: () => ['thumbnail'] as const,
+    urlFor: (size, retry) => api.getThumbnailUrl(props.assetId, size) + (retry ? '&retry=1' : ''),
+    key: () => props.assetId,
+  });
 
   return (
-    <Show when={!failed()}>
+    <Show
+      when={!loader.failed()}
+      fallback={
+        <div class="thumb-broken" data-testid="gallery-thumb-broken">
+          <ImageOff size={18} />
+        </div>
+      }
+    >
       <img
         data-testid="gallery-thumb"
-        src={api.getThumbnailUrl(props.assetId, size())}
+        src={loader.src()}
         alt=""
         decoding="async"
-        onError={() => (size() === 'preview' ? setSize('thumbnail') : setFailed(true))}
+        onLoad={loader.onLoad}
+        onError={loader.onError}
       />
     </Show>
   );
@@ -388,7 +405,15 @@ export default function AssetTimeline(props: Props) {
         role="button"
         tabIndex={0}
       >
-        <div class="thumb-img-slot" data-testid="gallery-thumb-slot">
+        <div
+          class="thumb-img-slot"
+          data-testid="gallery-thumb-slot"
+          // Thumbhash placeholder: paints instantly while the real thumbnail
+          // loads and stays visible behind the broken-image fallback. The
+          // decode is memoized module-wide, so remounts during virtual
+          // scrolling never re-decode.
+          style={{ 'background-image': thumbhashBackground(asset.thumbhash) }}
+        >
           <Show when={load()}>
             <Thumb assetId={asset.id} />
           </Show>

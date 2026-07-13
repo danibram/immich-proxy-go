@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,8 +15,19 @@ import (
 
 // Client is an HTTP client for the Immich API
 type Client struct {
-	baseURL    string
+	baseURL string
+	// httpClient serves JSON/API calls. Its total Timeout is correct there:
+	// no API response should take longer than 30s end to end.
 	httpClient *http.Client
+	// mediaClient serves streaming media (thumbnails, originals, video
+	// playback, download staging). Go's http.Client.Timeout keeps counting
+	// while the response body streams, so a total deadline would kill any
+	// transfer that takes longer than it — a long video can never finish
+	// through a 30s-total client. This client therefore has NO total timeout;
+	// instead the transport bounds each phase that can hang (dial, TLS,
+	// waiting for response headers), and the handlers' streaming copy aborts
+	// on idle (no bytes for a while) rather than on wall clock.
+	mediaClient *http.Client
 
 	// Cache of Immich v3 shared-link auth tokens for password-protected
 	// shares, keyed by keyType|key|password. See share_token.go.
@@ -38,7 +50,35 @@ func NewClient(baseURL string) *Client {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
+		mediaClient: &http.Client{
+			// No total timeout: media bodies may legitimately stream for
+			// minutes (see the field comment). Per-phase limits live in the
+			// transport below.
+			Timeout:   0,
+			Transport: newMediaTransport(),
+		},
 		shareTokens: make(map[string]shareTokenEntry),
+	}
+}
+
+// newMediaTransport bounds every phase of a media request that can hang
+// without a total deadline killing healthy long transfers. MaxIdleConnsPerHost
+// is raised well above Go's default of 2 because a gallery viewport easily
+// fires dozens of concurrent thumbnail requests at the single Immich host, and
+// with 2 idle slots the rest would re-dial (and re-TLS) every burst.
+func newMediaTransport() *http.Transport {
+	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		MaxIdleConns:          32,
+		MaxIdleConnsPerHost:   16,
+		IdleConnTimeout:       90 * time.Second,
 	}
 }
 
@@ -207,6 +247,13 @@ func (c *Client) GetAssetWithKeyType(assetID string, key string, password string
 
 // ProxyRequest forwards an HTTP request to Immich and returns the response
 func (c *Client) ProxyRequest(method, path string, query url.Values, headers http.Header, body io.Reader) (*http.Response, error) {
+	return c.proxyRequestWith(c.httpClient, method, path, query, headers, body)
+}
+
+// proxyRequestWith is ProxyRequest with an explicit http.Client, so media
+// paths can use the streaming client (no total timeout) while JSON/API paths
+// keep the hard 30s deadline.
+func (c *Client) proxyRequestWith(client *http.Client, method, path string, query url.Values, headers http.Header, body io.Reader) (*http.Response, error) {
 	// Build URL
 	reqURL := fmt.Sprintf("%s%s", c.baseURL, path)
 	if len(query) > 0 {
@@ -225,7 +272,7 @@ func (c *Client) ProxyRequest(method, path string, query url.Values, headers htt
 		}
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, wrapTransportError(err)
 	}
@@ -247,6 +294,36 @@ func (c *Client) proxyShareRequest(
 	headers http.Header,
 	body io.Reader,
 ) (*http.Response, error) {
+	return c.proxyShareRequestWith(c.httpClient, method, path, key, password, keyType, query, headers, body)
+}
+
+// proxyShareMediaRequest is proxyShareRequest over the media client: same
+// authentication handling, but no total timeout so long body streams
+// (videos, originals) are never killed mid-transfer.
+func (c *Client) proxyShareMediaRequest(
+	method string,
+	path string,
+	key string,
+	password string,
+	keyType KeyType,
+	query url.Values,
+	headers http.Header,
+	body io.Reader,
+) (*http.Response, error) {
+	return c.proxyShareRequestWith(c.mediaClient, method, path, key, password, keyType, query, headers, body)
+}
+
+func (c *Client) proxyShareRequestWith(
+	client *http.Client,
+	method string,
+	path string,
+	key string,
+	password string,
+	keyType KeyType,
+	query url.Values,
+	headers http.Header,
+	body io.Reader,
+) (*http.Response, error) {
 	if headers == nil {
 		headers = http.Header{}
 	}
@@ -256,13 +333,27 @@ func (c *Client) proxyShareRequest(
 			headers.Set("Cookie", sharedLinkTokenCookie+"="+token)
 		}
 	}
-	return c.proxyShareRequestWithoutToken(method, path, key, password, keyType, query, headers, body)
+	return c.proxyShareRequestWithoutTokenWith(client, method, path, key, password, keyType, query, headers, body)
 }
 
 // proxyShareRequestWithoutToken applies key/slug/password authentication but
 // never attaches the shared-link token cookie. It exists so the token login
 // call itself cannot recurse.
 func (c *Client) proxyShareRequestWithoutToken(
+	method string,
+	path string,
+	key string,
+	password string,
+	keyType KeyType,
+	query url.Values,
+	headers http.Header,
+	body io.Reader,
+) (*http.Response, error) {
+	return c.proxyShareRequestWithoutTokenWith(c.httpClient, method, path, key, password, keyType, query, headers, body)
+}
+
+func (c *Client) proxyShareRequestWithoutTokenWith(
+	client *http.Client,
 	method string,
 	path string,
 	key string,
@@ -301,7 +392,7 @@ func (c *Client) proxyShareRequestWithoutToken(
 		headers.Set("x-immich-share-password", password)
 	}
 
-	return c.ProxyRequest(method, path, query, headers, body)
+	return c.proxyRequestWith(client, method, path, query, headers, body)
 }
 
 // GetThumbnail retrieves an asset thumbnail
@@ -317,7 +408,7 @@ func (c *Client) GetThumbnailWithKeyType(assetID string, key string, password st
 		query.Set("size", size)
 	}
 
-	return c.proxyShareRequest("GET", path, key, password, keyType, query, nil, nil)
+	return c.proxyShareMediaRequest("GET", path, key, password, keyType, query, nil, nil)
 }
 
 // GetOriginal retrieves the original asset file
@@ -328,18 +419,26 @@ func (c *Client) GetOriginal(assetID string, key string, password string) (*http
 // GetOriginalWithKeyType retrieves the original asset file with specified key type
 func (c *Client) GetOriginalWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/original", assetID)
-	return c.proxyShareRequest("GET", path, key, password, keyType, nil, nil, nil)
+	return c.proxyShareMediaRequest("GET", path, key, password, keyType, nil, nil, nil)
 }
 
 // GetVideo retrieves a video for playback
 func (c *Client) GetVideo(assetID string, key string, password string) (*http.Response, error) {
-	return c.GetVideoWithKeyType(assetID, key, password, KeyTypeKey)
+	return c.GetVideoWithKeyType(assetID, key, password, KeyTypeKey, "")
 }
 
-// GetVideoWithKeyType retrieves a video for playback with specified key type
-func (c *Client) GetVideoWithKeyType(assetID string, key string, password string, keyType KeyType) (*http.Response, error) {
+// GetVideoWithKeyType retrieves a video for playback with specified key type.
+// rangeHeader, when non-empty, is the incoming request's Range header; it is
+// forwarded so Immich can answer 206 Partial Content and browsers can seek
+// without downloading the whole file.
+func (c *Client) GetVideoWithKeyType(assetID string, key string, password string, keyType KeyType, rangeHeader string) (*http.Response, error) {
 	path := fmt.Sprintf("/api/assets/%s/video/playback", assetID)
-	return c.proxyShareRequest("GET", path, key, password, keyType, nil, nil, nil)
+	var headers http.Header
+	if rangeHeader != "" {
+		headers = http.Header{}
+		headers.Set("Range", rangeHeader)
+	}
+	return c.proxyShareMediaRequest("GET", path, key, password, keyType, nil, headers, nil)
 }
 
 // UploadAsset uploads an asset via a shared link (uses key by default)
