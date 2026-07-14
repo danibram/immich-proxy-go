@@ -38,6 +38,8 @@ export const en = {
     cancel: 'Cancel',
     download: 'Download',
     downloadAll: 'Download all',
+    addPhotos: 'Add photos',
+    moreActions: 'More actions',
     upload: 'Upload',
     uploadItems: 'Upload items',
     selected: (n: number) => `${n} selected`,

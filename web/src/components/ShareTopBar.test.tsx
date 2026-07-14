@@ -11,6 +11,7 @@ import {
 import ShareTopBar from './ShareTopBar';
 
 const defaultProps = () => ({
+  dateRange: null,
   wide: false,
   collapsed: false,
   onUploadClick: vi.fn(),
@@ -58,18 +59,23 @@ describe('ShareTopBar', () => {
     });
   });
 
-  it('shows download button when allowDownload is true', () => {
+  it('moves download all into the secondary actions menu', () => {
     createRoot((dispose) => {
       render(() => <ShareTopBar {...defaultProps()} />);
-      expect(screen.getByRole('button', { name: /download all/i })).toBeInTheDocument();
+      const trigger = screen.getByLabelText(/more actions/i);
+      const menu = trigger.closest('details')!;
+      expect(menu).not.toHaveAttribute('open');
+      fireEvent.click(trigger);
+      expect(menu).toHaveAttribute('open');
+      expect(screen.getByRole('menuitem', { name: /download all/i })).toBeInTheDocument();
       dispose();
     });
   });
 
-  it('shows upload button when allowUpload is true', () => {
+  it('shows add photos as the primary album action', () => {
     createRoot((dispose) => {
       render(() => <ShareTopBar {...defaultProps()} />);
-      expect(screen.getByRole('button', { name: /upload items/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /add photos/i })).toBeInTheDocument();
       dispose();
     });
   });
@@ -86,8 +92,22 @@ describe('ShareTopBar', () => {
     createRoot((dispose) => {
       const props = defaultProps();
       render(() => <ShareTopBar {...props} />);
-      fireEvent.click(screen.getByRole('button', { name: /upload items/i }));
+      fireEvent.click(screen.getByRole('button', { name: /add photos/i }));
       expect(props.onUploadClick).toHaveBeenCalled();
+      dispose();
+    });
+  });
+
+  it('calls onDownloadAll from the secondary actions menu', () => {
+    createRoot((dispose) => {
+      const props = defaultProps();
+      render(() => <ShareTopBar {...props} />);
+      const trigger = screen.getByLabelText(/more actions/i);
+      const menu = trigger.closest('details')!;
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole('menuitem', { name: /download all/i }));
+      expect(props.onDownloadAll).toHaveBeenCalled();
+      expect(menu).not.toHaveAttribute('open');
       dispose();
     });
   });
@@ -120,6 +140,7 @@ describe('ShareTopBar', () => {
       });
       render(() => <ShareTopBar {...defaultProps()} />);
       expect(screen.queryByRole('button', { name: /download/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /more actions/i })).toBeNull();
       dispose();
     });
   });

@@ -1,5 +1,5 @@
-import { Check, CheckSquare, Download, Folder, Upload, X } from 'lucide-solid';
-import { Show, type JSX } from 'solid-js';
+import { Check, Download, Ellipsis, Plus, X } from 'lucide-solid';
+import { onCleanup, onMount, Show, type JSX } from 'solid-js';
 import { captureEvent, isFeatureEnabled } from '~/analytics';
 import { t } from '~/i18n';
 import {
@@ -26,12 +26,14 @@ function itemCountLabel() {
   return t().topbar.itemCount(assets().length);
 }
 
+function enterSelectionMode() {
+  captureEvent('selection_mode_enabled', { source: 'header' });
+  setIsSelectionMode(true);
+}
+
 function AlbumIdentity(props: { small?: boolean; dateRange?: string | null; withTestIds?: boolean }) {
   return (
     <div class={`tb-id ${props.small ? 'small' : ''}`}>
-      <span class="tb-av">
-        <Folder size={props.small ? 17 : 20} stroke-width={2} />
-      </span>
       <div class="tb-idtext">
         <span class="tb-title" {...(props.withTestIds ? { 'data-testid': 'album-title' } : {})}>
           {albumName()}
@@ -48,15 +50,95 @@ function AlbumIdentity(props: { small?: boolean; dateRange?: string | null; with
   );
 }
 
+function SelectButton(props: { class?: string }) {
+  return (
+    <button type="button" class={props.class ?? 'tb-select'} onClick={enterSelectionMode}>
+      {t().topbar.select}
+    </button>
+  );
+}
+
+function MoreActions(props: { onDownloadAll: () => void }) {
+  let root: HTMLDetailsElement | undefined;
+  let trigger: HTMLElement | undefined;
+
+  onMount(() => {
+    const closeFromOutside = (event: PointerEvent) => {
+      if (root?.open && !root.contains(event.target as Node)) root.open = false;
+    };
+    const closeFromKeyboard = (event: KeyboardEvent) => {
+      if (!root?.open || event.key !== 'Escape') return;
+      root.open = false;
+      trigger?.focus();
+    };
+    document.addEventListener('pointerdown', closeFromOutside);
+    document.addEventListener('keydown', closeFromKeyboard);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', closeFromOutside);
+      document.removeEventListener('keydown', closeFromKeyboard);
+    });
+  });
+
+  const downloadAll = () => {
+    if (root) root.open = false;
+    props.onDownloadAll();
+  };
+
+  return (
+    <Show when={shareCapabilities().canDownload}>
+      <details class="action-menu" ref={root}>
+        <summary
+          ref={trigger}
+          class="action-menu-trigger"
+          aria-label={t().topbar.moreActions}
+          aria-haspopup="menu"
+        >
+          <Ellipsis size={22} stroke-width={2} />
+        </summary>
+        <div class="action-menu-popover" role="menu">
+          <button type="button" role="menuitem" onClick={downloadAll}>
+            <Download size={18} stroke-width={2} />
+            {t().topbar.downloadAll}
+          </button>
+        </div>
+      </details>
+    </Show>
+  );
+}
+
+function AddPhotosButton(props: { hero?: boolean; onClick?: () => void }) {
+  const visible = () =>
+    shareCapabilities().canUpload && isFeatureEnabled('upload-ui', true);
+
+  return (
+    <Show when={visible()}>
+      <button
+        type="button"
+        class={props.hero ? 'hero-add' : 'tb-tbtn primary'}
+        onClick={() => props.onClick?.()}
+      >
+        <Plus size={18} stroke-width={2.2} />
+        {t().topbar.addPhotos}
+      </button>
+    </Show>
+  );
+}
+
 function MobileHero(props: Pick<Props, 'dateRange' | 'onUploadClick' | 'onDownloadAll'>) {
-  const caps = shareCapabilities;
-  const showUpload = () => caps().canUpload && isFeatureEnabled('upload-ui', true);
+  const hasActions = () =>
+    shareCapabilities().canDownload ||
+    (shareCapabilities().canUpload && isFeatureEnabled('upload-ui', true));
 
   return (
     <header class="hero">
-      <h1 class="hero-title" data-testid="album-title">
-        {albumName()}
-      </h1>
+      <div class="hero-heading">
+        <h1 class="hero-title" data-testid="album-title">
+          {albumName()}
+        </h1>
+        <Show when={shareCapabilities().canSelect}>
+          <SelectButton class="hero-select" />
+        </Show>
+      </div>
       <div class="hero-meta" data-testid="album-meta">
         <span>{itemCountLabel()}</span>
         <Show when={props.dateRange}>
@@ -64,20 +146,12 @@ function MobileHero(props: Pick<Props, 'dateRange' | 'onUploadClick' | 'onDownlo
           <span>{props.dateRange}</span>
         </Show>
       </div>
-      <div class="hero-actions">
-        <Show when={caps().canDownload}>
-          <button type="button" class="st-btn-dl" onClick={props.onDownloadAll}>
-            <Download size={18} stroke-width={2} />
-            {t().topbar.downloadAll}
-          </button>
-        </Show>
-        <Show when={showUpload()}>
-          <button type="button" class="st-btn-up" onClick={() => props.onUploadClick?.()}>
-            <Upload size={18} stroke-width={2} />
-            {t().topbar.uploadItems}
-          </button>
-        </Show>
-      </div>
+      <Show when={hasActions()}>
+        <div class="hero-actions">
+          <AddPhotosButton hero onClick={props.onUploadClick} />
+          <MoreActions onDownloadAll={props.onDownloadAll} />
+        </div>
+      </Show>
     </header>
   );
 }
@@ -90,55 +164,24 @@ function IconBtn(props: { label: string; onClick: () => void; children: JSX.Elem
   );
 }
 
-function TextBtn(props: {
-  label: string;
-  onClick: () => void;
-  primary?: boolean;
-  children: JSX.Element;
-}) {
-  return (
-    <button type="button" class={`tb-tbtn ${props.primary ? 'primary' : ''}`} onClick={props.onClick}>
-      {props.children} {props.label}
-    </button>
-  );
-}
-
-function BrowseActions(props: Pick<Props, 'wide' | 'onUploadClick' | 'onDownloadAll'>) {
-  const caps = shareCapabilities;
-  const showUpload = () => caps().canUpload && isFeatureEnabled('upload-ui', true);
-  const showSelect = () => caps().canSelect;
-
-  const enterSelect = () => {
-    captureEvent('selection_mode_enabled', { source: 'header' });
-    setIsSelectionMode(true);
-  };
-
+function BrowseActions(props: Pick<Props, 'wide' | 'collapsed' | 'onUploadClick' | 'onDownloadAll'>) {
   return (
     <Show
       when={props.wide}
       fallback={
-        <Show when={showSelect()}>
-          <IconBtn label={t().topbar.select} onClick={enterSelect}>
-            <CheckSquare size={22} stroke-width={2} />
-          </IconBtn>
+        <Show when={props.collapsed}>
+          <Show when={shareCapabilities().canSelect}>
+            <SelectButton />
+          </Show>
+          <MoreActions onDownloadAll={props.onDownloadAll} />
         </Show>
       }
     >
-      <Show when={showSelect()}>
-        <TextBtn label={t().topbar.select} onClick={enterSelect}>
-          <CheckSquare size={18} stroke-width={2} />
-        </TextBtn>
+      <Show when={shareCapabilities().canSelect}>
+        <SelectButton />
       </Show>
-      <Show when={caps().canDownload}>
-        <TextBtn label={t().topbar.download} onClick={props.onDownloadAll}>
-          <Download size={18} stroke-width={2} />
-        </TextBtn>
-      </Show>
-      <Show when={showUpload()}>
-        <TextBtn label={t().topbar.upload} onClick={() => props.onUploadClick?.()} primary>
-          <Upload size={18} stroke-width={2} />
-        </TextBtn>
-      </Show>
+      <AddPhotosButton onClick={props.onUploadClick} />
+      <MoreActions onDownloadAll={props.onDownloadAll} />
     </Show>
   );
 }
@@ -182,8 +225,6 @@ export default function ShareTopBar(props: Props) {
     setIsSelectionMode(false);
   };
 
-  const identityTestIds = () => props.wide;
-
   return (
     <Show
       when={isSelectionMode()}
@@ -197,14 +238,19 @@ export default function ShareTopBar(props: Props) {
             <div class="tb-left">
               <Show
                 when={props.wide}
-                fallback={<AlbumIdentity small dateRange={props.dateRange} withTestIds={false} />}
+                fallback={
+                  <Show when={props.collapsed}>
+                    <AlbumIdentity small dateRange={props.dateRange} withTestIds={false} />
+                  </Show>
+                }
               >
-                <AlbumIdentity dateRange={props.dateRange} withTestIds={identityTestIds()} />
+                <AlbumIdentity dateRange={props.dateRange} withTestIds />
               </Show>
             </div>
             <div class="tb-actions">
               <BrowseActions
                 wide={props.wide}
+                collapsed={props.collapsed}
                 onUploadClick={props.onUploadClick}
                 onDownloadAll={props.onDownloadAll}
               />

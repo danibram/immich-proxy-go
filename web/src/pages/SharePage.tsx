@@ -4,7 +4,6 @@ import { createEffect, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import {
   captureEvent,
   getShareRouteTypeFromPath,
-  isFeatureEnabled,
   registerPage,
   registerShareContext,
   unregisterPage,
@@ -18,7 +17,6 @@ import AssetViewer from '~/components/AssetViewer';
 import DownloadProgress from '~/components/DownloadProgress';
 import PasswordPrompt from '~/components/PasswordPrompt';
 import ShareTopBar from '~/components/ShareTopBar';
-import UploadFab from '~/components/UploadFab';
 import UploadModal from '~/components/UploadModal';
 import { useMatchMedia } from '~/hooks/useMatchMedia';
 import {
@@ -26,7 +24,6 @@ import {
   error,
   getSelectedAssets,
   isLoading,
-  isSelectionMode,
   passwordRequired,
   selectedAsset,
   selectAsset,
@@ -35,7 +32,6 @@ import {
   setLoadedSharedLink,
   setPasswordRequired,
   setSharedLink,
-  shareCapabilities,
   sharedLink,
 } from '~/store/share';
 import {
@@ -156,14 +152,6 @@ export default function SharePage() {
     void downloadAssets(assetList, source, setDownloadState);
   }
 
-  const fabHidden = () =>
-    wide() ||
-    !isFeatureEnabled('upload-ui', true) ||
-    !shareCapabilities().canUpload ||
-    isSelectionMode() ||
-    selectedAsset() !== null ||
-    showUploadModal();
-
   return (
     <>
       <title>{sharedLink()?.album?.albumName || t().share.documentTitleFallback} - Immich Public Proxy</title>
@@ -230,7 +218,6 @@ export default function SharePage() {
             </div>
           </div>
 
-          <UploadFab hidden={fabHidden()} onClick={() => setShowUploadModal(true)} />
           <UploadModal isOpen={showUploadModal()} onClose={() => setShowUploadModal(false)} />
 
           <DownloadProgress

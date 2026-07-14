@@ -40,8 +40,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 58px;
-  padding: 0 8px 0 14px;
+  height: 52px;
+  padding: 0 8px 0 16px;
   background: transparent;
   border-bottom: 1px solid transparent;
   transition:
@@ -59,9 +59,9 @@
 }
 
 .app-share .album[data-wide='1'] .topbar {
-  height: 68px;
-  padding: 0 20px;
-  gap: 18px;
+  height: 56px;
+  padding: 0 18px;
+  gap: 16px;
 }
 
 .app-share .tb-left {
@@ -76,12 +76,12 @@
 .app-share .tb-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex: 0 0 auto;
 }
 
 .app-share .album[data-wide='1'] .tb-actions {
-  gap: 9px;
+  gap: 7px;
 }
 
 .app-share .tb-count {
@@ -93,26 +93,7 @@
 .app-share .tb-id {
   display: flex;
   align-items: center;
-  gap: 11px;
   min-width: 0;
-}
-
-.app-share .tb-av {
-  flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(34, 197, 94, 0.12);
-  color: var(--accent);
-}
-
-.app-share .tb-id.small .tb-av {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
 }
 
 .app-share .tb-idtext {
@@ -124,7 +105,7 @@
 
 .app-share .tb-title {
   font-family: var(--font-title);
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--fg-1);
@@ -134,14 +115,14 @@
 }
 
 .app-share .tb-id.small .tb-title {
-  font-size: 15px;
+  font-size: 14.5px;
 }
 
 .app-share .tb-meta {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--fg-3);
   white-space: nowrap;
 }
@@ -204,12 +185,37 @@
   color: var(--accent);
 }
 
+.app-share .tb-select,
+.app-share .hero-select {
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.app-share .tb-select:hover,
+.app-share .hero-select:hover {
+  background: var(--chip-bg);
+  color: var(--fg-1);
+}
+
 .app-share .tb-tbtn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 40px;
-  padding: 0 15px;
+  height: 38px;
+  padding: 0 14px;
   border-radius: 10px;
   border: 1px solid var(--border);
   background: transparent;
@@ -236,12 +242,18 @@
 }
 
 .app-share .hero {
-  padding: 20px 20px 12px;
+  padding: 0 16px 10px;
 }
 
 .app-share .album[data-wide='0'] .hero {
-  margin-top: -48px;
-  padding-top: 4px;
+  margin-top: -44px;
+}
+
+.app-share .hero-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 .app-share .hero-kicker {
@@ -258,8 +270,12 @@
   margin: 0;
   font-family: var(--font-title);
   font-weight: 600;
-  font-size: 34px;
-  line-height: 1.04;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 30px;
+  line-height: 1.08;
   letter-spacing: -0.02em;
   color: var(--fg-1);
 }
@@ -273,8 +289,8 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  margin-top: 10px;
-  font-size: 14px;
+  margin-top: 5px;
+  font-size: 13.5px;
   color: var(--fg-2);
 }
 
@@ -287,53 +303,112 @@
 
 .app-share .hero-actions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-top: 18px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
 }
 
-.app-share .st-btn-dl,
-.app-share .st-btn-up {
+.app-share .hero-add {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 42px;
-  padding: 0 18px;
+  min-height: 40px;
+  padding: 0 16px;
   border-radius: 999px;
   font: inherit;
-  font-size: 14.5px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  border: 1px solid transparent;
+  border: none;
+  background: var(--accent);
+  color: oklch(99% 0.004 145);
   transition:
     transform 0.12s ease,
     background 0.15s ease;
 }
 
-.app-share .st-btn-dl {
-  background: var(--accent);
-  color: #fff;
-}
-
-.app-share .st-btn-dl:hover {
+.app-share .hero-add:hover {
   background: var(--accent-press);
   transform: translateY(-1px);
 }
 
-.app-share .st-btn-up {
-  background: transparent;
-  color: var(--fg-1);
-  border-color: var(--border);
+.app-share .action-menu {
+  position: relative;
+  flex: 0 0 auto;
 }
 
-.app-share .st-btn-up:hover {
+.app-share .hero-actions > .action-menu {
+  margin-left: auto;
+}
+
+.app-share .action-menu-trigger {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-1);
+  cursor: pointer;
+  list-style: none;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease;
+}
+
+.app-share .action-menu-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.app-share .action-menu-trigger:hover,
+.app-share .action-menu[open] > .action-menu-trigger {
   background: var(--chip-bg);
-  transform: translateY(-1px);
+}
+
+.app-share .action-menu-trigger:active {
+  transform: scale(0.94);
+}
+
+.app-share .action-menu-popover {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 38;
+  min-width: 176px;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: var(--shadow-md);
+}
+
+.app-share .action-menu-popover button {
+  width: 100%;
+  height: 40px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-1);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-share .action-menu-popover button:hover {
+  background: var(--chip-bg);
 }
 
 .app-share .hero-note {
   font-size: 13px;
   color: var(--fg-3);
 }
-

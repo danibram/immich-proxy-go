@@ -35,6 +35,8 @@ export const es: Messages = {
     cancel: 'Cancelar',
     download: 'Descargar',
     downloadAll: 'Descargar todo',
+    addPhotos: 'Añadir fotos',
+    moreActions: 'Más acciones',
     upload: 'Subir',
     uploadItems: 'Subir elementos',
     selected: (n: number) => `${n} seleccionado${n === 1 ? '' : 's'}`,
