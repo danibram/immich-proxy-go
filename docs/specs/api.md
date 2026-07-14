@@ -56,6 +56,9 @@ Removed in this version:
 GET /healthcheck
 ```
 
+Liveness probe for Docker healthchecks, reverse proxies and uptime monitors.
+No share context, no authentication, never rate-limited.
+
 **Response**: `200 OK`
 ```json
 {"status": "ok"}
@@ -69,6 +72,13 @@ GET /healthcheck
 GET /share/{key}/api/shared-links/me
 ```
 
+The SPA's entry point: one call returns everything the gallery needs — the
+share's type and expiry, the **effective** permissions (the proxy intersects
+the Immich link's flags with its own config: `allowDownload`, `showMetadata`,
+`downloadQuality`, `zoomQuality`), album metadata, and the full asset list
+with per-asset aspect ratios that drive the virtual timeline layout. Called
+once on page load and re-fetched after uploads complete.
+
 **Response**: `200 OK`
 ```json
 {
@@ -79,6 +89,8 @@ GET /share/{key}/api/shared-links/me
   "allowUpload": false,
   "allowDownload": true,
   "showMetadata": true,
+  "downloadQuality": "original",
+  "zoomQuality": "preview",
   "album": {
     "id": "uuid",
     "albumName": "My Album",
@@ -102,6 +114,11 @@ POST /share/{key}/api/shared-links/me/password
 Content-Type: application/json
 ```
 
+Exchanges the share password for a signed cookie so every subsequent media
+request authenticates without re-sending the password. Against Immich v3 the
+proxy also obtains and caches the upstream share token. Hard rate limit
+(`security.password_rate_limit`) — this is the brute-force surface.
+
 **Request**:
 ```json
 {"password": "secret"}
@@ -120,12 +137,32 @@ Sets `immich-share-password` cookie on success.
 
 ---
 
+### Get Asset Details
+
+```
+GET /share/{key}/api/assets/{assetId}
+```
+
+Sanitized per-asset details (EXIF, original filename). Fetched lazily by the
+viewer when the info panel opens — Immich v3 album listings no longer include
+EXIF inline, and fetching it for every asset up front would be wasteful.
+
+**Response**: `200 OK` with the sanitized asset JSON.
+
+---
+
 ### Get Thumbnail
 
 ```
 GET /share/{key}/api/assets/{assetId}/thumbnail.webp?size=thumbnail
 GET /share/{key}/api/assets/{assetId}/thumbnail.jpg?size=preview
 ```
+
+The workhorse route — every image the visitor sees comes through here:
+grid tiles use `size=thumbnail` (small webp), viewer slides and posters use
+`size=preview` (~1440px jpeg), and zoom upgrades to `size=fullsize` when
+allowed. Not rate-limited (smooth scrolling needs bursts); authorization is
+verdict-cached per share.
 
 **Response**: Image binary with appropriate `Content-Type`
 
@@ -173,6 +210,10 @@ Password-protected shares are never publicly cacheable.
 GET /share/{key}/api/assets/{assetId}/original
 ```
 
+The per-file "Download" button: streams the asset as an attachment (never
+rendered inline). This is a download endpoint, not a viewing one — the viewer
+always displays thumbnails/previews.
+
 **Response**: File binary with `Content-Disposition: attachment`. Image quality
 is capped by `options.max_download_quality`; videos remain original.
 
@@ -191,6 +232,9 @@ is capped by `options.max_download_quality`; videos remain original.
 GET /share/{key}/api/assets/{assetId}/video/playback
 ```
 
+Backs the viewer's video player: streams the playable transcode (or original)
+for `<video>` elements.
+
 **Response**: Video stream. The incoming `Range` header is forwarded to
 Immich and `206 Partial Content` / `Content-Range` / `Accept-Ranges` pass
 through, so browsers can seek. Streaming has no total deadline (an idle
@@ -200,7 +244,13 @@ watchdog aborts transfers that stop making progress).
 
 ### Bulk Download (ZIP) - Job-based
 
-Bulk downloads use a job system with progress tracking.
+Backs "download selection / whole album": the client starts a job, polls its
+progress, then fetches the finished archive. A job system (rather than
+streaming the ZIP) is deliberate: every asset is staged before the archive is
+assembled, so a ready ZIP always contains every requested file — a mid-way
+upstream failure fails the job instead of producing a silently incomplete
+archive. Jobs are cleaned up 10 minutes after completion;
+`security.max_concurrent_download_jobs` caps concurrent jobs.
 
 #### Start Download Job
 
@@ -281,6 +331,11 @@ Content-Type: multipart/form-data | image/* | video/*
 x-immich-checksum: <sha1 hex|base64>   (optional)
 ```
 
+Guest upload: streams one file through the proxy into the link owner's
+library (Immich v3 auto-associates it with the shared album). Only available
+when the Immich link has `allowUpload`; size capped by
+`security.max_upload_size`; content-type restricted to images/videos.
+
 When `x-immich-checksum` is sent and the asset already exists in the link
 owner's library, Immich short-circuits with `200 {"id": "...", "status":
 "duplicate"}` before the body is consumed.
@@ -299,6 +354,11 @@ owner's library, Immich short-circuits with `200 {"id": "...", "status":
 - `415 Unsupported Media Type`: Invalid file type
 
 ### Pre-upload Check
+
+Batch dedupe before any bytes are sent: the web client SHA-1-hashes selected
+files in a Web Worker and asks which already exist in the owner's library, so
+re-uploading an existing batch costs one JSON round trip instead of the full
+transfer. Those tiles show "already in album".
 
 ```
 POST /share/{key}/api/upload-check
