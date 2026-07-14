@@ -184,10 +184,7 @@
 
 .app-share .scrubber {
   position: fixed;
-  /* Keep the initial grip below the mobile album actions. The scrubber is
-     fixed, so starting it at the old toolbar edge made its invisible hit
-     target overlap the new overflow menu before the user scrolled. */
-  top: 148px;
+  top: var(--album-topbar-height);
   right: 0;
   bottom: 0;
   width: 64px;
@@ -202,7 +199,6 @@
 }
 
 .app-share .album[data-wide='1'] .scrubber {
-  top: 56px;
   width: 72px;
 }
 

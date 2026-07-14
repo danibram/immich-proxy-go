@@ -7,6 +7,7 @@
 }
 
 .app-share .album {
+  --album-topbar-height: 52px;
   position: relative;
   width: 100vw;
   height: 100dvh;
@@ -16,6 +17,10 @@
   font-size: 15px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+}
+
+.app-share .album[data-wide='1'] {
+  --album-topbar-height: 56px;
 }
 
 .app-share .album-scroll {
@@ -40,7 +45,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  height: 52px;
+  height: var(--album-topbar-height);
   padding: 0 8px 0 16px;
   background: transparent;
   border-bottom: 1px solid transparent;
@@ -59,7 +64,6 @@
 }
 
 .app-share .album[data-wide='1'] .topbar {
-  height: 56px;
   padding: 0 18px;
   gap: 16px;
 }
@@ -302,11 +306,14 @@
 }
 
 .app-share .hero-actions {
+  position: relative;
+  z-index: 26;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-top: 12px;
+  min-height: 40px;
 }
 
 .app-share .hero-add {

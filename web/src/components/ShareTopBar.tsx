@@ -58,6 +58,10 @@ function SelectButton(props: { class?: string }) {
   );
 }
 
+function canAddPhotos() {
+  return shareCapabilities().canUpload && isFeatureEnabled('upload-ui', true);
+}
+
 function MoreActions(props: { onDownloadAll: () => void }) {
   let root: HTMLDetailsElement | undefined;
   let trigger: HTMLElement | undefined;
@@ -85,33 +89,28 @@ function MoreActions(props: { onDownloadAll: () => void }) {
   };
 
   return (
-    <Show when={shareCapabilities().canDownload}>
-      <details class="action-menu" ref={root}>
-        <summary
-          ref={trigger}
-          class="action-menu-trigger"
-          aria-label={t().topbar.moreActions}
-          aria-haspopup="menu"
-        >
-          <Ellipsis size={22} stroke-width={2} />
-        </summary>
-        <div class="action-menu-popover" role="menu">
-          <button type="button" role="menuitem" onClick={downloadAll}>
-            <Download size={18} stroke-width={2} />
-            {t().topbar.downloadAll}
-          </button>
-        </div>
-      </details>
-    </Show>
+    <details class="action-menu" ref={root}>
+      <summary
+        ref={trigger}
+        class="action-menu-trigger"
+        aria-label={t().topbar.moreActions}
+        aria-haspopup="menu"
+      >
+        <Ellipsis size={22} stroke-width={2} />
+      </summary>
+      <div class="action-menu-popover" role="menu">
+        <button type="button" role="menuitem" onClick={downloadAll}>
+          <Download size={18} stroke-width={2} />
+          {t().topbar.downloadAll}
+        </button>
+      </div>
+    </details>
   );
 }
 
 function AddPhotosButton(props: { hero?: boolean; onClick?: () => void }) {
-  const visible = () =>
-    shareCapabilities().canUpload && isFeatureEnabled('upload-ui', true);
-
   return (
-    <Show when={visible()}>
+    <Show when={canAddPhotos()}>
       <button
         type="button"
         class={props.hero ? 'hero-add' : 'tb-tbtn primary'}
@@ -124,10 +123,10 @@ function AddPhotosButton(props: { hero?: boolean; onClick?: () => void }) {
   );
 }
 
-function MobileHero(props: Pick<Props, 'dateRange' | 'onUploadClick' | 'onDownloadAll'>) {
-  const hasActions = () =>
-    shareCapabilities().canDownload ||
-    (shareCapabilities().canUpload && isFeatureEnabled('upload-ui', true));
+function MobileHero(
+  props: Pick<Props, 'dateRange' | 'collapsed' | 'onUploadClick' | 'onDownloadAll'>
+) {
+  const hasActions = () => shareCapabilities().canDownload || canAddPhotos();
 
   return (
     <header class="hero">
@@ -135,7 +134,7 @@ function MobileHero(props: Pick<Props, 'dateRange' | 'onUploadClick' | 'onDownlo
         <h1 class="hero-title" data-testid="album-title">
           {albumName()}
         </h1>
-        <Show when={shareCapabilities().canSelect}>
+        <Show when={shareCapabilities().canSelect && !props.collapsed}>
           <SelectButton class="hero-select" />
         </Show>
       </div>
@@ -148,8 +147,12 @@ function MobileHero(props: Pick<Props, 'dateRange' | 'onUploadClick' | 'onDownlo
       </div>
       <Show when={hasActions()}>
         <div class="hero-actions">
-          <AddPhotosButton hero onClick={props.onUploadClick} />
-          <MoreActions onDownloadAll={props.onDownloadAll} />
+          <Show when={!props.collapsed}>
+            <AddPhotosButton hero onClick={props.onUploadClick} />
+            <Show when={shareCapabilities().canDownload}>
+              <MoreActions onDownloadAll={props.onDownloadAll} />
+            </Show>
+          </Show>
         </div>
       </Show>
     </header>
@@ -173,7 +176,9 @@ function BrowseActions(props: Pick<Props, 'wide' | 'collapsed' | 'onUploadClick'
           <Show when={shareCapabilities().canSelect}>
             <SelectButton />
           </Show>
-          <MoreActions onDownloadAll={props.onDownloadAll} />
+          <Show when={shareCapabilities().canDownload}>
+            <MoreActions onDownloadAll={props.onDownloadAll} />
+          </Show>
         </Show>
       }
     >
@@ -181,7 +186,9 @@ function BrowseActions(props: Pick<Props, 'wide' | 'collapsed' | 'onUploadClick'
         <SelectButton />
       </Show>
       <AddPhotosButton onClick={props.onUploadClick} />
-      <MoreActions onDownloadAll={props.onDownloadAll} />
+      <Show when={shareCapabilities().canDownload}>
+        <MoreActions onDownloadAll={props.onDownloadAll} />
+      </Show>
     </Show>
   );
 }
@@ -259,6 +266,7 @@ export default function ShareTopBar(props: Props) {
           <Show when={!props.wide}>
             <MobileHero
               dateRange={props.dateRange}
+              collapsed={props.collapsed}
               onUploadClick={props.onUploadClick}
               onDownloadAll={props.onDownloadAll}
             />

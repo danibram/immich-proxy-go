@@ -8,7 +8,7 @@ import { t } from '~/i18n';
 import { formatDuration, groupAssetsByDate } from '~/utils/dateUtils';
 import { createRetryingImage } from '~/utils/imageLoader';
 import { thumbhashBackground } from '~/utils/thumbhash';
-import { runViewerTransition } from '~/utils/viewTransitions';
+import { findGalleryTransitionTarget, runViewerTransition } from '~/utils/viewTransitions';
 import {
   assets,
   isAssetSelected,
@@ -353,7 +353,7 @@ export default function AssetTimeline(props: Props) {
       direction: 'open',
       oldElement:
         asset.type === 'IMAGE'
-          ? sourceElement.querySelector<HTMLElement>('.thumb-img-slot') ?? sourceElement
+          ? findGalleryTransitionTarget(asset.id, sourceElement) ?? sourceElement
           : undefined,
       update: () => selectAsset(asset, index),
     });
@@ -399,7 +399,6 @@ export default function AssetTimeline(props: Props) {
     return (
       <div
         data-testid="gallery-item"
-        data-gallery-asset-id={asset.id}
         data-asset-type={asset.type}
         class={`gallery-item ${selected() ? 'is-selected' : ''} ${isSelectionMode() ? 'is-selecting' : ''}`}
         style={{
@@ -422,6 +421,7 @@ export default function AssetTimeline(props: Props) {
         <div
           class="thumb-img-slot"
           data-testid="gallery-thumb-slot"
+          data-view-transition-asset-id={asset.id}
           // Thumbhash placeholder: paints instantly while the real thumbnail
           // loads and stays visible behind the broken-image fallback. The
           // decode is memoized module-wide, so remounts during virtual

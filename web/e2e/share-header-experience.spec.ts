@@ -5,7 +5,7 @@ const png = Buffer.from(
   'base64'
 );
 
-const assets = Array.from({ length: 8 }, (_, index) => ({
+const assets = Array.from({ length: 16 }, (_, index) => ({
   id: `${index + 1}`.repeat(8) + '-1111-4111-8111-111111111111',
   type: 'IMAGE',
   originalFileName: `disney-${index + 1}.jpg`,
@@ -56,7 +56,7 @@ test('mobile header keeps album context and exposes photo-first actions', async 
   await page.goto('/share/demo');
 
   await expect(page.getByRole('heading', { name: 'Disney Paris' })).toBeVisible();
-  await expect(page.getByTestId('album-meta')).toContainText('8 items');
+  await expect(page.getByTestId('album-meta')).toContainText('16 items');
   await expect(page.getByTestId('album-meta')).toContainText('Jul 2026');
   await expect(page.getByRole('button', { name: 'Select' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add photos' })).toBeVisible();
@@ -64,6 +64,12 @@ test('mobile header keeps album context and exposes photo-first actions', async 
 
   await page.getByLabel('More actions').click();
   await expect(page.getByRole('menuitem', { name: 'Download all' })).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await page.locator('.album-scroll').evaluate((element) => element.scrollTo({ top: 80 }));
+  await expect(page.locator('.topbar')).toHaveAttribute('data-collapsed', '1');
+  await expect(page.getByLabel('More actions')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Select' })).toHaveCount(1);
 });
 
 test('desktop header stays compact and keeps download in the secondary menu', async ({ page }) => {

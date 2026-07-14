@@ -88,6 +88,15 @@ describe('ShareTopBar', () => {
     });
   });
 
+  it('keeps a single action set mounted when the mobile header collapses', () => {
+    createRoot((dispose) => {
+      render(() => <ShareTopBar {...defaultProps()} collapsed />);
+      expect(screen.getAllByLabelText(/more actions/i)).toHaveLength(1);
+      expect(screen.getAllByRole('button', { name: /^select$/i })).toHaveLength(1);
+      dispose();
+    });
+  });
+
   it('calls onUploadClick when upload button clicked', () => {
     createRoot((dispose) => {
       const props = defaultProps();
