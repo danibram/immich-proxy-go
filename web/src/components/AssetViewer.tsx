@@ -25,6 +25,7 @@ import {
 import { assetIdFromHash } from '~/utils/viewerDeepLink';
 import { createRetryingImage } from '~/utils/imageLoader';
 import { thumbhashToDataURL } from '~/utils/thumbhash';
+import { runViewerTransition } from '~/utils/viewTransitions';
 import ExifSheet from './ExifSheet';
 import ProtectedImage from './ProtectedImage';
 import ViewerVideoLayer from './ViewerVideoLayer';
@@ -174,6 +175,25 @@ export default function AssetViewer() {
     return window.location.pathname + window.location.search;
   }
 
+  function findGalleryPhoto(assetId: string): HTMLElement | null {
+    const items = document.querySelectorAll<HTMLElement>('[data-gallery-asset-id]');
+    for (const item of items) {
+      if (item.dataset.galleryAssetId === assetId) {
+        return item.querySelector<HTMLElement>('.thumb-img-slot');
+      }
+    }
+    return null;
+  }
+
+  function closeWithTransition() {
+    const asset = current();
+    runViewerTransition({
+      direction: 'close',
+      update: closeViewer,
+      getNewElement: asset.type === 'IMAGE' ? () => findGalleryPhoto(asset.id) : undefined,
+    });
+  }
+
   function requestClose() {
     // A pending debounced push firing after the unwind would resurrect a
     // hash entry on a closed viewer.
@@ -185,7 +205,7 @@ export default function AssetViewer() {
       return;
     }
     window.history.replaceState(window.history.state, '', cleanShareUrl());
-    closeViewer();
+    closeWithTransition();
   }
 
   async function toggleFullscreen() {
@@ -323,7 +343,7 @@ export default function AssetViewer() {
       }
       cancelPendingHistoryPush();
       viewerDepth = 0;
-      closeViewer();
+      closeWithTransition();
     };
     const onFullscreenChange = () => setFullscreen(document.fullscreenElement === viewerEl());
     window.addEventListener('popstate', onPopState);

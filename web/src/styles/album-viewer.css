@@ -21,6 +21,34 @@
   }
 }
 
+/* The gallery and viewer remain in the same document while the URL hash
+   changes. During that state update, the browser captures the clicked tile
+   and the current viewer media as one shared element. The root cross-fade
+   supplies the dark backdrop while the photo interpolates position + size. */
+html[data-viewer-transition] .app-share .album .viewer {
+  animation: none;
+}
+
+html[data-viewer-transition] .app-share .album .vw-slide.is-current .vw-media {
+  view-transition-name: viewer-photo;
+}
+
+html[data-viewer-transition]::view-transition-group(root) {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+html[data-viewer-transition]::view-transition-group(viewer-photo) {
+  z-index: 100;
+  animation-duration: 240ms;
+  animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+html[data-viewer-transition]::view-transition-image-pair(viewer-photo) {
+  overflow: hidden;
+  border-radius: 4px;
+}
+
 .app-share .album .vw-top {
   position: absolute;
   top: 0;
