@@ -5,6 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.3] - 2026-07-15
+
+### Bug Fixes
+
+- 🐛 Detect already-complete images after loader resets (stuck poster)
+
+A browser-cached image can finish loading before the retry machine's
+key/ladder reset runs (viewer opening, slide reuse). The reset cleared
+loaded=false while the <img> already held the target src fully decoded —
+no further load event ever fires for an unchanged src, so the blurry
+poster stayed on top of a perfectly loaded image until a lucky remount.
+The machine now takes the element via ref and, after every reset, checks
+complete/naturalWidth against the current src in a microtask.
+
 ## [1.15.2] - 2026-07-15
 
 ### Bug Fixes
