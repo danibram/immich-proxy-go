@@ -1,6 +1,7 @@
 package immich
 
 import (
+	"time"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -39,6 +40,7 @@ func TestGetAlbum_TimelineFallbackForImmichV3(t *testing.T) {
 				"isFavorite":[false,false],
 				"duration":[null,90500],
 				"fileCreatedAt":["2026-07-06T10:27:13","2026-07-05T08:00:00"],
+				"localOffsetHours":[2,-5.5],
 				"ratio":[1.778,0.75],
 				"thumbhash":["aGFzaA==",null],
 				"livePhotoVideoId":[null,null],
@@ -70,6 +72,11 @@ func TestGetAlbum_TimelineFallbackForImmichV3(t *testing.T) {
 	if img.FileCreatedAt.IsZero() || img.LocalDateTime.IsZero() {
 		t.Errorf("timestamps not parsed: %+v", img)
 	}
+	// localDateTime = fileCreatedAt (UTC) shifted by the asset's local offset.
+	// Late-evening photos group under the wrong day otherwise.
+	if got := img.LocalDateTime.Sub(img.FileCreatedAt); got != 2*time.Hour {
+		t.Errorf("localDateTime offset: want +2h, got %v", got)
+	}
 	if img.Ratio != 1.778 {
 		t.Errorf("ratio not mapped: %v", img.Ratio)
 	}
@@ -83,6 +90,9 @@ func TestGetAlbum_TimelineFallbackForImmichV3(t *testing.T) {
 	}
 	if vid.Duration != "0:01:30.500000" {
 		t.Errorf("duration not converted from milliseconds: %q", vid.Duration)
+	}
+	if got := vid.LocalDateTime.Sub(vid.FileCreatedAt); got != -5*time.Hour-30*time.Minute {
+		t.Errorf("negative fractional offset: want -5h30m, got %v", got)
 	}
 }
 

@@ -15,6 +15,7 @@ import {
   selectedCount,
   selectedAsset,
   setIsSelectionMode,
+  mergeAssetDetails,
   setLoadedSharedLink,
   setSelectedAssets,
   setSharedLink,
@@ -345,6 +346,50 @@ describe('Share Store', () => {
         expect(selected.length).toBe(2);
         expect(selected.map(a => a.id)).toContain('asset-1');
         expect(selected.map(a => a.id)).toContain('asset-3');
+        dispose();
+      });
+    });
+  });
+
+  describe('mergeAssetDetails', () => {
+    it('keeps the timeline grouping keys authoritative', () => {
+      createRoot((dispose) => {
+        setSharedLink({
+          id: 'link-1',
+          key: 'k',
+          type: 'INDIVIDUAL',
+          allowDownload: true,
+          allowUpload: false,
+          showMetadata: true,
+          assets: [
+            {
+              id: 'asset-1',
+              type: 'IMAGE',
+              originalFileName: '',
+              localDateTime: '2026-07-08T23:30:53.454Z',
+              fileCreatedAt: '2026-07-08T23:30:53.454Z',
+              ratio: 1.333,
+            } as never,
+          ],
+        } as never);
+
+        // The detail endpoint reports a different local time (e.g. +2h,
+        // crossing midnight). Merging it must NOT re-group the photo: EXIF
+        // and filename flow in, the day-grouping keys stay put.
+        mergeAssetDetails({
+          id: 'asset-1',
+          type: 'IMAGE',
+          originalFileName: '20260709_013053.heic',
+          localDateTime: '2026-07-09T01:30:53.454Z',
+          fileCreatedAt: '2026-07-09T01:30:53.454Z',
+          exifInfo: { make: 'samsung' },
+        } as never);
+
+        const merged = (sharedLink()!.assets ?? [])[0] as never as Record<string, unknown>;
+        expect(merged.originalFileName).toBe('20260709_013053.heic');
+        expect((merged.exifInfo as Record<string, unknown>).make).toBe('samsung');
+        expect(merged.localDateTime).toBe('2026-07-08T23:30:53.454Z');
+        expect(merged.fileCreatedAt).toBe('2026-07-08T23:30:53.454Z');
         dispose();
       });
     });

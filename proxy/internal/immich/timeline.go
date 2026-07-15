@@ -99,7 +99,14 @@ func (b *timeBucketAssets) toAssets() []Asset {
 
 		if created, ok := parseTimelineTime(stringAt(b.FileCreatedAt, i)); ok {
 			asset.FileCreatedAt = created
-			asset.LocalDateTime = created
+			// Immich's localDateTime is the local wall-clock time encoded as a
+			// UTC-shaped string: fileCreatedAt (UTC) shifted by the asset's
+			// local offset. Using plain UTC here groups late-evening photos
+			// under the WRONG day — and since the per-asset detail endpoint
+			// returns the correct value, the gallery's day grouping would
+			// change underneath the user the moment a boundary photo was
+			// opened in the viewer.
+			asset.LocalDateTime = created.Add(time.Duration(floatAt(b.LocalOffsetHours, i) * float64(time.Hour)))
 		}
 		if i < len(b.Thumbhash) && b.Thumbhash[i] != nil {
 			asset.Thumbhash = *b.Thumbhash[i]

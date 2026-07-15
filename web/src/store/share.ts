@@ -107,7 +107,19 @@ export function mergeAssetDetails(detail: Asset) {
   if (!link) return;
 
   const merge = (list: Asset[] | undefined): Asset[] =>
-    (list ?? []).map((asset) => (asset.id === detail.id ? { ...asset, ...detail } : asset));
+    (list ?? []).map((asset) =>
+      asset.id === detail.id
+        ? {
+            ...asset,
+            ...detail,
+            // The timeline's grouping keys stay authoritative: letting the
+            // per-asset detail response change them would re-group the photo
+            // (move it to another day) the moment it is opened in the viewer.
+            localDateTime: asset.localDateTime,
+            fileCreatedAt: asset.fileCreatedAt,
+          }
+        : asset
+    );
 
   if (link.type === 'ALBUM' && link.album) {
     setSharedLink({ ...link, album: { ...link.album, assets: merge(link.album.assets) } });
