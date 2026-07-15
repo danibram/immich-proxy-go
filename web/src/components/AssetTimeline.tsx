@@ -97,6 +97,7 @@ function Thumb(props: { assetId: string }) {
       }
     >
       <img
+        ref={loader.attach}
         data-testid="gallery-thumb"
         src={loader.src()}
         alt=""

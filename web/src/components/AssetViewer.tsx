@@ -100,6 +100,7 @@ function ViewerSlide(props: {
                   }
                 >
                   <img
+                    ref={loader.attach}
                     class="vw-img"
                     src={loader.src()}
                     alt={props.asset.originalFileName}

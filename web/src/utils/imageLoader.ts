@@ -25,6 +25,14 @@ export interface RetryingImage {
   onLoad: () => void;
   /** Wire to the <img> error event. */
   onError: () => void;
+  /**
+   * Wire to the <img> ref. Lets the machine detect an element that is
+   * ALREADY complete for the current src — a browser-cached image can finish
+   * loading before a key/ladder reset runs, and since the src doesn't change
+   * afterwards there will never be another load event; without this check
+   * the poster/placeholder stays on top of a fully loaded image forever.
+   */
+  attach: (el: HTMLImageElement) => void;
 }
 
 /**
@@ -53,6 +61,29 @@ export function createRetryingImage<Size extends string>(options: {
   const [attempt, setAttempt] = createSignal<Attempt | null>({ index: 0, retry: false });
   const [loaded, setLoaded] = createSignal(false);
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let element: HTMLImageElement | undefined;
+
+  const currentSrc = (): string | undefined => {
+    const current = untrack(attempt);
+    if (!current) return undefined;
+    const sizes = untrack(() => options.sizes());
+    const size = sizes[Math.min(current.index, sizes.length - 1)];
+    return options.urlFor(size, current.retry);
+  };
+
+  // If the rendered element already holds the current src fully decoded, no
+  // load event is coming — mark loaded directly. Deferred a microtask so the
+  // <img>'s reactive src attribute has been applied before comparing.
+  const checkAlreadyComplete = () => {
+    queueMicrotask(() => {
+      const el = element;
+      const src = currentSrc();
+      if (!el || !src || untrack(loaded)) return;
+      if (el.complete && el.naturalWidth > 0 && el.src.endsWith(src)) {
+        setLoaded(true);
+      }
+    });
+  };
 
   const clearTimer = () => {
     if (timer !== undefined) {
@@ -71,6 +102,7 @@ export function createRetryingImage<Size extends string>(options: {
         clearTimer();
         setAttempt({ index: 0, retry: false });
         setLoaded(false);
+        checkAlreadyComplete();
       },
       { defer: true }
     )
@@ -89,6 +121,10 @@ export function createRetryingImage<Size extends string>(options: {
     failed: () => attempt() === null,
     loaded,
     onLoad: () => setLoaded(true),
+    attach: (el: HTMLImageElement) => {
+      element = el;
+      checkAlreadyComplete();
+    },
     onError: () => {
       const current = untrack(attempt);
       // Ignore stray error events while already failed or mid-backoff.

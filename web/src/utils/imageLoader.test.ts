@@ -163,4 +163,60 @@ describe('createRetryingImage', () => {
       dispose();
     });
   });
+
+  describe('attach (already-complete element)', () => {
+    it('marks loaded when a reset leaves an element already complete for the current src', async () => {
+      const [key, setKey] = createSignal('asset-1');
+      let loader!: RetryingImage;
+      const dispose = createRoot((d) => {
+        loader = createRetryingImage({
+          sizes: () => ['preview', 'thumbnail'] as const,
+          urlFor: (size, retry) => `/thumb-${key() === 'asset-1' ? 'a' : 'b'}?size=${size}${retry ? '&retry=1' : ''}`,
+          key,
+        });
+        return d;
+      });
+
+      // Browser-cached image finished before anything else ran.
+      const el = {
+        complete: true,
+        naturalWidth: 800,
+        src: 'https://example.com/thumb-b?size=preview',
+      } as HTMLImageElement;
+      loader.attach(el);
+      loader.onLoad();
+      expect(loader.loaded()).toBe(true);
+
+      // A key reset (slide reuse) clears loaded; the element already holds
+      // the NEW src fully decoded, so no load event will ever come.
+      setKey('asset-2');
+      expect(loader.loaded()).toBe(false);
+      await Promise.resolve(); // flush the microtask check
+      expect(loader.loaded()).toBe(true);
+    });
+
+    it('does not mark loaded when the element holds a different src', async () => {
+      const [key, setKey] = createSignal('asset-1');
+      let loader!: RetryingImage;
+      createRoot(() => {
+        loader = createRetryingImage({
+          sizes: () => ['preview'] as const,
+          urlFor: () => (key() === 'asset-1' ? '/thumb-a?size=preview' : '/thumb-b?size=preview'),
+          key,
+        });
+      });
+
+      const el = {
+        complete: true,
+        naturalWidth: 800,
+        src: 'https://example.com/thumb-a?size=preview',
+      } as HTMLImageElement;
+      loader.attach(el);
+      loader.onLoad();
+
+      setKey('asset-2'); // element still shows thumb-a; new src is thumb-b
+      await Promise.resolve();
+      expect(loader.loaded()).toBe(false);
+    });
+  });
 });
