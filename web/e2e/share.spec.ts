@@ -17,7 +17,9 @@ test.describe('UI Smoke Tests', () => {
     await expect(page.locator('body')).toBeVisible();
 
     // Should show Immich branding
-    await expect(page.getByText(/immich/i)).toBeVisible({ timeout: 5000 });
+    await expect(
+      page.getByRole('link', { name: 'Immich Public Proxy', exact: true }),
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('home page has correct structure', async ({ page }) => {

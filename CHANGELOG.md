@@ -5,6 +5,179 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-07-15
+
+### Documentation
+
+- 📝 Explain what each API route is for
+
+Every endpoint section now opens with its purpose: what it does, which part
+of the client calls it and when, and the relevant limits (rate limiting,
+caching, size caps). Adds the missing Get Asset Details section and the
+downloadQuality/zoomQuality fields to the shared-links/me example.
+
+
+### Features
+
+- ✨ Add gallery view transitions
+
+Animate shared photos between the virtual gallery and fullscreen viewer while preserving URL history, reduced-motion preferences, and unsupported-browser fallbacks.
+
+
+### Miscellaneous
+
+- **deps:** Bump actions/setup-node from 4 to 6
+
+- **deps:** Bump actions/checkout from 4 to 6
+
+- **deps:** Bump actions/setup-go from 5 to 6
+
+- **deps:** Bump github.com/spf13/viper from 1.19.0 to 1.21.0 in /proxy
+
+- **deps-dev:** Bump vite-plugin-solid from 2.11.10 to 2.11.12 in /web
+
+
+### Other
+
+- Merge pull request #1 from danibram/dependabot/github_actions/actions/setup-node-6
+
+chore(deps): bump actions/setup-node from 4 to 6
+
+- Merge pull request #2 from danibram/dependabot/github_actions/actions/checkout-6
+
+chore(deps): bump actions/checkout from 4 to 6
+
+- Merge pull request #3 from danibram/dependabot/github_actions/actions/setup-go-6
+
+chore(deps): bump actions/setup-go from 5 to 6
+
+- Merge pull request #6 from danibram/dependabot/go_modules/proxy/github.com/spf13/viper-1.21.0
+
+chore(deps): bump github.com/spf13/viper from 1.19.0 to 1.21.0 in /proxy
+
+- Merge pull request #10 from danibram/dependabot/npm_and_yarn/web/vite-plugin-solid-2.11.12
+
+chore(deps-dev): bump vite-plugin-solid from 2.11.10 to 2.11.12 in /web
+
+- Bump docker/build-push-action from 6 to 7
+
+Bumps [docker/build-push-action](https://github.com/docker/build-push-action) from 6 to 7.
+- [Release notes](https://github.com/docker/build-push-action/releases)
+- [Commits](https://github.com/docker/build-push-action/compare/v6...v7)
+
+---
+updated-dependencies:
+- dependency-name: docker/build-push-action
+  dependency-version: '7'
+  dependency-type: direct:production
+  update-type: version-update:semver-major
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- Merge pull request #15 from danibram/dependabot/github_actions/docker/build-push-action-7
+
+Bump docker/build-push-action from 6 to 7
+
+- Bump docker/login-action from 3 to 4
+
+Bumps [docker/login-action](https://github.com/docker/login-action) from 3 to 4.
+- [Release notes](https://github.com/docker/login-action/releases)
+- [Commits](https://github.com/docker/login-action/compare/v3...v4)
+
+---
+updated-dependencies:
+- dependency-name: docker/login-action
+  dependency-version: '4'
+  dependency-type: direct:production
+  update-type: version-update:semver-major
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- Merge pull request #16 from danibram/dependabot/github_actions/docker/login-action-4
+
+Bump docker/login-action from 3 to 4
+
+- Bump github.com/go-chi/cors from 1.2.1 to 1.2.2 in /proxy
+
+Bumps [github.com/go-chi/cors](https://github.com/go-chi/cors) from 1.2.1 to 1.2.2.
+- [Release notes](https://github.com/go-chi/cors/releases)
+- [Commits](https://github.com/go-chi/cors/compare/v1.2.1...v1.2.2)
+
+---
+updated-dependencies:
+- dependency-name: github.com/go-chi/cors
+  dependency-version: 1.2.2
+  dependency-type: direct:production
+  update-type: version-update:semver-patch
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- Merge pull request #9 from danibram/dependabot/go_modules/proxy/github.com/go-chi/cors-1.2.2
+
+Bump github.com/go-chi/cors from 1.2.1 to 1.2.2 in /proxy
+
+- Bump go.uber.org/zap from 1.27.0 to 1.28.0 in /proxy
+
+Bumps [go.uber.org/zap](https://github.com/uber-go/zap) from 1.27.0 to 1.28.0.
+- [Release notes](https://github.com/uber-go/zap/releases)
+- [Changelog](https://github.com/uber-go/zap/blob/master/CHANGELOG.md)
+- [Commits](https://github.com/uber-go/zap/compare/v1.27.0...v1.28.0)
+
+---
+updated-dependencies:
+- dependency-name: go.uber.org/zap
+  dependency-version: 1.28.0
+  dependency-type: direct:production
+  update-type: version-update:semver-minor
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- Merge pull request #13 from danibram/dependabot/go_modules/proxy/go.uber.org/zap-1.28.0
+
+Bump go.uber.org/zap from 1.27.0 to 1.28.0 in /proxy
+
+- Merge pull request #39 from danibram/codex/gallery-view-transitions
+
+✨ Add gallery view transitions
+
+- 💄 Make the album header photo-first
+
+- 🔥 Remove dead frontend code
+
+- Merge pull request #40 from danibram/codex/album-first-header
+
+💄 Make the album header photo-first
+
+- Bump github.com/go-chi/chi/v5 from 5.1.0 to 5.3.1 in /proxy
+
+Bumps [github.com/go-chi/chi/v5](https://github.com/go-chi/chi) from 5.1.0 to 5.3.1.
+- [Release notes](https://github.com/go-chi/chi/releases)
+- [Changelog](https://github.com/go-chi/chi/blob/master/CHANGELOG.md)
+- [Commits](https://github.com/go-chi/chi/compare/v5.1.0...v5.3.1)
+
+---
+updated-dependencies:
+- dependency-name: github.com/go-chi/chi/v5
+  dependency-version: 5.3.1
+  dependency-type: direct:production
+  update-type: version-update:semver-minor
+...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- Merge pull request #31 from danibram/dependabot/go_modules/proxy/github.com/go-chi/chi/v5-5.3.1
+
+Bump github.com/go-chi/chi/v5 from 5.1.0 to 5.3.1 in /proxy
+
+
+### Refactor
+
+- ♻️ Harden gallery transition ownership
+
 ## [1.14.0] - 2026-07-13
 
 ### Documentation
