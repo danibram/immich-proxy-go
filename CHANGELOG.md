@@ -5,6 +5,24 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.4] - 2026-07-15
+
+### Bug Fixes
+
+- 🐛 Group photos by their true local day (last photo of the day vanished)
+
+The v3 timeline mapping faked localDateTime with the UTC fileCreatedAt,
+ignoring the localOffsetHours column Immich already sends — so photos
+taken late in the evening grouped under the wrong day. Worse: the
+per-asset detail endpoint returns the CORRECT local time, and the viewer
+lazily merges it into the store, so opening a boundary photo re-grouped
+it live — the 'last photo of the day disappears after viewing it' bug.
+
+Two layers:
+- timeline.go applies localOffsetHours (tested at +2h and -5h30m).
+- mergeAssetDetails keeps the timeline's grouping keys authoritative so
+  a detail response can never move a photo between days mid-session.
+
 ## [1.15.3] - 2026-07-15
 
 ### Bug Fixes
