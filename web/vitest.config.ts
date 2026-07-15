@@ -17,7 +17,7 @@ export default defineConfig({
     include: ['src/**/*.{test,spec}.{js,ts,tsx}'],
     deps: {
       optimizer: {
-        web: {
+        client: {
           include: ['solid-js'],
         },
       },
