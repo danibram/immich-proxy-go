@@ -203,6 +203,40 @@ test('grid loads thumbnails, viewer shows an instant poster then the preview', a
   await page.goto('/share/demo');
   await expect(page.getByTestId('share-gallery')).toBeVisible();
 
+  const supportsViewTransitions = await page.evaluate(
+    () => typeof (document as Document & { startViewTransition?: unknown }).startViewTransition === 'function'
+  );
+  await page.evaluate(() => {
+    type TransitionWindow = Window & {
+      viewerTransitionDirections?: string[];
+      viewerTransitionReadyStates?: string[];
+    };
+    type TransitionDocument = Document & {
+      startViewTransition?: (update: () => void) => { ready: Promise<unknown> };
+    };
+    const transitionWindow = window as TransitionWindow;
+    transitionWindow.viewerTransitionDirections = [];
+    transitionWindow.viewerTransitionReadyStates = [];
+    new MutationObserver(() => {
+      const direction = document.documentElement.dataset.viewerTransition;
+      const directions = transitionWindow.viewerTransitionDirections!;
+      if (direction && directions.at(-1) !== direction) directions.push(direction);
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-viewer-transition'] });
+
+    const transitionDocument = document as TransitionDocument;
+    const nativeStart = transitionDocument.startViewTransition?.bind(document);
+    if (nativeStart) {
+      transitionDocument.startViewTransition = (update) => {
+        const transition = nativeStart(update);
+        void transition.ready.then(
+          () => transitionWindow.viewerTransitionReadyStates!.push('ready'),
+          () => transitionWindow.viewerTransitionReadyStates!.push('skipped')
+        );
+        return transition;
+      };
+    }
+  });
+
   // Grid tiles request the small webp thumbnail, never preview.
   await expect.poll(() => requested.length).toBeGreaterThan(0);
   expect(requested.every((r) => r.size === 'thumbnail')).toBe(true);
@@ -210,6 +244,22 @@ test('grid loads thumbnails, viewer shows an instant poster then the preview', a
   // Opening the viewer shows the poster instantly while preview is in flight.
   await page.getByTestId('gallery-item').first().click();
   await expect(page.getByTestId('asset-viewer')).toBeVisible();
+  if (supportsViewTransitions) {
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { viewerTransitionDirections?: string[] }).viewerTransitionDirections
+        )
+      )
+      .toContain('open');
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { viewerTransitionReadyStates?: string[] }).viewerTransitionReadyStates
+        )
+      )
+      .toContain('ready');
+  }
   await expect(page.getByTestId('viewer-poster')).toBeVisible();
   await expect.poll(() => requested.some((r) => r.size === 'preview')).toBe(true);
 
@@ -218,6 +268,28 @@ test('grid loads thumbnails, viewer shows an instant poster then the preview', a
   await expect(page.getByTestId('viewer-poster')).toBeHidden();
   // Clean first-attempt URLs carry no retry marker (CDN cacheability).
   expect(requested.every((r) => !r.retry)).toBe(true);
+
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByTestId('asset-viewer')).toBeHidden();
+  if (supportsViewTransitions) {
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { viewerTransitionDirections?: string[] }).viewerTransitionDirections
+        )
+      )
+      .toContain('close');
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (window as Window & { viewerTransitionReadyStates?: string[] }).viewerTransitionReadyStates?.filter(
+              (state) => state === 'ready'
+            ).length
+        )
+      )
+      .toBe(2);
+  }
 });
 
 test('a failed tile retries once with a retry marker and then recovers', async ({ page }) => {

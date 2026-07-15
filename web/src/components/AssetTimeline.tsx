@@ -8,6 +8,7 @@ import { t } from '~/i18n';
 import { formatDuration, groupAssetsByDate } from '~/utils/dateUtils';
 import { createRetryingImage } from '~/utils/imageLoader';
 import { thumbhashBackground } from '~/utils/thumbhash';
+import { runViewerTransition } from '~/utils/viewTransitions';
 import {
   assets,
   isAssetSelected,
@@ -340,15 +341,22 @@ export default function AssetTimeline(props: Props) {
   let longPressTimer: number | null = null;
   let longPressAsset: Asset | null = null;
 
-  function handleAssetClick(asset: Asset, e: MouseEvent) {
+  function handleAssetActivation(asset: Asset, sourceElement: HTMLElement, event: Event) {
     if (isSelectionMode()) {
-      e.preventDefault();
+      event.preventDefault();
       toggleAssetSelection(asset.id);
       return;
     }
 
     const index = assets().findIndex((a) => a.id === asset.id);
-    selectAsset(asset, index);
+    runViewerTransition({
+      direction: 'open',
+      oldElement:
+        asset.type === 'IMAGE'
+          ? sourceElement.querySelector<HTMLElement>('.thumb-img-slot') ?? sourceElement
+          : undefined,
+      update: () => selectAsset(asset, index),
+    });
   }
 
   function handleAssetLongPress(asset: Asset) {
@@ -391,6 +399,7 @@ export default function AssetTimeline(props: Props) {
     return (
       <div
         data-testid="gallery-item"
+        data-gallery-asset-id={asset.id}
         data-asset-type={asset.type}
         class={`gallery-item ${selected() ? 'is-selected' : ''} ${isSelectionMode() ? 'is-selecting' : ''}`}
         style={{
@@ -398,7 +407,12 @@ export default function AssetTimeline(props: Props) {
           width: px(item.width),
           height: px(item.height),
         }}
-        onClick={(e) => handleAssetClick(asset, e)}
+        onClick={(e) => handleAssetActivation(asset, e.currentTarget, e)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          handleAssetActivation(asset, e.currentTarget, e);
+        }}
         onTouchStart={() => handleTouchStartAsset(asset)}
         onTouchEnd={handleTouchEndAsset}
         onTouchCancel={handleTouchEndAsset}
