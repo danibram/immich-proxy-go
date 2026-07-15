@@ -5,6 +5,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.0] - 2026-07-15
+
+### Features
+
+- ✨ Redesign the share header: one surface, two quiet actions
+
+The topbar painted its own greener dark (backdrop saturate(180%) amplifying
+the tinted bar background, always-on in wide mode) over the neutral gallery,
+buried Download all behind a one-item overflow menu, and pushed a saturated
+upload pill as the loudest element on screen — against PRODUCT.md's 'photos
+lead; chrome recedes'.
+
+- One surface: the bar is transparent over the photos and only gains a
+  neutral scrim (blur, no saturate) when pinned/collapsed.
+- Two actions, quiet: selection (icon) and Add photos (tonal, primary end
+  slot). The overflow menu is gone; Download all is gone — downloads flow
+  through selection (select icon -> select all -> download), which the
+  header e2e now pins.
+- Own accent: oklch(0.72 0.17 152) replaces raw #22c55e; accent glow token
+  deleted; tonal fg token per theme.
+- Mobile hero: three stacked rows (~180px) become one compact row; photos
+  start immediately.
+
 ## [1.15.4] - 2026-07-15
 
 ### Bug Fixes
