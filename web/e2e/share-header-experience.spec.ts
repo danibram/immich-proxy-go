@@ -62,17 +62,17 @@ test('mobile header keeps album context and exposes photo-first actions', async 
   await expect(page.getByRole('button', { name: 'Add photos' })).toBeVisible();
   await expect(page.locator('.fab')).toHaveCount(0);
 
-  await page.getByLabel('More actions').click();
-  await expect(page.getByRole('menuitem', { name: 'Download all' })).toBeVisible();
+  // No overflow menu and no standalone download-all: downloads live in
+  // selection mode (select icon -> select all -> download).
+  await expect(page.getByLabel('More actions')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Download all' })).toHaveCount(0);
 
-  await page.keyboard.press('Escape');
   await page.locator('.album-scroll').evaluate((element) => element.scrollTo({ top: 80 }));
   await expect(page.locator('.topbar')).toHaveAttribute('data-collapsed', '1');
-  await expect(page.getByLabel('More actions')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Select' })).toHaveCount(1);
 });
 
-test('desktop header stays compact and keeps download in the secondary menu', async ({ page }) => {
+test('desktop header stays compact; downloads flow through selection', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockAlbum(page);
   await page.goto('/share/demo');
@@ -83,7 +83,10 @@ test('desktop header stays compact and keeps download in the secondary menu', as
   await expect(page.getByRole('button', { name: 'Select' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add photos' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Download all' })).toHaveCount(0);
+  await expect(page.getByLabel('More actions')).toHaveCount(0);
 
-  await page.getByLabel('More actions').click();
-  await expect(page.getByRole('menuitem', { name: 'Download all' })).toBeVisible();
+  // The download path: enter selection, select everything, download appears.
+  await page.getByRole('button', { name: 'Select' }).click();
+  await page.getByRole('button', { name: 'Select all', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Download \(16\)/ })).toBeVisible();
 });

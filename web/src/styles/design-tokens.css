@@ -1,8 +1,9 @@
 :root {
   --white: #ffffff;
   --cream: #ecfdf3;
-  --accent: #22c55e;
-  --accent-press: #16a34a;
+  /* Own warm green (OKLCH), deliberately not a framework default. */
+  --accent: oklch(0.72 0.17 152);
+  --accent-press: oklch(0.6 0.15 152);
   --black: #0c0b0b;
   --grey-1: #e4e1df;
   --grey-2: #bcb8b6;
@@ -17,7 +18,6 @@
   --radius-pill: 999px;
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 28px 60px -26px rgba(0, 0, 0, 0.28), 0 6px 18px rgba(0, 0, 0, 0.07);
-  --accent-glow: 0 0 0 1px rgba(34, 197, 94, 0.18), 0 12px 32px -8px rgba(34, 197, 94, 0.32);
 }
 
 .album[data-theme='light'] {
@@ -33,6 +33,7 @@
   --border-faint: rgba(0, 0, 0, 0.07);
   --thumb-bg: #dcfce7;
   --bar-bg: rgba(255, 255, 255, 0.82);
+  --accent-tonal-fg: oklch(0.45 0.13 152);
   --bar-border: rgba(0, 0, 0, 0.08);
   --scrub-track: rgba(0, 0, 0, 0.1);
   --scrub-thumb: var(--black);
@@ -53,7 +54,8 @@
   --border: oklch(34% 0.012 145);
   --border-faint: oklch(100% 0 0 / 0.08);
   --thumb-bg: oklch(24% 0.035 145);
-  --bar-bg: oklch(17% 0.012 145 / 0.86);
+  --bar-bg: oklch(15% 0.008 145 / 0.85);
+  --accent-tonal-fg: oklch(0.8 0.12 152);
   --bar-border: oklch(100% 0 0 / 0.1);
   --scrub-track: oklch(100% 0 0 / 0.15);
   --scrub-thumb: var(--fg-1);

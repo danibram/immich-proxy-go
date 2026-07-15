@@ -196,7 +196,6 @@ export default function SharePage() {
               wide={wide()}
               collapsed={collapsed()}
               onUploadClick={() => setShowUploadModal(true)}
-              onDownloadAll={() => runDownload(assets(), 'header')}
               onDownloadSelected={() => runDownload(getSelectedAssets(), 'selection')}
             />
 

@@ -1,5 +1,5 @@
-import { Check, Download, Ellipsis, Plus, X } from 'lucide-solid';
-import { onCleanup, onMount, Show, type JSX } from 'solid-js';
+import { Check, Download, Plus, SquareCheckBig, X } from 'lucide-solid';
+import { Show, type JSX } from 'solid-js';
 import { captureEvent, isFeatureEnabled } from '~/analytics';
 import { t } from '~/i18n';
 import {
@@ -18,7 +18,6 @@ interface Props {
   wide: boolean;
   collapsed: boolean;
   onUploadClick?: () => void;
-  onDownloadAll: () => void;
   onDownloadSelected: () => void;
 }
 
@@ -50,11 +49,11 @@ function AlbumIdentity(props: { small?: boolean; dateRange?: string | null; with
   );
 }
 
-function SelectButton(props: { class?: string }) {
+function SelectButton() {
   return (
-    <button type="button" class={props.class ?? 'tb-select'} onClick={enterSelectionMode}>
-      {t().topbar.select}
-    </button>
+    <IconBtn label={t().topbar.select} onClick={enterSelectionMode}>
+      <SquareCheckBig size={20} stroke-width={2} />
+    </IconBtn>
   );
 }
 
@@ -62,97 +61,46 @@ function canAddPhotos() {
   return shareCapabilities().canUpload && isFeatureEnabled('upload-ui', true);
 }
 
-function MoreActions(props: { onDownloadAll: () => void }) {
-  let root: HTMLDetailsElement | undefined;
-  let trigger: HTMLElement | undefined;
-
-  onMount(() => {
-    const closeFromOutside = (event: PointerEvent) => {
-      if (root?.open && !root.contains(event.target as Node)) root.open = false;
-    };
-    const closeFromKeyboard = (event: KeyboardEvent) => {
-      if (!root?.open || event.key !== 'Escape') return;
-      root.open = false;
-      trigger?.focus();
-    };
-    document.addEventListener('pointerdown', closeFromOutside);
-    document.addEventListener('keydown', closeFromKeyboard);
-    onCleanup(() => {
-      document.removeEventListener('pointerdown', closeFromOutside);
-      document.removeEventListener('keydown', closeFromKeyboard);
-    });
-  });
-
-  const downloadAll = () => {
-    if (root) root.open = false;
-    props.onDownloadAll();
-  };
-
-  return (
-    <details class="action-menu" ref={root}>
-      <summary
-        ref={trigger}
-        class="action-menu-trigger"
-        aria-label={t().topbar.moreActions}
-        aria-haspopup="menu"
-      >
-        <Ellipsis size={22} stroke-width={2} />
-      </summary>
-      <div class="action-menu-popover" role="menu">
-        <button type="button" role="menuitem" onClick={downloadAll}>
-          <Download size={18} stroke-width={2} />
-          {t().topbar.downloadAll}
-        </button>
-      </div>
-    </details>
-  );
-}
-
-function AddPhotosButton(props: { hero?: boolean; onClick?: () => void }) {
+function AddPhotosButton(props: { compact?: boolean; onClick?: () => void }) {
   return (
     <Show when={canAddPhotos()}>
       <button
         type="button"
-        class={props.hero ? 'hero-add' : 'tb-tbtn primary'}
+        class={`tb-tbtn primary ${props.compact ? 'is-compact' : ''}`}
+        aria-label={t().topbar.addPhotos}
+        title={t().topbar.addPhotos}
         onClick={() => props.onClick?.()}
       >
         <Plus size={18} stroke-width={2.2} />
-        {t().topbar.addPhotos}
+        <Show when={!props.compact}>{t().topbar.addPhotos}</Show>
       </button>
     </Show>
   );
 }
 
 function MobileHero(
-  props: Pick<Props, 'dateRange' | 'collapsed' | 'onUploadClick' | 'onDownloadAll'>
+  props: Pick<Props, 'dateRange' | 'collapsed' | 'onUploadClick'>
 ) {
-  const hasActions = () => shareCapabilities().canDownload || canAddPhotos();
-
   return (
     <header class="hero">
-      <div class="hero-heading">
+      <div class="hero-text">
         <h1 class="hero-title" data-testid="album-title">
           {albumName()}
         </h1>
-        <Show when={shareCapabilities().canSelect && !props.collapsed}>
-          <SelectButton class="hero-select" />
-        </Show>
-      </div>
-      <div class="hero-meta" data-testid="album-meta">
-        <span>{itemCountLabel()}</span>
-        <Show when={props.dateRange}>
-          <span class="dot" />
-          <span>{props.dateRange}</span>
-        </Show>
-      </div>
-      <Show when={hasActions()}>
-        <div class="hero-actions">
-          <Show when={!props.collapsed}>
-            <AddPhotosButton hero onClick={props.onUploadClick} />
-            <Show when={shareCapabilities().canDownload}>
-              <MoreActions onDownloadAll={props.onDownloadAll} />
-            </Show>
+        <div class="hero-meta" data-testid="album-meta">
+          <span>{itemCountLabel()}</span>
+          <Show when={props.dateRange}>
+            <span class="dot" />
+            <span>{props.dateRange}</span>
           </Show>
+        </div>
+      </div>
+      <Show when={!props.collapsed}>
+        <div class="hero-actions">
+          <Show when={shareCapabilities().canSelect}>
+            <SelectButton />
+          </Show>
+          <AddPhotosButton compact onClick={props.onUploadClick} />
         </div>
       </Show>
     </header>
@@ -167,7 +115,7 @@ function IconBtn(props: { label: string; onClick: () => void; children: JSX.Elem
   );
 }
 
-function BrowseActions(props: Pick<Props, 'wide' | 'collapsed' | 'onUploadClick' | 'onDownloadAll'>) {
+function BrowseActions(props: Pick<Props, 'wide' | 'collapsed' | 'onUploadClick'>) {
   return (
     <Show
       when={props.wide}
@@ -176,9 +124,6 @@ function BrowseActions(props: Pick<Props, 'wide' | 'collapsed' | 'onUploadClick'
           <Show when={shareCapabilities().canSelect}>
             <SelectButton />
           </Show>
-          <Show when={shareCapabilities().canDownload}>
-            <MoreActions onDownloadAll={props.onDownloadAll} />
-          </Show>
         </Show>
       }
     >
@@ -186,9 +131,6 @@ function BrowseActions(props: Pick<Props, 'wide' | 'collapsed' | 'onUploadClick'
         <SelectButton />
       </Show>
       <AddPhotosButton onClick={props.onUploadClick} />
-      <Show when={shareCapabilities().canDownload}>
-        <MoreActions onDownloadAll={props.onDownloadAll} />
-      </Show>
     </Show>
   );
 }
@@ -259,7 +201,6 @@ export default function ShareTopBar(props: Props) {
                 wide={props.wide}
                 collapsed={props.collapsed}
                 onUploadClick={props.onUploadClick}
-                onDownloadAll={props.onDownloadAll}
               />
             </div>
           </header>
@@ -268,7 +209,6 @@ export default function ShareTopBar(props: Props) {
               dateRange={props.dateRange}
               collapsed={props.collapsed}
               onUploadClick={props.onUploadClick}
-              onDownloadAll={props.onDownloadAll}
             />
           </Show>
         </>

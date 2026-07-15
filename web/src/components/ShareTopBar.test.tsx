@@ -15,7 +15,6 @@ const defaultProps = () => ({
   wide: false,
   collapsed: false,
   onUploadClick: vi.fn(),
-  onDownloadAll: vi.fn(),
   onDownloadSelected: vi.fn(),
 });
 
@@ -59,15 +58,12 @@ describe('ShareTopBar', () => {
     });
   });
 
-  it('moves download all into the secondary actions menu', () => {
+  it('keeps the browse header to selection and upload only (downloads live in selection mode)', () => {
     createRoot((dispose) => {
       render(() => <ShareTopBar {...defaultProps()} />);
-      const trigger = screen.getByLabelText(/more actions/i);
-      const menu = trigger.closest('details')!;
-      expect(menu).not.toHaveAttribute('open');
-      fireEvent.click(trigger);
-      expect(menu).toHaveAttribute('open');
-      expect(screen.getByRole('menuitem', { name: /download all/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /download all/i })).toBeNull();
+      expect(screen.queryByLabelText(/more actions/i)).toBeNull();
+      expect(screen.getByRole('button', { name: /^select$/i })).toBeInTheDocument();
       dispose();
     });
   });
@@ -91,7 +87,6 @@ describe('ShareTopBar', () => {
   it('keeps a single action set mounted when the mobile header collapses', () => {
     createRoot((dispose) => {
       render(() => <ShareTopBar {...defaultProps()} collapsed />);
-      expect(screen.getAllByLabelText(/more actions/i)).toHaveLength(1);
       expect(screen.getAllByRole('button', { name: /^select$/i })).toHaveLength(1);
       dispose();
     });
@@ -107,19 +102,7 @@ describe('ShareTopBar', () => {
     });
   });
 
-  it('calls onDownloadAll from the secondary actions menu', () => {
-    createRoot((dispose) => {
-      const props = defaultProps();
-      render(() => <ShareTopBar {...props} />);
-      const trigger = screen.getByLabelText(/more actions/i);
-      const menu = trigger.closest('details')!;
-      fireEvent.click(trigger);
-      fireEvent.click(screen.getByRole('menuitem', { name: /download all/i }));
-      expect(props.onDownloadAll).toHaveBeenCalled();
-      expect(menu).not.toHaveAttribute('open');
-      dispose();
-    });
-  });
+
 
   it('shows selection UI when in selection mode', () => {
     createRoot((dispose) => {
