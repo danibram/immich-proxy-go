@@ -22,7 +22,7 @@ RUN npm run build
 # Stage 2: Build the Go proxy
 # Runs on the build host's platform and cross-compiles to the target arch
 # (TARGETOS/TARGETARCH are provided by buildx), so no QEMU-emulated compile.
-FROM --platform=$BUILDPLATFORM golang:1.22-alpine AS go-builder
+FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS go-builder
 
 ARG TARGETOS
 ARG TARGETARCH
