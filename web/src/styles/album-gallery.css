@@ -184,7 +184,7 @@
 
 .app-share .scrubber {
   position: fixed;
-  top: 58px;
+  top: var(--album-topbar-height);
   right: 0;
   bottom: 0;
   width: 64px;
@@ -199,7 +199,6 @@
 }
 
 .app-share .album[data-wide='1'] .scrubber {
-  top: 68px;
   width: 72px;
 }
 

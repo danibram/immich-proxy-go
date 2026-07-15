@@ -92,11 +92,9 @@ export interface DownloadJobStatus {
 class ApiClient {
   private baseUrl: string = '';
   private shareKey: string = '';
-  private shareType: 'share' | 's' = 'share';
 
   setShareKey(key: string, type: 'share' | 's' = 'share') {
     this.shareKey = key;
-    this.shareType = type;
     this.baseUrl = `/${type}/${key}/api`;
   }
 

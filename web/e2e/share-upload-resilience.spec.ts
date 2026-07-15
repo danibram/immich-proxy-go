@@ -31,12 +31,7 @@ function uniquePngFile(name: string) {
 
 async function openUploadModal(page: Page, shareKey: string) {
   await openShareByKey(page, shareKey);
-  // Desktop topbar renders a "Upload" text button; the mobile hero uses
-  // "Upload items". Match either so the spec survives viewport changes.
-  await page
-    .getByRole('button', { name: /^Upload( items)?$/ })
-    .first()
-    .click();
+  await page.getByRole('button', { name: 'Add photos' }).first().click();
   await expect(page.locator('.sheet')).toBeVisible();
 }
 

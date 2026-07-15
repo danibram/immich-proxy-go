@@ -42,10 +42,7 @@ function sha1Hex(buffer: Buffer): string {
 
 async function openUploadModal(page: Page, shareKey: string) {
   await openShareByKey(page, shareKey);
-  await page
-    .getByRole('button', { name: /^Upload( items)?$/ })
-    .first()
-    .click();
+  await page.getByRole('button', { name: 'Add photos' }).first().click();
   await expect(page.locator('.sheet')).toBeVisible();
 }
 
