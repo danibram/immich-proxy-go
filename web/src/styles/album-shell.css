@@ -138,8 +138,7 @@
   background: var(--fg-3);
 }
 
-.app-share .topbar[data-wide='0'] .tb-id,
-.app-share .topbar[data-wide='0'] .tb-kicker {
+.app-share .topbar[data-wide='0'] .tb-id {
   transition:
     opacity 0.26s ease,
     transform 0.26s ease;
@@ -148,14 +147,6 @@
 .app-share .topbar[data-wide='0'][data-collapsed='0'] .tb-id {
   opacity: 0;
   transform: translateY(7px);
-  position: absolute;
-  left: 0;
-  pointer-events: none;
-}
-
-.app-share .topbar[data-wide='0'][data-collapsed='1'] .tb-kicker {
-  opacity: 0;
-  transform: translateY(-7px);
   position: absolute;
   left: 0;
   pointer-events: none;
@@ -185,7 +176,7 @@
   transform: scale(0.92);
 }
 
-.app-share .icon-btn.is-on {
+.app-share .icon-btn .is-on {
   color: var(--accent);
 }
 
@@ -260,16 +251,6 @@
   gap: 14px;
 }
 
-.app-share .hero-kicker {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--fg-3);
-  margin-bottom: 12px;
-}
-
 .app-share .hero-title {
   margin: 0;
   font-family: var(--font-title);
@@ -282,11 +263,6 @@
   line-height: 1.08;
   letter-spacing: -0.02em;
   color: var(--fg-1);
-}
-
-.app-share .hero-title em {
-  font-style: italic;
-  font-weight: 500;
 }
 
 .app-share .hero-meta {
@@ -413,9 +389,4 @@
 
 .app-share .action-menu-popover button:hover {
   background: var(--chip-bg);
-}
-
-.app-share .hero-note {
-  font-size: 13px;
-  color: var(--fg-3);
 }

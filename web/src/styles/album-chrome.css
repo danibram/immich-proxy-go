@@ -366,36 +366,6 @@
   background: var(--chip-bg);
 }
 
-.app-share .up-list {
-  margin-top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.app-share .up-item {
-  display: grid;
-  grid-template-columns: 30px 1fr auto;
-  column-gap: 10px;
-  align-items: center;
-}
-
-.app-share .up-ico {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: var(--chip-bg);
-  color: var(--fg-2);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.app-share .up-item.is-done .up-ico {
-  background: var(--accent);
-  color: #fff;
-}
-
 .app-share .up-name {
   font-size: 13.5px;
   font-weight: 500;
@@ -407,22 +377,6 @@
 .app-share .up-size {
   font-size: 12px;
   color: var(--fg-3);
-}
-
-.app-share .up-bar {
-  grid-column: 2 / -1;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--chip-bg);
-  overflow: hidden;
-  margin-top: 6px;
-}
-
-.app-share .up-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.2s ease;
 }
 
 /* --- upload pipeline: offline banner, aggregate bar, tile grid --- */

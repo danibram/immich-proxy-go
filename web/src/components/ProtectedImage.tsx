@@ -18,7 +18,6 @@ interface ProtectedImageProps {
 const ProtectedImage: Component<ProtectedImageProps> = (props) => {
   let canvasRef: HTMLCanvasElement | undefined;
   const [loaded, setLoaded] = createSignal(false);
-  const [dimensions, setDimensions] = createSignal({ width: 0, height: 0 });
 
   createEffect(() => {
     const img = new Image();
@@ -33,7 +32,6 @@ const ProtectedImage: Component<ProtectedImageProps> = (props) => {
       // Set canvas dimensions to match image
       canvasRef.width = img.naturalWidth;
       canvasRef.height = img.naturalHeight;
-      setDimensions({ width: img.naturalWidth, height: img.naturalHeight });
 
       // Draw image to canvas
       ctx.drawImage(img, 0, 0);

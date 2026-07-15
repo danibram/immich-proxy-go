@@ -1,4 +1,4 @@
-export type ViewerTransitionDirection = 'open' | 'close';
+type ViewerTransitionDirection = 'open' | 'close';
 
 type BrowserViewTransition = {
   ready: Promise<unknown>;
