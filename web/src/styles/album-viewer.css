@@ -7,46 +7,74 @@
   color: oklch(98% 0.006 145);
   display: flex;
   flex-direction: column;
-  animation: vwIn 0.2s ease;
+  transition: opacity 0.2s cubic-bezier(0.25, 1, 0.5, 1);
   --vw-foot-height: calc(88px + env(safe-area-inset-bottom));
 }
 
-@keyframes vwIn {
-  from {
+@starting-style {
+  .app-share .album .viewer {
     opacity: 0;
-  }
-
-  to {
-    opacity: 1;
   }
 }
 
 /* The gallery and viewer remain in the same document while the URL hash
    changes. During that state update, the browser captures the clicked tile
-   and the current viewer media as one shared element. The root cross-fade
-   supplies the dark backdrop while the photo interpolates position + size. */
+   and the current viewer media as one shared element. Switch the root directly
+   to its destination so the light gallery cannot flash over the dark viewer;
+   only the photo interpolates position, size, and content. */
 html[data-viewer-transition] .app-share .album .viewer {
-  animation: none;
+  transition: none;
 }
 
 html[data-viewer-transition] .app-share .album .vw-slide.is-current .vw-media {
   view-transition-name: viewer-photo;
 }
 
-html[data-viewer-transition]::view-transition-group(root) {
-  animation-duration: 180ms;
-  animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+/* View-transition pseudo-elements can outlive the transient data attribute by
+   a paint. Keep their animation rules stable so Chromium never falls back to
+   (and restarts) its additive UA cross-fade while tearing the tree down. */
+html::view-transition-group(root) {
+  animation: none;
 }
 
-html[data-viewer-transition]::view-transition-group(viewer-photo) {
+html::view-transition-group(viewer-photo) {
   z-index: 100;
   animation-duration: 240ms;
   animation-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-html[data-viewer-transition]::view-transition-image-pair(viewer-photo) {
+html::view-transition-image-pair(viewer-photo) {
   overflow: hidden;
   border-radius: 4px;
+}
+
+html::view-transition-old(root) {
+  animation: none;
+  opacity: 0;
+  mix-blend-mode: normal;
+}
+
+html::view-transition-new(root) {
+  animation: none;
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+
+html::view-transition-old(viewer-photo) {
+  animation: none;
+  opacity: 1;
+  mix-blend-mode: normal;
+}
+
+html::view-transition-new(viewer-photo) {
+  animation: viewer-transition-reveal 240ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  mix-blend-mode: normal;
+}
+
+@keyframes viewer-transition-reveal {
+  from {
+    opacity: 0;
+  }
 }
 
 .app-share .album .vw-top {
@@ -263,7 +291,7 @@ html[data-viewer-transition]::view-transition-image-pair(viewer-photo) {
 
 @media (prefers-reduced-motion: reduce) {
   .app-share .album .viewer {
-    animation: none;
+    transition: none;
   }
 
   .app-share .album .vw-track.anim,

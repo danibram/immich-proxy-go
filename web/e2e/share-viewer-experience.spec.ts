@@ -210,6 +210,7 @@ test('grid loads thumbnails, viewer shows an instant poster then the preview', a
     type TransitionWindow = Window & {
       viewerTransitionDirections?: string[];
       viewerTransitionReadyStates?: string[];
+      viewerTransitionBlendModes?: Array<Record<string, string>>;
     };
     type TransitionDocument = Document & {
       startViewTransition?: (update: () => void) => { ready: Promise<unknown> };
@@ -217,6 +218,7 @@ test('grid loads thumbnails, viewer shows an instant poster then the preview', a
     const transitionWindow = window as TransitionWindow;
     transitionWindow.viewerTransitionDirections = [];
     transitionWindow.viewerTransitionReadyStates = [];
+    transitionWindow.viewerTransitionBlendModes = [];
     new MutationObserver(() => {
       const direction = document.documentElement.dataset.viewerTransition;
       const directions = transitionWindow.viewerTransitionDirections!;
@@ -229,7 +231,16 @@ test('grid loads thumbnails, viewer shows an instant poster then the preview', a
       transitionDocument.startViewTransition = (update) => {
         const transition = nativeStart(update);
         void transition.ready.then(
-          () => transitionWindow.viewerTransitionReadyStates!.push('ready'),
+          () => {
+            const pseudoStyle = (pseudo: string) => getComputedStyle(document.documentElement, pseudo);
+            transitionWindow.viewerTransitionBlendModes!.push({
+              rootOld: pseudoStyle('::view-transition-old(root)').mixBlendMode,
+              rootNew: pseudoStyle('::view-transition-new(root)').mixBlendMode,
+              photoOld: pseudoStyle('::view-transition-old(viewer-photo)').mixBlendMode,
+              photoNew: pseudoStyle('::view-transition-new(viewer-photo)').mixBlendMode,
+            });
+            transitionWindow.viewerTransitionReadyStates!.push('ready');
+          },
           () => transitionWindow.viewerTransitionReadyStates!.push('skipped')
         );
         return transition;
@@ -259,6 +270,20 @@ test('grid loads thumbnails, viewer shows an instant poster then the preview', a
         )
       )
       .toContain('ready');
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as Window & { viewerTransitionBlendModes?: Array<Record<string, string>> })
+            .viewerTransitionBlendModes?.[0]
+        )
+      )
+      .toEqual({ rootOld: 'normal', rootNew: 'normal', photoOld: 'normal', photoNew: 'normal' });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.dataset.viewerTransition ?? null))
+      .toBeNull();
+    expect(
+      await page.getByTestId('asset-viewer').evaluate((viewer) => getComputedStyle(viewer).animationName)
+    ).toBe('none');
   }
   await expect(page.getByTestId('viewer-poster')).toBeVisible();
   await expect.poll(() => requested.some((r) => r.size === 'preview')).toBe(true);
