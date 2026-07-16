@@ -20,7 +20,7 @@
     "@noble/hashes": "^1.8.0",
     "@solidjs/router": "^0.14.0",
     "lucide-solid": "^0.460.0",
-    "posthog-js": "^1.376.4",
+    "posthog-js": "^1.402.3",
     "solid-js": "^1.8.0",
     "thumbhash": "^0.1.1"
   },
