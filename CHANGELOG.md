@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.16.1] - 2026-07-22
+
+### Bug Fixes
+
+- 🐛 Mobile hero actions were untappable under the sticky topbar
+
+The redesigned mobile header put the actions in the hero's first row —
+spatially under the expanded topbar, which is an EMPTY transparent sticky
+strip (z-30) at that moment. Every tap on the '+' landed on the topbar and
+died; a long-press 'worked' only because the incidental scroll collapsed
+the header, moving the actions into the real topbar. Verified by hit-test
+in production: elementFromPoint on the button center returned .topbar.
+
+- The expanded mobile topbar no longer intercepts events
+  (pointer-events: none until collapsed / selection mode).
+- Touch targets bumped 38px -> 40px (PRODUCT.md floor).
+- New e2e: mobile hit-test + tap on '+' opens the upload sheet (regression
+  pin), desktop Add photos opens the sheet; upload modal gains a root
+  testid.
+
 ## [1.16.0] - 2026-07-15
 
 ### Features
