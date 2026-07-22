@@ -55,6 +55,14 @@
     height 0.26s ease;
 }
 
+/* On mobile while expanded, the topbar is an EMPTY transparent strip (the
+   actions live in the hero row, which sits underneath it spatially). It must
+   not intercept taps: without this, the hero's buttons are unreachable —
+   the '+' did nothing on phones. */
+.app-share .album[data-wide='0'] .topbar[data-collapsed='0']:not(.is-select) {
+  pointer-events: none;
+}
+
 .app-share .topbar[data-collapsed='1'],
 .app-share .topbar.is-select {
   background: var(--bar-bg);
@@ -208,7 +216,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 38px;
+  height: 40px;
   padding: 0 14px;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -236,7 +244,7 @@
 }
 
 .app-share .tb-tbtn.is-compact {
-  width: 38px;
+  width: 40px;
   padding: 0;
   justify-content: center;
 }
@@ -359,7 +367,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 38px;
+  height: 40px;
   padding: 0 14px;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -387,7 +395,7 @@
 }
 
 .app-share .tb-tbtn.is-compact {
-  width: 38px;
+  width: 40px;
   padding: 0;
   justify-content: center;
 }

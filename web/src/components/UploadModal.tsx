@@ -391,7 +391,7 @@ export default function UploadModal(props: Props) {
 
   return (
     <Show when={props.isOpen}>
-      <div class={`sheet-wrap ${props.isOpen ? 'is-open' : ''}`}>
+      <div class={`sheet-wrap ${props.isOpen ? 'is-open' : ''}`} data-testid="upload-modal">
         <div class="sheet-scrim" onClick={handleClose} />
         <div class="sheet scrollbar-hide">
           <div class="sheet-grip" />

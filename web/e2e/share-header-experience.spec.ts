@@ -72,6 +72,24 @@ test('mobile header keeps album context and exposes photo-first actions', async 
   await expect(page.getByRole('button', { name: 'Select' })).toHaveCount(1);
 });
 
+test('mobile hero actions are actually tappable under the sticky topbar', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mockAlbum(page);
+  await page.goto('/share/demo');
+
+  const addButton = page.getByRole('button', { name: 'Add photos' });
+  await expect(addButton).toBeVisible();
+  // The empty expanded topbar overlays the hero row; it must not swallow
+  // the tap (regression: the '+' did nothing on phones).
+  const receives = await addButton.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return el.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2));
+  });
+  expect(receives).toBe(true);
+  await addButton.click();
+  await expect(page.getByTestId('upload-modal')).toBeVisible();
+});
+
 test('desktop header stays compact; downloads flow through selection', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await mockAlbum(page);
@@ -89,4 +107,14 @@ test('desktop header stays compact; downloads flow through selection', async ({ 
   await page.getByRole('button', { name: 'Select' }).click();
   await page.getByRole('button', { name: 'Select all', exact: true }).click();
   await expect(page.getByRole('button', { name: /Download \(16\)/ })).toBeVisible();
+});
+
+test('desktop Add photos opens the upload sheet', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await mockAlbum(page);
+  await page.goto('/share/demo');
+
+  await page.getByRole('button', { name: 'Add photos' }).click();
+  await expect(page.getByTestId('upload-modal')).toBeVisible();
+  await expect(page.getByRole('heading', { name: /upload/i })).toBeVisible();
 });
